@@ -1,3 +1,5 @@
+Stop typing files. Start driving code.
+
 # Document de Conception et Plan Stratégique : Projet "Next-Gen IDE"
 
 Pour détrôner un outil hégémonique comme Visual Studio Code (plus de 70 % de parts de marché), copier son modèle est voué à l'échec. La bascule ne s'opère que si l'on identifie les failles structurelles des solutions existantes et que l'on exploite une rupture d'usage que l'architecture actuelle ne peut pas encaisser.
