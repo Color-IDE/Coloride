@@ -6,7 +6,7 @@
 
 **Coloride sera un environnement de réalisation logicielle où chaque action proposée par une IA reste soumise à un contrôle déterministe, une exécution isolée et des preuves vérifiables.**
 
-Le plan s’appuie sur les douze pages de l’étude [Stratégie IDE IA Next-Gen.pdf](</Users/ilyesameraoui/Downloads/Stratégie IDE IA Next-Gen.pdf>).
+Le plan s’appuie sur les douze pages de l’étude stratégique initiale (*Stratégie IDE IA Next-Gen*).
 
 Les choix confirmés sont les suivants :
 
@@ -14,11 +14,11 @@ Les choix confirmés sont les suivants :
 - **Mode local/BYOK et cloud managé disponibles dès le MVP.**
 - **macOS, Windows et Linux disponibles dès le MVP.**
 - **Deux fondateurs au départ**, puis recrutements avant la première sortie.
-- **Éditeur de code propre à Coloride, sans Monaco**, intégré dans l’interface React/Tauri existante dans l’architecture cible ; le chat, l’arborescence et les panneaux restent web.
+- **Éditeur fondé sur CodeMirror 6 couplé directement au Host Rust, sans Monaco**, intégré dans l’interface React/Tauri ; le chat, l’arborescence et les panneaux restent web.
 - Couverture complète des cinq personas en V1.
 - Nouveau socle applicatif : le dépôt actuel contient des documents stratégiques, sans implémentation à reprendre.
 
-**Décision actualisée le 8 novembre 2026 :** le choix d’un éditeur propre remplace l’intégration de Monaco proposée initialement. Le fonctionnement interne détaillé de cet éditeur reste une proposition à valider par prototype ; aucune application ni mesure de performance n’est encore livrée. Les anciennes estimations calendaires fondées sur Monaco sont remplacées par les jalons de la section 4.
+**Décision actualisée le 8 novembre 2026 :** l’adoption de **CodeMirror 6** comme vue d’édition couplée directement au **Host Rust natif** remplace l’intégration de Monaco. Ce choix garantit une empreinte mémoire réduite, une architecture en deux couches (WebView ↔ Host Rust) avec une seule autorité de persistance, un support mature pour l’IME, l’accessibilité et la virtualisation DOM, et concentre l’effort d’ingénierie sur l’orchestration d’agents, le diff vérifié et les décorations d’état Coloride.
 
 L’étude fournit une direction pertinente : cockpit d’agents, contexte local, isolation et budgets. Quatre propositions doivent être corrigées avant leur traduction technique :
 
@@ -26,10 +26,10 @@ L’étude fournit une direction pertinente : cockpit d’agents, contexte local
 |---|---|
 | Rust garantirait un démarrage inférieur à 100 ms et moins de 150 Mo de RAM | Remplacer ces promesses par des objectifs mesurés sur l’application complète, avec périmètre et matériel documentés. |
 | MCP assurerait l’isolation et l’abstraction des modèles | Séparer connecteurs MCP, adaptateurs de modèles, autorisations et isolation d’exécution. MCP organise les échanges avec les outils et les ressources. |
-| WASM permettrait une compatibilité légère avec les extensions VS Code | Exclure l’émulation générale du programme initial. L’emploi éventuel de WASM pour notre moteur de texte ne fournit pas les API et services attendus par les extensions VS Code. |
+| WASM permettrait une compatibilité légère avec les extensions VS Code | Exclure l’émulation générale du programme initial. L’isolation éventuelle de plugins via WASI ne fournit pas les API et services attendus par les extensions VS Code. |
 | Local-first et BYOK supprimeraient les risques et les coûts | Mesurer les transferts réels et les coûts d’exploitation ; BYOK transfère le coût d’inférence à l’utilisateur sans supprimer les autres charges. |
 
-Ces distinctions suivent les périmètres documentés de [MCP](https://modelcontextprotocol.io/docs/learn/architecture) et de [Monaco](https://github.com/microsoft/monaco-editor).
+Ces distinctions suivent les périmètres documentés de [MCP](https://modelcontextprotocol.io/docs/learn/architecture), de [CodeMirror 6](https://codemirror.net/docs/guide/) et de [Monaco](https://github.com/microsoft/monaco-editor).
 
 ### Matrice d’adaptation UX/UI
 
@@ -54,31 +54,40 @@ Un même workspace alimente trois présentations : **Créer**, **Apprendre** et 
 
 Le code demeure la source de vérité. Le produit ne promet pas une conversion visuelle universelle de tout programme.
 
-L’identité Coloride associe couleurs, icônes et libellés : **tests réussis**, **à examiner**, **échec**, **source inchangée**, **non testé**, **validation périmée**. Un statut vert indique précisément les vérifications réussies sur une version donnée.
+### Sémantique des couleurs et états de validation Coloride
+
+Pour garantir la lisibilité et l’accessibilité (daltonisme, lecteurs d’écran), chaque état combine une **couleur**, une **icône distincte** et un **libellé explicite** liés au hash exact de la révision du document :
+
+| État Coloride | Icône & Libellé | Condition exacte d’obtention | Action utilisateur / transition |
+|---|---|---|---|
+| 🟢 **Vert** | `✓ Validé` | Compilation réussie, `vtsls`/Biome sans erreur et 100 % des tests impactés réussis dans la sandbox sur le snapshot courant | Prêt à fusionner ou publier ; passe immédiatement à `⟳ Validation périmée` dès qu’un caractère de la plage est modifié |
+| 🟡 **Jaune / Ambre** | `! À examiner` | Patch généré par un agent en attente d’arbitrage humain, décision d’architecture ou avertissement non bloquant | Revue interactive via `@codemirror/merge` (Accepter, Rejeter ou Demander un ajustement) |
+| 🔴 **Rouge** | `✕ Échec` | Erreur de compilation, erreur de type (`vtsls`), règle Biome bloquante ou test en échec dans la sandbox | Inspection de la trace d’erreur corrélée ; correction manuelle ou relance ciblée de l’agent (max 2 essais auto) |
+| 🟠 **Orange / Gris** | `⟳ Validation périmée` | Plage précédemment `✓ Validé` mais modifiée localement par l’utilisateur après le passage des tests | Re-vérification incrémentale automatique en arrière-plan pour rétablir l’état `✓ Validé` ou `✕ Échec` |
+| 🔵 **Bleu** | `• Source inchangée` | Code d’origine ou d’infrastructure non modifié par la tâche courante | Édition normale ; sert de référence stable dans le workspace |
 
 ## 2. Architecture globale, Context Engine et exécution
 
 ### Organisation du système
 
-Le MVP adopte un **monolithe modulaire Rust côté host**, avec des processus séparés pour les composants coûteux ou exposés : indexation, modèles locaux, serveurs de langage et sandboxes. L’interface reste React/Tauri. La vue de l’éditeur possède un cycle de mise à jour indépendant des panneaux React ; le prototype évaluera un noyau de texte Rust compilé en WebAssembly dans un Web Worker.
+Le MVP adopte un **monolithe modulaire Rust côté host**, avec des processus séparés pour les composants coûteux ou exposés : indexation, modèles locaux, serveurs de langage et sandboxes. L’interface reste React/Tauri. La vue d’édition repose sur **CodeMirror 6**, avec un cycle de mise à jour indépendant des panneaux React et une synchronisation directe par deltas avec le **Host Rust natif**.
 
 ```mermaid
 flowchart TB
     U["Utilisateur"] --> UI["Interface React / Tauri<br/>Conversation · Arborescence · Panneaux"]
-    UI --> EV["Éditeur Coloride<br/>Vue web indépendante · Diff"]
-    EV <-->|"Opérations et révisions"| EC["Noyau de texte propre<br/>Rust / WASM Worker à valider"]
-    UI <-->|"IPC typé"| H["Host Rust<br/>Workspace · Git · LSP · DAP"]
-    EC <-->|"Via adaptateur TypeScript et IPC<br/>Deltas · Journal · Snapshots"| H
-    H --> O["Orchestrateur déterministe<br/>États · Journal · Budgets"]
-    O <--> C["Context Engine<br/>Recherche · Symboles · Dépendances"]
-    O --> A["Agents spécialisés<br/>Codeur · Reviewer · DevOps · SQL"]
+    UI --> EV["Éditeur Coloride (CodeMirror 6)<br/>État visuel · Lezer < 2 ms · Décorations"]
+    UI <-->|"IPC typé + Channel binaire"| H["Host Rust Natif (Source de vérité)<br/>Workspace · Rope · Journal · Git · LSP · DAP"]
+    EV <-->|"IPC Tauri direct (Channel / Deltas)<br/>Snapshots · Décorations d'état"| H
+    H --> O["Juge & Orchestrateur déterministe<br/>États · Checkpoints · Budgets"]
+    O <--> C["Context Engine (MCP local < 20 ms)<br/>SQLite WAL/mmap · Tree-sitter · Graphe"]
+    O --> A["Moteurs d'agents (ACP/SDK & Spécialisés)<br/>Codex · Claude Code · DevOps · SQL"]
     A <--> M["Model Gateway<br/>Local · BYOK · Managé · Privé"]
     A --> P["Propositions d'actions structurées"]
     P --> G["Policy Engine<br/>Droits · Cibles · Préconditions · Quotas"]
     G --> T["Tool Broker"]
     T --> MC["Connecteurs MCP contrôlés"]
-    T --> S["Sandbox<br/>VM locale / Runner cloud"]
-    S --> E["Preuves<br/>Diff · Tests · Logs · Artefacts"]
+    T --> S["Sandbox<br/>Natif OS (0 VM) / OCI / Cloud"]
+    S --> E["Preuves (Tests ciblés puis complets)<br/>Diff · Tests · Logs · Artefacts"]
     E --> O
     O --> UI
     UI --> V["Validation liée à une version"]
@@ -91,48 +100,41 @@ flowchart TB
 
 | Composant | Responsabilité et choix |
 |---|---|
-| Workspace Service | Fichiers, réplica journalisé des buffers non enregistrés, sauvegarde atomique, surveillance des changements, récupération après crash |
-| Git Service | Instantanés, branches de tâches, diffs et application conditionnée à la version courante ; conservation des modifications utilisateur |
-| Editor Core Coloride | Noyau de texte propre en Rust : transactions, sélection, historique undo/redo et révisions ; exécution WASM dans un Worker proposée pour le prototype |
-| Editor View Coloride | Vue TypeScript/DOM virtualisée indépendante de React : saisie, curseur, sélection, défilement, coloration, diagnostics et complétion ; intégration clavier, IME et accessibilité |
-| Diff Service / Review View | Calcul des différences sur des snapshots immuables et vue de revue propre ; acceptation de modifications avec contrôle des versions, sans dépendance au diff de Monaco |
-| Language Service | `typescript-language-server` au MVP ; LSP sur JSON-RPC/stdio, supervisé par le host |
+| Workspace & Document Service (Host Rust) | Autorité unique de persistance : buffers en mémoire (`ropey`), démarrage paresseux (*Lazy Boot* avec restauration instantanée de session), journalisation durable, sauvegarde atomique et récupération après crash |
+| Git & Checkpoint Service | **Time-Travel Checkpoints** invisibles (`refs/coloride/checkpoints/<task_id>`) avant chaque action d’agent permettant d’annuler une tâche multi-fichiers en 1 clic sans polluer `git log` ; branches de tâches et diffs conditionnés à la version courante |
+| Editor View (CodeMirror 6) | Rendu DOM virtualisé indépendant de React : saisie optimiste immédiate (`EditorState`), coloration locale instantanée (< 2 ms via Lezer) enrichie progressivement par Tree-sitter/LSP, et extensions `StateField` / `Decoration` pour les états Coloride |
+| Diff Service / Review View | Éditions agents anclées sur l’AST (`Tree-sitter`) ou blocs `SEARCH/REPLACE` vérifiés ; calcul du diff exact dans le Host Rust sur snapshots immuables et présentation via `@codemirror/merge` |
+| Language & Quality Service | `vtsls` (et adaptateur prêt pour `tsgo` / TypeScript 7 natif) + **Biome** (Rust) pour le linting et le formatage en quelques millisecondes ; démarrés en arrière-plan et projetés dans CodeMirror 6 |
 | Debug Service | DAP avec adaptateur JavaScript ; lancement, évaluation et terminal soumis aux permissions |
-| Terminal Service | `xterm.js` et PTY supervisé ; commandes des agents exécutées dans la sandbox |
-| Preview Service | Origine distincte, sans pont IPC Tauri ni cookies du service de gestion |
+| Terminal Service | `xterm.js` et PTY supervisé via flux binaires Tauri `Channel` ; commandes des agents exécutées dans la sandbox |
+| Preview Service (Browser Loop) | Origine distincte sans pont IPC Tauri ; capture automatique des erreurs runtime (`console.error`, exceptions non gérées, échecs réseau) et de l’arbre DOM/accessibilité pour alimenter les preuves `Evidence` avant d’accorder l’état `🟢 ✓ Validé` |
+| Migration & Onboarding Service | Import en 1 clic au premier lancement depuis VS Code / Cursor / Claude Desktop : raccourcis clavier (presets VS Code / Vim / JetBrains), thèmes, serveurs MCP existants (soumis à validation) et règles projet (`.cursorrules`, `CLAUDE.md`, `AGENTS.md`) |
 
-Tree-sitter produit une structure syntaxique incrémentale ; les informations sémantiques viennent du LSP et des compilateurs. Un lien de dépendance déduit heuristiquement porte un niveau de confiance. [Documentation Tree-sitter](https://tree-sitter.github.io/tree-sitter/).
+Tree-sitter produit une structure syntaxique incrémentale directement dans le Host Rust ; les informations sémantiques viennent du LSP et des compilateurs. Un lien de dépendance déduit heuristiquement porte un niveau de confiance. [Documentation Tree-sitter](https://tree-sitter.github.io/tree-sitter/).
 
 Les dépôts non approuvés ne peuvent pas déclencher librement hooks Git, scripts de démarrage, extensions ou processus de langage sur l’hôte.
 
-### Éditeur propre dans React/Tauri
+### Architecture d’édition à deux couches : CodeMirror 6 + Host Rust
 
-**Périmètre confirmé :** Coloride développe son moteur d’édition et sa vue, tout en conservant React pour le chat, les onglets, l’arborescence et les panneaux, et Tauri pour l’application desktop. Le terminal reste fondé sur xterm.js. Tree-sitter, LSP/DAP et les bibliothèques de traitement de texte restent réutilisables ; cette décision ne lance pas une interface native GPUI.
+**Périmètre confirmé :** Coloride utilise **CodeMirror 6** pour la couche d’interaction et d’affichage dans la WebView, couplé directement au **Host Rust natif** via IPC Tauri. React gère le chat, les onglets, l’arborescence et les panneaux.
 
-**Architecture interne proposée pour le prototype :**
+**Fonctionnement interne et avantages de la séparation en deux couches :**
 
-- Une bibliothèque Rust `editor-core`, sans dépendance à React ni aux API système, implémente les transactions sur le texte et l’historique. Elle est testable en natif et compilable en WASM via `wasm-bindgen`.
-- Un Worker héberge le document actif et ordonne les transactions. La vue TypeScript gère un sous-arbre DOM stable, avec des lignes virtualisées, indépendamment du rendu React. Une projection provisoire permet la saisie et la composition ; elle est réconciliée avec les révisions du noyau.
-- Les échanges transportent des opérations incrémentales et des révisions. La saisie n’attend pas un aller-retour IPC Tauri ; aucun document complet n’est retransmis à chaque frappe. La latence UI → Worker → UI reste à mesurer.
-- Le host Rust conserve un réplica journalisé pour les snapshots, la récupération, Git, LSP et les agents. Il n’est pas une seconde autorité d’édition concurrente. Toutes les mutations d’un document ouvert, y compris les patchs d’agents, passent par les transactions du document actif après contrôle de version.
-- La composition IME reste pilotée par les événements du navigateur. La vue ne réécrit pas le DOM de composition en cours ; la transaction de texte est validée à sa fin. Une sauvegarde ou un snapshot attend cette fin, ou reste explicitement en attente si la composition n’est pas terminée.
-- Les conversions entre octets UTF-8, indices UTF-16, positions LSP et graphèmes sont centralisées. Les déplacements du curseur, fins de ligne, caractères combinés, emoji et texte bidirectionnel font partie du contrat d’édition.
-- Le DOM permet de réutiliser le rendu de texte du navigateur, mais ne garantit pas l’accessibilité d’une vue virtualisée. Clavier, lecteurs d’écran et composition sont des critères bloquants du prototype.
+- **Latence de frappe minimale (UI optimiste) :** CodeMirror 6 maintient son `EditorState` immuable (structure en arbre de texte) pour le rendu immédiat de la frappe, la composition IME native du navigateur, le multicurseur et l’accessibilité (lecteurs d’écran), sans bloquer sur un aller-retour IPC.
+- **Autorité unique dans le Host Rust :** chaque transaction locale validée dans CodeMirror 6 émet un delta compact et versionné vers le Host Rust via IPC. Le Host Rust applique ce delta à sa structure de texte native (`ropey`), écrit le journal de récupération et alimente directement en mémoire — sans repasser par la WebView — Tree-sitter, le serveur LSP, le `Context Engine` et les snapshots des agents.
+- **Économie mémoire et suppression du Split-Brain :** le document actif n’est maintenu que dans la vue active CodeMirror 6 et dans le Host Rust. Les conversions d’offsets (octets UTF-8 pour Rust/Tree-sitter, UTF-16 pour LSP et positions CodeMirror) sont centralisées dans le pont Host Rust ↔ CodeMirror.
+- **Décorations d’état Coloride natives :** les états d’exécution et de validation (🟢 Validé, 🟡 En révision, 🔴 Échec, 🔵 Infrastructure, validation périmée) sont injectés sous forme de `StateEffect` et `Decoration` CodeMirror 6 liés au hash exact de la révision testée. Dès qu’une plage couverte est modifiée par l’utilisateur, CodeMirror invalide localement le badge vert en attendant le nouveau cycle du Host Rust.
+- **Coédition V1 prête à l’emploi :** en V1, l’intégration collaborative s’appuie sur `y-codemirror.next` (Yjs) avec `UndoManager` isolé par origine (séparant l’historique d’annulation de l’utilisateur des actions d’agents ou de collaborateurs distants), synchronisé avec le Host Rust.
 
-L’exécution de Rust/WASM dans un Worker est documentée par [wasm-bindgen](https://wasm-bindgen.github.io/wasm-bindgen/examples/wasm-in-web-worker.html). Les événements de composition sont décrits dans la [documentation des API web](https://developer.mozilla.org/en-US/docs/Web/API/Element/compositionstart_event). Ces mécanismes ne constituent pas une preuve de performance ou de compatibilité du futur éditeur Coloride.
+**Révisions et récupération :** chaque document porte un identifiant et une génération de session. On distingue la révision interactive affichée dans CodeMirror 6, la révision durablement journalisée par le Host Rust et celle sauvegardée sur disque. Le statut « sauvegardé » exige une écriture disque réussie de la révision correspondante ; une édition survenue entre-temps laisse le document modifié.
 
-**Révisions et récupération :** chaque document porte un identifiant et une génération de session. Distinguer la révision appliquée dans le noyau, la révision durablement journalisée par le host et celle sauvegardée sur disque. Le statut « sauvegardé » exige une écriture disque réussie de la révision correspondante ; une édition survenue entre-temps laisse le document modifié. Une réponse tardive d’un ancien document ou Worker ne peut pas remplacer le buffer visible.
+Avant une sauvegarde, un contexte agent ou un snapshot de test, le Host Rust synchronise le dernier delta acquitté de CodeMirror 6 (en attendant la fin d’une éventuelle composition IME en cours) et fige une révision précise. Le contexte peut inclure des changements non enregistrés, sans imposer leur sauvegarde sur disque. Tous les patchs d’agents passent par le Host Rust qui vérifie la révision de base, puis pousse une transaction versionnée vers CodeMirror 6. Après un crash de la WebView ou de l’application, le Host Rust restaure le dernier journal confirmé.
 
-Avant une sauvegarde, un contexte agent ou un snapshot de test, une barrière attend les transactions en cours et capture une révision précise. Le contexte peut inclure des changements non enregistrés, sans imposer leur sauvegarde sur disque. Le host doit avoir confirmé la disponibilité de cette même révision. Une modification ultérieure ne change pas le snapshot capturé ; l’application du résultat vérifie de nouveau la version courante. Après un crash, restaurer le dernier journal confirmé et indiquer une éventuelle saisie non encore journalisée ; ne pas promettre une durabilité de données non acquittées.
-
-| Jalon | Fonctions de l’éditeur propre |
+| Jalon | Fonctions de l’éditeur (CodeMirror 6 + Host Rust) |
 |---|---|
-| **Prototype préalable** | Saisie, sélection, défilement, undo/redo, IME, accents, emoji, arabe/bidi, accessibilité et récupération ; mesure du chemin de saisie sur les trois OS |
-| **MVP** | Curseur unique, onglets, recherche/remplacement, indentation, raccourcis, coloration TypeScript, diagnostics/navigation/complétion LSP, conflits disque, diff multi-fichiers et patchs versionnés ; défilement horizontal pour les longues lignes |
-| **Bêta** | Multicurseur, snippets, pliage, retour visuel à la ligne et optimisation des grands fichiers ; durcissement de l’entrée et de l’accessibilité |
-| **V1** | Coédition via adaptateur Yjs, undo par origine, revues enrichies et intégration des espaces DevOps/SQL ; les opérations distantes entrent dans la même chaîne de transactions, sans CRDT maison |
-
-Le protocole de coédition de V1 doit établir l’ordre partagé via Yjs et projeter les changements dans le noyau d’édition. L’historique undo de collaboration est géré par origine dans l’adaptateur Yjs ; les opérations distantes ne sont pas ajoutées comme saisies locales à annuler.
+| **MVP** | CodeMirror 6 intégré hors du cycle de re-rendu React ; synchronisation de deltas avec le Host Rust (`ropey` + journal) ; coloration, diagnostics/navigation/complétion LSP ; diff unifié et côte-à-côte (`@codemirror/merge`) ; décorations d’état Coloride liées aux snapshots ; gestion des conflits disque |
+| **Bêta** | Multicurseur complet, snippets, pliage de code, retour visuel à la ligne, recherche/remplacement avancés, optimisation de l’ouverture des très grands fichiers (mode dégradé au-delà d’un seuil de taille) |
+| **V1** | Coédition temps réel via `y-codemirror.next` (Yjs), undo/redo isolé par origine (humain vs agent vs pair), widgets de revue inline enrichis et éditeurs spécialisés pour les espaces DevOps (HCL/YAML) et SQL |
 
 ### Context Engine : contexte précis, actualisé et traçable
 
@@ -155,9 +157,9 @@ flowchart LR
 
 Décisions d’implémentation :
 
-1. **Stockage local :** SQLite WAL pour les métadonnées et le graphe, FTS5 pour la recherche lexicale, `sqlite-vec` pour les embeddings. Index reconstruisibles à partir des sources.
-2. **Indexation incrémentale :** mise à jour des fichiers modifiés ; invalidation lors des changements de branche, suppressions et changements du modèle d’embedding.
-3. **Recherche hybride :** fusion des résultats lexicaux et vectoriels, puis enrichissement par les imports, références, tests voisins et diagnostics.
+1. **Stockage local chaud (0 Mo requis au premier lancement) :** SQLite en mode `WAL` (`synchronous = NORMAL`, `mmap_size` actif pour lectures en mémoire mappée) pour les métadonnées et le graphe, **FTS5 (BM25) + graphe de symboles Tree-sitter/LSP** actifs immédiatement sans téléchargement de modèle, et `sqlite-vec` avec modèle d’embedding compact (< 150 Mo) téléchargé à la demande. Index reconstruisibles à partir des sources.
+2. **Indexation incrémentale avec *debounce* :** mise à jour des fichiers modifiés uniquement après une pause de frappe (*debounce*) ou lors des jalons de tâche afin de ne jamais concurrencer les threads d’édition ; invalidation lors des changements de branche, suppressions et changements du modèle d’embedding.
+3. **Recherche hybride et analyse d’impact :** fusion des résultats lexicaux et vectoriels, puis enrichissement par les imports, références, tests voisins et diagnostics. Le graphe de dépendances identifie également les tests directement impactés par une modification (*Test Impact Analysis*).
 4. **Buffers prioritaires :** les modifications non enregistrées font partie du snapshot de tâche. Une réponse ne doit pas s’appuyer silencieusement sur une ancienne version disque.
 5. **Fenêtre maîtrisée :** budget initial de 16 000 tokens de contexte récupéré, réduit selon les limites du modèle et la réserve de sortie. Les tâches importantes récupèrent le contexte par étapes.
 6. **Dégradation explicite :** si l’index vectoriel est indisponible, recherche lexicale et symbolique ; si le code est incomplet, extraction textuelle avec indication de confiance.
@@ -165,15 +167,21 @@ Décisions d’implémentation :
 
 Les ACL s’appliquent avant la récupération et avant l’envoi. Code, commentaires et résultats MCP restent des données non fiables : leur contenu ne peut pas modifier la politique d’exécution.
 
-### Orchestration multi-agents
+### Orchestration hybride : Moteurs d’agents (ACP / SDK) + Juge déterministe Coloride
 
-| Agent | Entrées et livrables | Limites |
+Plutôt que de réinventer de zéro un agent généraliste de génération de code, Coloride sépare **l’intelligence de génération** (moteurs d’agents connectables ou natifs) et **le Juge déterministe en Rust** (la valeur propre de Coloride) :
+
+- **Moteurs d’agents connectables (Chat / Codeur) :** via le protocole **ACP (Agent Client Protocol)**, SDK ou CLI supervisé, l’utilisateur peut piloter **Claude Code**, **OpenAI Codex**, **GitHub Copilot SDK**, **OpenCode** ou l’agent managé Coloride directement dans l’interface. Coloride expose son `Context Engine` (SQLite FTS5 + graphe Tree-sitter/LSP) comme serveur MCP local ultra-rapide (< 20 ms) pour ces agents.
+- **Le Juge / Arbitre Coloride (100 % Rust déterministe) :** aucune action d’un agent externe ou interne ne s’applique directement sans contrôle. Le Host Rust crée un **Checkpoint Time-Travel** (`refs/coloride/checkpoints/<task_id>`), intercepte les modifications, exécute `vtsls` + `Biome` + les tests impactés dans la sandbox + la vérification de rendu du `Preview Service`, et attribue l’état **🟢 Vert**, **🟡 Jaune** ou **🔴 Rouge**. En cas de **🔴 Rouge**, le Juge renvoie automatiquement le diagnostic structuré à l’agent pour correction (jusqu’à 2 cycles).
+- **Micro-agents spécialisés Coloride :** flux légers dédiés à la traduction pédagogique (modes *Grand public / Débutant*), à l’autocomplétion locale rapide (< 700 ms) et, en V1, aux spécialistes **DevOps** et **DBA/SQL** couplés à leurs exécuteurs sécurisés.
+
+| Rôle / Composant | Origine & Exécution | Responsabilités et limites |
 |---|---|---|
-| **Planificateur** | Intention → étapes, dépendances, critères d’acceptation | Ne délivre aucune autorisation |
-| **Codeur** | Contexte → patch ciblé et tests proposés | Écrit uniquement dans son workspace isolé |
-| **Reviewer** | Diff et preuves → observations structurées | Ne peut ni fusionner ni déclarer seul la correction fonctionnelle |
-| **DevOps** | Infrastructure, pipeline, incident → diagnostic ou plan | Analyse en lecture ; mutations via exécuteur dédié |
-| **SQL** | Schéma, requêtes, statistiques → recommandations ou migration | Aucun privilège administrateur implicite |
+| **Moteur Codeur (Externe ACP/SDK ou Managé)** | Codex, Claude Code, Copilot SDK ou modèle managé/local | Produit le plan et les `ChangeSet` dans un worktree isolé ; ne délivre aucune autorisation |
+| **Juge / Reviewer Déterministe Coloride** | **Host Rust natif** + Sandbox + `Preview Service` | Crée le checkpoint, exécute `vtsls`/Biome/tests/preview, produit `Evidence` et fixe la couleur (`🟢`/`🟡`/`🔴`) |
+| **Micro-Agent Pédagogique & UX** | Prompt léger géré par Coloride | Traduit les diffs, erreurs et coûts en langage clair pour les modes *Créer* et *Apprendre* |
+| **Spécialiste DevOps (V1)** | Agent + connecteurs Terraform/Ansible/CI/K8s | Analyse en lecture ; mutations uniquement via exécuteur dédié après approbation du plan |
+| **Spécialiste SQL / DBA (V1)** | Agent + connecteur PostgreSQL & clones assainis | Introspection et `EXPLAIN` ; aucun privilège administrateur implicite |
 
 Le MVP utilise un Codeur et un Reviewer **séquentiels**. La V1 autorise des tâches parallèles sur des workspaces distincts et un graphe de dépendances explicite.
 
@@ -202,22 +210,25 @@ Les traces partagées contiennent plans, décisions résumées, appels d’outil
 | `ContextBundle` | Extraits sourcés, versions, fraîcheur, classification et destination autorisée |
 | `ModelProvider` | Capacités déclarées, génération en streaming, appels d’outils structurés, annulation et usage |
 | `ToolCall` | Outil, arguments validés, capacités requises, préconditions et clé d’idempotence |
-| `ChangeSet` | Patch, version de base, fichiers affectés et digest du résultat |
-| `Evidence` | Snapshot testé, image d’exécution, commandes, codes de sortie et artefacts |
+| `ChangeSet` | Opérations sémantiques AST (`Tree-sitter`) ou blocs `SEARCH/REPLACE` ancrés sur les symboles, compilés par le Host Rust en patch exact ; version de base, fichiers affectés et digest du résultat |
+| `Evidence` | Snapshot testé, checkpoint Git associé, commandes, codes de sortie, diagnostics `vtsls`/Biome, rapport runtime du `Preview Service` (0 `console.error`/crash) et artefacts |
 | `Approval` | Identité, cible, action, digest approuvé et expiration |
 
 Les schémas sont versionnés, validés côté Rust et projetés en types TypeScript. Un changement du patch, de la cible ou du plan invalide l’approbation correspondante.
 
-### Isolation et sécurité d’exécution
+### Isolation et sécurité d’exécution (Sans Docker obligatoire)
 
-| Environnement | Choix retenu | Restrictions |
+Pour garantir un onboarding en un clic sans imposer l’installation de Docker ou d’une machine virtuelle lourde, l’isolation locale repose sur **trois niveaux progressifs** :
+
+| Environnement | Choix retenu | Restrictions et optimisations de vitesse |
 |---|---|---|
-| **Local, trois OS** | Conteneurs OCI éphémères dans une VM Linux dédiée gérée par Podman Machine | Copie du workspace, pas de montage général du dossier personnel ni de socket de conteneur |
-| **Cloud MVP** | Une tâche ECS Fargate par exécution, sans partage entre tenants | Aucun mode privilégié, aucun Docker-in-Docker ; stack TypeScript prédéfinie |
-| **V1/Enterprise** | Backend Firecracker pour les jobs nécessitant davantage de contrôle et les environnements privés compatibles | Workers Linux/KVM durcis ; jamais présenté comme runtime natif macOS/Windows |
+| **1. Local par défaut (Sans Docker / 0 VM)** | **Sandbox native du système d’exploitation** (`sandbox-exec`/Seatbelt sur macOS, `Landlock` + `bubblewrap`/namespaces sur Linux, `AppContainer` + `Job Objects` sur Windows) combinée à un `git worktree` ou clone *Copy-on-Write* (APFS/reflinks) | Démarrage en **< 5 ms**, 0 Mo de RAM de VM ; écriture restreinte au worktree temporaire, blocage de `~/.ssh`, `~/.aws` et du réseau sortant par défaut ; exécution prioritaire des tests impactés + Biome |
+| **2. Local conteneurisé (Optionnel / Multi-services)** | Abstraction OCI automatique compatible avec **OrbStack, Docker Desktop ou Podman** (utilisée uniquement si présente et requise par la tâche) | Pool de conteneurs pré-chauffés (*Warm Sandbox Pool*) avec cache paquets en lecture seule (`pnpm`/`bun`) ; pas de montage du dossier personnel ni de socket de conteneur |
+| **3. Cloud MVP** | Une tâche ECS Fargate par exécution, sans partage entre tenants | Aucun mode privilégié, aucun Docker-in-Docker ; stack TypeScript prédéfinie avec cache d’images et de dépendances pré-positionné |
+| **4. V1/Enterprise** | Backend Firecracker pour les jobs nécessitant davantage de contrôle et les environnements privés compatibles | Workers Linux/KVM durcis avec restauration rapide de snapshots microVM ; jamais présenté comme runtime natif macOS/Windows |
 | **Extensions limitées** | Wasmtime/WASI | Capacités explicites, fichiers préouverts, limites mémoire et temps |
 
-Podman Machine permet une VM sur les trois plateformes. Fargate fournit une frontière d’exécution par tâche, avec des restrictions incompatibles avec certains usages Docker. Firecracker requiert un environnement Linux/KVM approprié. [Podman](https://docs.podman.io/en/latest/markdown/podman-machine.1.html), [Fargate](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/fargate-security-considerations.html), [Firecracker](https://github.com/firecracker-microvm/firecracker/blob/main/docs/prod-host-setup.md).
+L’utilisateur peut ainsi utiliser Coloride dès l’installation sans Docker ni Podman grâce à la sandbox native de l’OS. Lorsque des conteneurs sont nécessaires (bases de données de test, environnements multi-services), le Host Rust détecte un runtime OCI existant (OrbStack, Docker, Podman) ou bascule sur le runner cloud autorisé. [Fargate](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/fargate-security-considerations.html), [Firecracker](https://github.com/firecracker-microvm/firecracker/blob/main/docs/prod-host-setup.md).
 
 Garde-fous communs :
 
@@ -245,40 +256,40 @@ Tauri utilise des moteurs différents selon les plateformes ; son choix ne dispe
 
 | ADR | Choix | Justification et compromis |
 |---|---|---|
-| UI | React, TypeScript, Vite, vue d’édition Coloride et xterm.js | React conserve le chat et les panneaux ; la vue de texte est stable et mise à jour indépendamment |
-| Édition | Noyau Rust propre ; WASM/Worker et vue DOM virtualisée proposés pour le prototype | Maîtrise des transactions et de la revue IA ; coût supplémentaire de saisie, rendu, accessibilité et maintenance multiplateforme |
-| Noyau | Rust, Tokio, interfaces de stockage et d’exécution | Partage des invariants entre poste et cloud ; traitements lourds hors du thread UI |
+| UI | React, TypeScript, Vite, store atomique (Zustand/Jotai), CodeMirror 6 et xterm.js | Isolation stricte des re-rendus : le streaming IA et les logs sont cadencés à 16 ms (`requestAnimationFrame`) sur des listes virtualisées sans impacter l’éditeur |
+| Édition | CodeMirror 6 (Lezer < 2 ms) côté WebView + `ropey` et journal dans le Host Rust via `tauri::ipc::Channel` | Saisie optimiste immédiate, coloration à deux vitesses (Lezer local puis Tree-sitter/LSP), flux IPC binaires sans surcoût de sérialisation JSON |
+| Noyau | Rust, Tokio, *Lazy Boot* et interfaces de stockage/exécution | Restauration instantanée de la fenêtre et du fichier actif au démarrage ; lancement différé de `vtsls`/Biome, SQLite et sandboxes sur des threads de basse priorité |
 | Orchestration | Machine à états persistante, sans framework d’essaim autonome | Contrôle des transitions, des reprises et du coût ; pas de dépendance cloud pour le mode local |
 | API cloud | Rust/Axum, REST/OpenAPI, SSE pour les événements, WebSocket pour les terminaux | Contrats typés, reconnexion par curseur et séparation des flux |
-| Stockage cloud | PostgreSQL, stockage objet S3, KMS | Métadonnées transactionnelles ; artefacts identifiés par digest et isolés par tenant |
-| Hébergement MVP | AWS en région UE, ECS Fargate, RDS PostgreSQL, S3/CloudFront | Réduction de l’exploitation initiale ; dépendance fournisseur contenue dans les adaptateurs |
+| Stockage cloud | PostgreSQL, stockage objet compatible S3 / Cloudflare R2, KMS | Métadonnées transactionnelles ; artefacts identifiés par digest et isolés par tenant sans frais de bande passante sortante (*zero egress*) |
+| Hébergement MVP | AWS (région UE : ECS Fargate, RDS PostgreSQL) + Cloudflare R2/Pages pour la publication statique | Réduction de l’exploitation initiale, propagation instantanée (< 50 ms) et maîtrise des coûts de trafic ; dépendance fournisseur contenue dans les adaptateurs |
 | Identité | OIDC Authorization Code + PKCE ; fédération SAML/SCIM en Enterprise | Aucun compte requis pour le local ; identité requise pour les services managés |
-| Connecteurs | MCP sur stdio pour le local et transport HTTP standard pour le distant | Catalogue autorisé, scopes et authentification propres à chaque connecteur |
+| Connecteurs & Agents | MCP (stdio/HTTP) pour les outils ; **ACP (Agent Client Protocol) / SDK** pour intégrer Claude Code, Codex ou agents externes | Catalogue autorisé, scopes et interception systématique des actions par le Juge Rust |
 | Collaboration | Événements synchronisés dès la bêta ; Yjs pour la coédition en V1 | Synchronisation activée par workspace ; Git reste responsable des versions publiées |
-| Extension | LSP, DAP, import de préférences et plugins WASI contrôlés | Pas de promesse de compatibilité générale avec le Marketplace VS Code |
+| Onboarding & Extension | Import 1-clic (VS Code / Cursor / Claude Desktop : keymaps, thèmes, MCP, `.cursorrules` / `CLAUDE.md`), LSP/DAP et plugins WASI | Adoption immédiate sans friction ; pas de promesse d’émulation générale du Marketplace VS Code |
 
 Les instantanés cloud sont envoyés uniquement pour les tâches explicitement hébergées. L’activation du cloud ne synchronise pas automatiquement tous les dépôts.
 
 ### Modèles et routage
 
-Le registre de modèles doit enregistrer fournisseur, identifiant, capacités, limites, prix, politique de données et version de configuration.
+Le registre de modèles doit enregistrer fournisseur, identifiant, capacités, limites, prix, politique de données et version de configuration. Pour éviter de multiplier les moteurs d’inférence en mémoire, l’exécution locale est **unifiée sur un seul runtime** (`llama.cpp` embarqué par le Host Rust ou connexion à une instance Ollama existante), et la recherche de contexte fonctionne immédiatement sans téléchargement obligatoire.
 
 | Usage | Choix initial | Règle de routage |
 |---|---|---|
-| Complétion courte | Qwen2.5-Coder 1.5B quantifié, runtime `llama.cpp` | Local, contexte proche du curseur ; annulation immédiate après nouvelle frappe |
-| Explication et petites transformations | Qwen2.5-Coder 7B Instruct via Ollama | Option locale selon les ressources ; pas de garantie de parité avec les modèles distants |
-| Recherche sémantique | BGE-M3 exécuté localement via ONNX Runtime | Indexation en arrière-plan ; recherche lexicale disponible sans téléchargement du modèle |
+| Complétion courte | Qwen2.5-Coder 1.5B quantifié (runtime local unifié `llama.cpp` / Ollama) | Local, contexte proche du curseur ; annulation immédiate après nouvelle frappe |
+| Explication et petites transformations | Qwen2.5-Coder 7B Instruct (même runtime local unifié) | Option locale selon la RAM/VRAM disponible ; pas de garantie de parité avec les modèles distants |
+| Recherche de contexte et sémantique | **SQLite FTS5 (BM25) + Graphe Tree-sitter/LSP** par défaut (0 Mo) ; modèle d’embedding compact (`nomic-embed-code` / `bge-small` < 150 Mo) en option | Recherche lexicale et structurelle instantanée dès l’ouverture ; indexation vectorielle optionnelle en arrière-plan |
 | Code et revue managés | `claude-sonnet-5-5` | Configuration initiale du service, soumise aux évaluations du produit |
 | Raisonnement complexe | `gpt-6-astra` | Escalade permise par la politique et le budget ; jamais automatique vers une destination interdite |
 | Entreprise privée | Endpoint vLLM homologué | Modèle choisi dans le catalogue de l’organisation ; tests de compatibilité des capacités |
 
-Ces modèles constituent une **configuration initiale à évaluer**, pas un classement universel. Les références consultées documentent [Qwen2.5-Coder](https://arxiv.org/abs/2409.12186), [BGE-M3](https://huggingface.co/BAAI/bge-m3), [Sonnet 5.5](https://platform.claude.com/docs/en/models/sonnet-5-5/overview) et les [modèles OpenAI pour le code](https://developers.openai.com/api/docs/guides/code-generation).
+Ces modèles constituent une **configuration initiale à évaluer**, pas un classement universel. Les références consultées documentent [Qwen2.5-Coder](https://arxiv.org/abs/2409.12186), [Sonnet 5.5](https://platform.claude.com/docs/en/models/sonnet-5-5/overview) et les [modèles OpenAI pour le code](https://developers.openai.com/api/docs/guides/code-generation).
 
-Les clés BYOK restent dans le coffre du système et les appels partent directement du host. Le service managé utilise ses propres credentials côté serveur. Une panne fournisseur suspend la tâche ou utilise un fournisseur de secours déjà autorisé.
+Les clés BYOK restent dans le coffre du système et les appels partent directement du host. Le service managé utilise ses propres credentials côté serveur. Le `Model Gateway` structure systématiquement les requêtes (instructions système, graphe du dépôt et fichiers stables en préfixe avec marqueurs `cache_control`) pour exploiter le **Prompt Caching** natif des fournisseurs, réduisant de 75 à 90 % le coût des boucles Codeur/Reviewer et la latence du premier token (TTFT). Une panne fournisseur suspend la tâche ou utilise un fournisseur de secours déjà autorisé.
 
 ### Publication et opérations spécialisées
 
-**MVP :** publication React/Vite statique sur S3 privé derrière CloudFront. Le bouton Publier promeut l’artefact testé, identifié par digest. Les anciennes versions restent disponibles pour restauration. SSR, API serveur et secrets dans le bundle sont exclus de ce premier parcours.
+**MVP :** publication React/Vite statique sur **Cloudflare R2 + Cloudflare Pages/Workers** (0 $ de frais d’*egress* et invalidation globale en < 50 ms) ou via connecteur externe au choix de l’utilisateur (Vercel, GitHub Pages). Le bouton Publier promeut l’artefact testé, identifié par digest. Les anciennes versions restent disponibles pour restauration en un clic. SSR, API serveur et secrets dans le bundle sont exclus de ce premier parcours.
 
 **V1 DevOps :** génération Terraform/Ansible et GitHub Actions ; diagnostic Kubernetes en lecture ; application d’un plan approuvé par un exécuteur séparé. Les plans Terraform sont traités comme des artefacts sensibles, car ils peuvent contenir des secrets. [Documentation Terraform](https://developer.hashicorp.com/terraform/cli/commands/plan).
 
@@ -286,25 +297,42 @@ Les clés BYOK restent dans le coffre du système et les appels partent directem
 
 ## 4. Roadmap en quatre phases
 
-**Le calendrier initial M1–M24+ est à recalibrer : il supposait l’intégration de Monaco.** La construction d’un éditeur propre ajoute un chantier de moteur de texte, de rendu et de saisie multiplateforme. Un prototype de viabilité précède l’engagement sur les durées des quatre phases ; il fait partie de la préparation du MVP. Le cloud et les trois OS restent des critères de sortie. Les dates seront établies après mesure du prototype, estimation du backlog et confirmation des recrutements, sans ajouter arbitrairement un délai fixe.
-
-Une responsabilité dédiée **édition de texte et entrée multiplateforme** est requise avant l’industrialisation. Les effectifs ci-dessous sont des hypothèses de capacité incluant cette responsabilité, à confirmer lors du recalage.
+**L’adoption de CodeMirror 6 couplé directement au Host Rust offre une base d’édition légère et immédiatement exploitable.** L’équipe peut concentrer le MVP sur la proposition de valeur distinctive de Coloride : la synchronisation déterministe entre l’éditeur et le Host Rust, le Context Engine hybride, l’exécution isolée en sandbox et la validation visuelle par états de couleur.
 
 | Phase | Objectifs et livrables | Équipe et compétences | Risques majeurs et atténuation | Critères de sortie |
 |---|---|---|---|---|
-| **1. MVP — après prototype validé** | Éditeur propre à curseur unique et diff ; Tauri sur trois OS ; TypeScript/React ; local/BYOK et cloud ; contexte hybride ; Codeur/Reviewer ; tests, preview et publication statique | **2 → 5 personnes** : fondateurs produit/frontend et Rust/IA ; ingénieur édition texte/rendu, plateforme et QA avant la sortie. Expertise sécurité/accessibilité ponctuelle | Fiabilité de l’édition : prototype bloquant et tests de transactions. Dispersion : stack métier unique. WebView : essais sur les trois OS. Pertes de fichiers : versions et journal. Coûts : quotas | Saisie, IME, accessibilité, sauvegarde et reprise validées ; parcours agent complet sur les trois OS ; aucun écrasement utilisateur ; budget appliqué ; revue de sécurité |
-| **2. Bêta fermée — après stabilisation du MVP** | 20–50 utilisateurs ; multicurseur, snippets, pliage et word wrap ; ergonomie débutant ; édition visuelle du catalogue ; mémoire de projet ; synchronisation des tâches ; MCP sélectionné | **7 personnes** : ajout ingénieur IA/contexte et designer produit ; maintien édition, plateforme et QA | Régressions de saisie : fuzzing et tests natifs. Contexte incorrect : corpus de retrieval. Permissions confuses : tests utilisateurs. Providers : contrats et circuit breakers | Mesures qualité/coût/latence ; onboarding autonome ; fonctions avancées de l’éditeur validées ; restauration et déconnexion réseau |
-| **3. V1 multi-rôles — après validation des usages bêta** | Cinq personas ; agents parallèles ; backend Node managé ; PostgreSQL ; Terraform/Ansible/CI ; coédition et undo par origine ; backend Firecracker | **9–11 personnes** : ajout expertise DevOps/SRE, données/PostgreSQL et sécurité ; maintien de la responsabilité éditeur | Conflits agents/coédition : transactions et workspaces séparés. Infrastructure/migrations : plans approuvés et rapprochement d’état. Visuel/code : transformations testées | Scénarios pour chaque persona ; convergence et undo de coédition ; tests de charge ; audit des autorisations ; restauration des applications et bases |
-| **4. Scale / Enterprise — après qualification de la V1** | VPC/on-premise ; SSO/SAML/SCIM ; RBAC/ABAC ; politiques centrales ; audit ; haute disponibilité ; modèles privés | **13–16 personnes** : SRE, sécurité, identité, administration plateforme et support entreprise ; maintien du moteur d’édition ; accompagnement DPO/juridique | Isolation multi-tenant, mises à jour privées, disponibilité et conformité : tests d’intrusion, déploiements progressifs et exercices de reprise | RPO/RTO vérifiés ; identité ; suppression des données testée ; pilote entreprise accepté ; procédures d’incident opérationnelles |
+| **1. MVP** | Éditeur CodeMirror 6 + Host Rust (`ropey`/journal) et diff (`@codemirror/merge`) ; décorations d’état Coloride ; Tauri sur trois OS ; TypeScript/React ; local/BYOK et cloud ; contexte hybride ; Codeur/Reviewer ; tests, preview et publication statique | **2 → 4 personnes** : fondateurs produit/frontend et Rust/IA ; ingénieur plateforme/sandbox et QA avant la sortie. Expertise sécurité ponctuelle | Synchronisation IPC des deltas : tests de propriétés sur les révisions. Dispersion : stack métier unique. WebView : essais sur les trois OS. Pertes de fichiers : versions et journal. Coûts : quotas | Saisie fluide, sauvegarde et reprise après crash validées ; parcours agent complet sur les trois OS ; aucun écrasement utilisateur ; budget appliqué ; revue de sécurité |
+| **2. Bêta fermée — après stabilisation du MVP** | 20–50 utilisateurs ; extensions CodeMirror avancées (snippets, pliage, grands fichiers) ; ergonomie débutant ; édition visuelle du catalogue ; mémoire de projet ; synchronisation des tâches ; MCP sélectionné | **6 personnes** : ajout ingénieur IA/contexte et designer produit ; maintien plateforme et QA | Désynchronisation d’états de couleur : tests de mutation de révision. Contexte incorrect : corpus de retrieval. Permissions confuses : tests utilisateurs. Providers : contrats et circuit breakers | Mesures qualité/coût/latence ; onboarding autonome ; fonctions avancées de l’éditeur validées ; restauration et déconnexion réseau |
+| **3. V1 multi-rôles — après validation des usages bêta** | Cinq personas ; agents parallèles ; backend Node managé ; PostgreSQL ; Terraform/Ansible/CI ; coédition via `y-codemirror.next` et undo par origine ; backend Firecracker | **8–10 personnes** : ajout expertise DevOps/SRE, données/PostgreSQL et sécurité | Conflits agents/coédition : transactions et workspaces séparés. Infrastructure/migrations : plans approuvés et rapprochement d’état. Visuel/code : transformations testées | Scénarios pour chaque persona ; convergence et undo de coédition ; tests de charge ; audit des autorisations ; restauration des applications et bases |
+| **4. Scale / Enterprise — après qualification de la V1** | VPC/on-premise ; SSO/SAML/SCIM ; RBAC/ABAC ; politiques centrales ; audit ; haute disponibilité ; modèles privés | **12–15 personnes** : SRE, sécurité, identité, administration plateforme et support entreprise ; accompagnement DPO/juridique | Isolation multi-tenant, mises à jour privées, disponibilité et conformité : tests d’intrusion, déploiements progressifs et exercices de reprise | RPO/RTO vérifiés ; identité ; suppression des données testée ; pilote entreprise accepté ; procédures d’incident opérationnelles |
 
 **Ordre de construction du MVP :**
 
-1. **Prototype de viabilité :** réaliser la tranche saisie → transaction → affichage → journal → récupération de l’éditeur propre ; valider IME, Unicode/bidi, sélection, undo et lecteurs d’écran sur les trois OS. Mesurer la proposition Rust/WASM/Worker avant de figer son implémentation et de chiffrer le calendrier.
-2. **Socle :** industrialiser l’éditeur, les contrats de révision et les conflits disque ; workspace, Git, LSP/DAP, contexte et modèles. Les travaux VM locale et runner Fargate avancent avec la responsabilité plateforme.
-3. **Boucle agent :** développer le diff propre et l’application de patchs versionnés, puis patch → tests → revue → intégration ; budgets, récupération et preview isolée.
-4. **Livraison :** terminer les parcours local et cloud, la publication statique, le packaging signé et l’acceptation native sur les trois OS. Replanifier si un critère de saisie ou d’intégrité échoue ; ne pas le supprimer pour tenir une ancienne date.
+1. **Socle d’édition et Host Rust :** intégrer CodeMirror 6 hors du cycle de rendu React ; implémenter le pont IPC de deltas versionnés vers le Host Rust (`ropey`, journalisation sur disque, récupération après crash, gestion des conflits disque) et connecter Git, Tree-sitter, `vtsls`/Biome et DAP.
+2. **Contexte et sandboxes sans friction :** assembler le Context Engine (SQLite WAL, FTS5 + graphe de symboles, `sqlite-vec` optionnel), la passerelle de modèles et l’isolation à trois niveaux (Sandbox native de l’OS par défaut sans Docker, détection OCI optionnelle et runner Fargate).
+3. **Boucle agent AST et états Coloride :** développer l’application de `ChangeSet` ancrés sur l’AST (`Tree-sitter`), les décorations d’état Coloride (vert/jaune/rouge/bleu/périmé) et la vue de diff/revue, puis la boucle patch → tests ciblés → revue → intégration, les budgets et la preview isolée.
+4. **Livraison :** terminer les parcours local et cloud, la publication statique, le packaging signé et l’acceptation native sur les trois OS.
 
 Hypothèse de support initial : macOS Apple Silicon, Windows 11 x64 et Ubuntu 24.04 x64. Les autres architectures matérielles seront ajoutées après validation de cette matrice.
+
+### Structure cible du Monorepo (Cargo Workspace + pnpm)
+
+Pour démarrer l’implémentation immédiatement avec une séparation nette des responsabilités entre les deux fondateurs :
+
+```text
+coloride/
+├── apps/
+│   ├── desktop-tauri/          # Application Tauri v2 (assemblage fenêtre, menus natifs, updater)
+│   └── web-ui/                 # Interface React + Vite + Zustand/Jotai (Chat, Cockpit, Panneaux)
+├── packages/
+│   ├── editor-cm6/             # Vue CodeMirror 6 isolée, décorations d'état Coloride (🟢/🟡/🔴/🟠/🔵), diff merge
+│   └── protocol-types/         # Types TypeScript générés automatiquement depuis les contrats Rust (ts-rs / specta)
+└── crates/
+    ├── host-core/              # Monolithe modulaire Rust : buffers ropey, journal, Git checkpoints, migration 1-clic
+    ├── context-engine/         # SQLite WAL/mmap, FTS5, Tree-sitter, graphe d'impact et serveur MCP local
+    ├── judge-orchestrator/     # Machine à états, Policy Engine, pont ACP/SDK (Codex/Claude Code) et validation Evidence
+    └── sandbox-runner/         # Exécution isolée : Sandbox OS native (Seatbelt/Landlock/AppContainer), OCI et Cloud
+```
 
 ## 5. Exigences non fonctionnelles et plan de validation
 
@@ -314,7 +342,7 @@ Hypothèse de support initial : macOS Apple Silicon, Windows 11 x64 et Ubuntu 24
 |---|---|
 | **Budgets** | Limites par tâche, utilisateur et organisation ; réservation du coût maximal estimé avant appel ; plafonds de tokens, durée, outils et ressources sandbox |
 | **Boucles d’agents** | Deux corrections automatiques par défaut ; arrêt sur répétition sans progrès ; reprise explicite avec nouveau budget |
-| **Optimisation** | Cache par contenu, modèle et politique ; contexte différentiel ; routage local ; aucune réutilisation de cache entre tenants |
+| **Optimisation** | **Prompt Caching** natif sur les préfixes de `ContextBundle` ; cache par contenu, modèle et politique ; contexte différentiel ; routage local ; aucune réutilisation de cache entre tenants |
 | **Confidentialité** | Mode strictement local sans compte ; destination et données envoyées visibles ; aucun basculement distant silencieux |
 | **Secrets** | Coffre OS en local, KMS/Secrets Manager côté service ; credentials temporaires ; détection avant indexation, export et journalisation |
 | **Propriété intellectuelle** | Contrats fournisseurs, provenance des dépendances, inventaire des licences et règles d’export ; le masquage de secrets ne vaut pas anonymisation du code |
@@ -330,7 +358,7 @@ Ces valeurs sont des **cibles d’acceptation**, non des performances déjà obt
 
 | Mesure | Cible et périmètre |
 |---|---|
-| Réactivité de saisie | Cible p95 ≤ 16 ms entre événement d’entrée et affichage, sur le scénario de référence ; inclure le passage Worker et mesurer avec chat en streaming, terminal et arborescence actifs |
+| Réactivité de saisie | Cible p95 ≤ 16 ms entre événement d’entrée et affichage dans CodeMirror 6 sur le scénario de référence ; synchronisation asynchrone vers le Host Rust mesurée avec chat en streaming, terminal et arborescence actifs |
 | Ouverture d’un fichier | p95 ≤ 150 ms pour un fichier local ≤ 1 Mo, indexation en arrière-plan |
 | Démarrage desktop | p95 ≤ 3 s jusqu’à l’interface utilisable ; chargement des modèles mesuré séparément |
 | Complétion IA | p95 ≤ 700 ms jusqu’à une suggestion courte, modèle 1.5B chargé et matériel compatible documenté |
@@ -341,6 +369,18 @@ Ces valeurs sont des **cibles d’acceptation**, non des performances déjà obt
 | Reprise Enterprise | Métadonnées durables : RPO ≤ 15 min et RTO ≤ 4 h, démontrés par exercice |
 
 La consommation mémoire est publiée séparément pour UI/host, LSP/index, modèles et VM. La latence de démarrage d’un runner cloud est distincte de la complétion interactive.
+
+### Les 7 leviers d’optimisation pour la fluidité et la vitesse d’exécution
+
+Pour garantir une sensation d’instantanéité supérieure aux IDE Electron, les sept mécanismes suivants sont intégrés à travers l’architecture :
+
+1. **Canaux IPC binaires Tauri v2 (`tauri::ipc::Channel` & Payloads bruts) :** éviter la sérialisation JSON coûteuse sur les flux à haute fréquence (deltas de texte volumineux, ouverture de fichiers, flux de logs terminal, streaming de tokens IA, arbres de fichiers) et regrouper les mises à jour par frame (`requestAnimationFrame` à 16 ms côté UI).
+2. **Sandbox native instantanée (0 VM), snapshots *Copy-on-Write* et Warm Pool OCI :** exécuter par défaut dans la sandbox native du noyau de l’OS (`Seatbelt` / `Landlock` / `AppContainer`) sur un `git worktree` ou clone *Copy-on-Write* (APFS sur macOS, reflinks) en moins de 5 ms sans exiger Docker ; si un runtime OCI (OrbStack/Docker/Podman) est utilisé, maintenir un conteneur pré-démarré avec cache paquets (`pnpm store` / `bun`).
+3. **Isolation des re-rendus UI et virtualisation intégrale :** souscriptions atomiques fines (Zustand/Jotai), virtualisation de l’arborescence et des messages, et cadencement du rendu Markdown en streaming par tranche de 16 ms pour ne jamais perturber CodeMirror 6.
+4. **Démarrage paresseux (*Lazy Boot*) et restauration instantanée de session :** au lancement (< 3 s), charger immédiatement la fenêtre, la disposition mise en cache et le buffer du fichier actif dans CodeMirror 6 ; initialiser `vtsls`/Biome, l’indexation et les sandboxes de manière asynchrone en arrière-plan.
+5. **Coloration et symboles à deux vitesses (Lezer immédiat + Tree-sitter/LSP progressif) :** coloration syntaxique locale en moins de 2 ms via le parseur incrémental Lezer de CodeMirror 6, enrichie de façon asynchrone par Tree-sitter et les diagnostics LSP calculés dans le Host Rust.
+6. **Exécution ciblée des tests (*Test Impact Analysis*) :** utiliser le graphe de dépendances du `Context Engine` pour exécuter en priorité dans la sandbox les tests directement liés aux symboles modifiés (ex. `vitest related`), fournissant un premier retour 🟢/🔴 en moins de 2 secondes avant la suite complète.
+7. **Caches chauds SQLite (`WAL` + `mmap`) et indexation avec *debounce* :** lectures quasi-instantanées en mémoire mappée (`synchronous = NORMAL`, `mmap_size`) et déclenchement de l’indexation vectorielle uniquement après une pause de frappe (*debounce*) ou aux jalons de tâche.
 
 ### Observabilité et évaluation continue
 
@@ -360,15 +400,14 @@ Chaque changement de modèle ou de prompt passe par une évaluation hors ligne, 
 
 | Scénario | Résultat attendu |
 |---|---|
-| Édition TypeScript avec chat en streaming, terminal et grand arbre de fichiers | Curseur et scroll stables ; latence de frappe mesurée ; aucun remontage du composant d’édition causé par le chat |
-| Frappe, sélection, annulation et rétablissement sur texte Unicode | Texte exact conservé ; conversions UTF-8/UTF-16/graphèmes cohérentes ; propriétés de transactions vérifiées par fuzzing |
-| Composition IME, touches mortes, accents, emoji et arabe/bidi | Aucun caractère perdu, doublé ou scindé ; sauvegarde et snapshot coordonnés avec la composition |
-| Navigation clavier, zoom, VoiceOver, NVDA et Orca | Lecture et édition utilisables, y compris au-delà du viewport ; validation native sur chaque OS, pas seulement inspection du DOM |
-| Bascule rapide entre fichiers avec lectures ou réponses Worker retardées | Identité du document et génération vérifiées ; aucun ancien contenu affiché ou enregistré sous un nouveau chemin |
-| Crash du Worker ou du host, sauvegarde pendant une nouvelle édition | Restauration de la dernière révision journalisée ; aucun faux statut « sauvegardé » ; modifications plus récentes conservées |
-| Patch IA, diff ou diagnostic reçu après une modification locale | Révision contrôlée ; décoration obsolète écartée, patch réévalué ou conflit présenté ; aucune application sur de mauvais offsets |
-| Coloration syntaxique et états de validation | Couleurs réellement rendues et lisibles vérifiées sur les trois OS ; présence d’une grammaire ou d’un thème insuffisante |
-| Coédition V1, reconnexion et undo local après modifications distantes | Documents convergents ; undo limité à l’origine attendue ; aucun changement distant supprimé accidentellement |
+| Édition TypeScript avec chat en streaming, terminal et grand arbre de fichiers | Curseur et scroll stables dans CodeMirror 6 ; latence de frappe mesurée ; aucun remontage du composant d’édition causé par le chat |
+| Synchronisation CodeMirror 6 ↔ Host Rust sur texte Unicode et IME | Texte exact conservé entre `EditorState` et `ropey` ; conversions UTF-8/UTF-16 cohérentes avec LSP ; sauvegarde et snapshot coordonnés avec la fin de composition IME |
+| Navigation clavier, zoom, VoiceOver, NVDA et Orca | Lecture et édition utilisables dans CodeMirror 6 et les panneaux d’état Coloride ; validation native sur chaque OS |
+| Bascule rapide entre fichiers avec lectures ou événements IPC retardés | Identité du document et génération vérifiées ; aucun ancien contenu affiché ou enregistré sous un nouveau chemin |
+| Crash de la WebView ou du host, sauvegarde pendant une nouvelle édition | Restauration de la dernière révision journalisée dans le Host Rust ; aucun faux statut « sauvegardé » ; modifications plus récentes conservées |
+| Patch IA, diff ou diagnostic reçu après une modification locale | Révision contrôlée par le Host Rust ; décoration obsolète écartée, patch réévalué ou conflit présenté ; aucune application sur de mauvais offsets |
+| Coloration syntaxique et états de validation | Couleurs réellement rendues et lisibles vérifiées sur les trois OS ; invalidation immédiate de l’état vert dès modification locale |
+| Coédition V1 (`y-codemirror.next`), reconnexion et undo local après modifications distantes | Documents convergents entre pairs et Host Rust ; undo limité à l’origine attendue ; aucun changement distant ou agent supprimé accidentellement |
 | L’utilisateur modifie un fichier pendant une tâche | Conflit présenté ; aucune modification utilisateur écrasée |
 | Crash après une action externe | Rapprochement d’état avant reprise ; absence de duplication aveugle |
 | Prompt injection dans un fichier ou une réponse MCP | Incapacité à élargir les permissions ou à exfiltrer des données |
@@ -381,4 +420,4 @@ Chaque changement de modèle ou de prompt passe par une évaluation hors ligne, 
 | Publication puis restauration | Promotion et retour vers des artefacts identifiés et vérifiés |
 | Mise à jour desktop | Installation signée, migration de données compatible et récupération testée sur les trois OS |
 
-La validation combine tests Rust et WASM du même noyau, tests de transactions, tests de composants et de parcours web, essais natifs sur chaque OS et tests d’isolation. Les tests d’édition vérifient le texte, la sélection, les révisions et la récupération, au-delà du seul rendu visuel. Aucun résultat de compilation ou de typecheck ne sera présenté comme preuve du fonctionnement réel de ces parcours.
+La validation combine tests unitaires et de propriétés du noyau Rust (`ropey` + journal + conversions d’offsets), tests d’intégration IPC avec CodeMirror 6, essais natifs sur chaque OS et tests d’isolation des sandboxes. Aucun résultat de compilation ou de typecheck ne sera présenté comme preuve du fonctionnement réel de ces parcours.
