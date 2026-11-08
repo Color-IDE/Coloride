@@ -54,6 +54,31 @@ Un même workspace alimente trois présentations : **Créer**, **Apprendre** et 
 
 Le code demeure la source de vérité. Le produit ne promet pas une conversion visuelle universelle de tout programme.
 
+### Disposition de l’interface : Le « Cockpit Multi-Chat » en 4 zones
+
+Contrairement aux éditeurs classiques où le chat est relégué dans une colonne étroite, Coloride place le **pilotage multi-agents au centre** tout en conservant les repères ergonomiques de VS Code :
+
+```text
+┌────┬──────────────────┬───────────────────────────────────────────────┬────────────────────────────┐
+│ACT.│ 1. PANNEAU GAUCHE│ 2. CENTRE : ONGLETS & JUSQU'À 8 CHATS //      │ 3. DROITE : INSPECTEUR     │
+│BAR │   (Dynamique)    │ [💬 Chat 1 🟢][💬 Chat 2 🟡][⊞ Grille 1/4/8]  │ [ 👁 Preview | 💻 Code ]   │
+├────┼──────────────────┼───────────────────────────────────────────────┼────────────────────────────┤
+│ 💬 │ SESSIONS / CHATS │ ┌─────────────────────┬─────────────────────┐ │ src/auth/login.tsx         │
+│ 📁 │ ▸ 🟢 #1 Login UI │ │ 🟢 Chat #1 (Codex)  │ 🟡 Chat #2 (Claude) │ │ ────────────────────────── │
+│ 🔍 │ ▸ 🟡 #2 Stripe   │ │ "Créer Login UI"    │ "Webhook Stripe"    │ │ 10│🔵 export function...   │
+│ 🌿 │ ▸ 🔴 #3 Auth DB  │ │ ✓ 4 tests passés    │ ! Choix EUR / USD ? │ │ 11│🟢 ✓ const ok = auth()  │
+│ 🐛 │ ▸ 🟢 #4 Navbar   │ │ [Diff] [✓ Accepter] │ [EUR] [USD] [Diff]  │ │ 12│🟡 ! currency = 'EUR'   │
+│ 🔌 │ ───────────────  │ ├─────────────────────┼─────────────────────┤ │   │   [✓ Accepter] [✕ Rej] │
+│ ⚙️ │ (Ou Arborescence │ │ 🔴 Chat #3 (Codex)  │ 🟢 Chat #4 (Claude) │ │ (Ou bascule instantanée    │
+│ 👤 │  si icône 📁)    │ │ ✕ Échec test #2     │ ✓ Preview 0 erreur  │ │  sur 👁 Preview en direct) │
+└────┴──────────────────┴───────────────────────────────────────────────┴────────────────────────────┘
+```
+
+1. **Extrême gauche — `Activity Bar` (style VS Code) :** barre d’icônes verticale permettant de basculer le panneau latéral entre **💬 Sessions de Chat** (par défaut), **📁 Explorateur de fichiers**, **🔍 Recherche globale** (SQLite FTS5), **🌿 Git & Checkpoints**, **🐛 Debug & Tests** et **🔌 Connecteurs MCP / Modèles**.
+2. **Gauche — Panneau latéral dynamique :** affiche la liste des conversations/agents avec leur pastille d’état (`🟢/🟡/🔴/🟠`) ou l’arborescence des fichiers annotée par état de validation.
+3. **Centre — Zone principale à onglets et Grille Multi-Chat (1 à 8 chats simultanés) :** barre d’onglets avec sélecteur de disposition (`1 | 2 | 4 | 8 chats`). Chaque chat actif s’exécute dans son propre `git worktree` isolé et affiche son contour de couleur Coloride en temps réel.
+4. **Droite — Inspecteur contextuel (`[ 👁 Preview | 💻 Code & Diff ]`) :** synchronisé en `< 10 ms` avec le chat sélectionné au centre. L’utilisateur bascule en un clic entre l’aperçu web interactif (`Preview Service`) et l’éditeur **CodeMirror 6** (code et diff `@codemirror/merge` colorés).
+
 ### Sémantique des couleurs et états de validation Coloride
 
 Pour garantir la lisibilité et l’accessibilité (daltonisme, lecteurs d’écran), chaque état combine une **couleur**, une **icône distincte** et un **libellé explicite** liés au hash exact de la révision du document :
@@ -314,6 +339,63 @@ Les clés BYOK restent dans le coffre du système et les appels partent directem
 4. **Livraison :** terminer les parcours local et cloud, la publication statique, le packaging signé et l’acceptation native sur les trois OS.
 
 Hypothèse de support initial : macOS Apple Silicon, Windows 11 x64 et Ubuntu 24.04 x64. Les autres architectures matérielles seront ajoutées après validation de cette matrice.
+
+### Diagramme de Gantt prévisionnel (MVP → Enterprise)
+
+```mermaid
+gantt
+    title Roadmap de Développement Coloride (MVP → Enterprise)
+    dateFormat  YYYY-MM-DD
+    axisFormat  %b %Y
+
+    section Phase 1 : MVP (S1-S8)
+    S1-S2 Socle Rust (ropey) + UI Cockpit 4 zones & CodeMirror 6 :a1, 2026-11-09, 28d
+    S3-S4 Context Engine (SQLite FTS5/Tree-sitter) + vtsls/Biome :a2, after a1, 28d
+    S5-S6 Juge Rust + Sandbox OS Native + Pont ACP (Codex/Claude) :a3, after a2, 28d
+    S7-S8 Preview Browser Loop + Cloudflare Pages + Packaging 3 OS :a4, after a3, 28d
+    Jalon M1 : Release MVP Alpha :milestone, m1, after a4, 0d
+
+    section Phase 2 : Bêta Fermée (S9-S12)
+    S9-S10 Grille Multi-Chat (8 agents //) + Détection conflits AST :b1, after a4, 28d
+    S11-S12 Modes Créer/Apprendre + Prompt Caching + Onboarding 50 users :b2, after b1, 28d
+    Jalon M2 : Ouverture Bêta Fermée :milestone, m2, after b2, 0d
+
+    section Phase 3 : V1 Multi-Personas (S13-S18)
+    S13-S14 Coédition Yjs (y-codemirror.next) + Undo par origine :c1, after b2, 28d
+    S15-S16 Espace DBA (PostgreSQL + Clones) & DevOps (Terraform/K8s) :c2, after c1, 28d
+    S17-S18 Runners Firecracker + Durcissement Sécurité & Charge :c3, after c2, 28d
+    Jalon M3 : Lancement V1 Publique :milestone, m3, after c3, 0d
+
+    section Phase 4 : Enterprise (S19-S24)
+    S19-S21 SSO SAML/SCIM + RBAC/ABAC + Endpoints privés vLLM :d1, after c3, 42d
+    S22-S24 Déploiement VPC/On-Prem + Audit RGPD & RPO/RTO :d2, after d1, 42d
+    Jalon M4 : Qualification Enterprise :milestone, m4, after d2, 0d
+```
+
+### Découpage opérationnel par Sprints (Cycles de 2 semaines) et Milestones GitHub
+
+| Milestone GitHub | Sprints | Objectifs majeurs | Livrables clés (Definition of Done) |
+|---|---|---|---|
+| **`M1.1 - Core & Cockpit Shell`**<br>*(Semaines 1–4)* | **S1 – S2** | Monorepo Cargo/pnpm, Host Rust (`ropey`, journal, crash recovery) et interface **Cockpit 4 zones** (Activity Bar, Panneau latéral, Centre Multi-Chat à onglets, Inspecteur CodeMirror 6 / Preview). | Application Tauri v2 compilant sur macOS/Win/Linux ; synchronisation de deltas CodeMirror 6 ↔ Host Rust via `tauri::ipc::Channel` (< 16 ms) ; import 1-clic depuis VS Code/Cursor. |
+| **`M1.2 - Context & Fast Quality`**<br>*(Semaines 5–8)* | **S3 – S4** | Moteur de contexte instantané (0 Mo requis au lancement), analyse AST incrémentale et intégration qualité ultra-rapide. | SQLite `WAL`/`mmap` + FTS5 (BM25) + graphe `Tree-sitter` ; `vtsls` + **Biome** connectés à CodeMirror 6 ; exposition du `Context Engine` en serveur MCP local (< 20 ms). |
+| **`M1.3 - The Judge & OS Sandbox`**<br>*(Semaines 9–12)* | **S5 – S6** | Isolation sans Docker obligatoire, checkpoints Git invisibles et boucle de validation d’agents (ACP/SDK : Claude Code, Codex). | Sandbox OS native (`Seatbelt`/`Landlock`/`AppContainer` < 5 ms) sur `git worktree` CoW ; *Time-Travel Checkpoints* (`refs/coloride/checkpoints/*`) ; `ChangeSet` AST et décorations `🟢/🟡/🔴/🟠/🔵`. |
+| **`M1.4 - MVP Launch Ready`**<br>*(Semaines 13–16)* | **S7 – S8** | Validation visuelle du frontend, publication 1-clic et packaging signé multi-OS. | `Preview Service` capturant `console.error`/DOM dans `Evidence` ; runner cloud Fargate ; publication statique **Cloudflare R2/Pages** ; binaires signés macOS, Windows et Ubuntu. |
+| **`M2.0 - Closed Beta (8-Chat Grid)`**<br>*(Semaines 17–24)* | **S9 – S12** | Ouverture à 20–50 développeurs externes, multi-chats parallèles jusqu’à 8 agents, ergonomie Débutant/No-Code et Prompt Caching. | Grille centrale jusqu’à **8 chats simultanés** sur worktrees isolés avec détection de conflits AST ; `Prompt Caching` (-75 % coûts) ; catalogue de composants visuels et télémétrie OpenTelemetry. |
+| **`M3.0 - V1 Multi-Personas`**<br>*(Semaines 25–36)* | **S13 – S18** | Couverture complète des **5 personas** (No-Code, Junior, Senior, DevOps, DBA), coédition temps réel et exécution microVM. | Coédition `y-codemirror.next` (Yjs) avec undo par origine ; connecteur **PostgreSQL** (`EXPLAIN` sur clone assaini) ; plans **Terraform/Ansible/K8s** approuvés ; backend **Firecracker**. |
+| **`M4.0 - Scale & Enterprise`**<br>*(Semaines 37–48)* | **S19 – S24** | Gouvernance grands comptes, déploiement privé VPC/on-premise, identité fédérée et haute disponibilité. | SSO **OIDC / SAML / SCIM**, RBAC/ABAC, endpoints privés **vLLM**, audit de conformité RGPD/CNIL, exercices RPO ≤ 15 min / RTO ≤ 4 h validés. |
+
+### Gouvernance GitHub Projects, Labels et Workflow Git (CI/CD)
+
+1. **GitHub Projects V2 (`Coloride — Product & Engineering Roadmap`) :**
+   - **Champs personnalisés :** `Status` (`Inbox`, `Ready`, `In Progress`, `In Review`, `🟢 Validated`, `Blocked`), `Sprint` (itérations de 2 semaines), `Priority` (`P0` à `P3`), `Points` (Fibonacci `1–8`), `Crate / Package` (`host-core`, `context-engine`, `judge-orchestrator`, `sandbox-runner`, `editor-cm6`, `web-ui`, `desktop-tauri`), `OS Target` (`macOS`, `Windows`, `Linux`) et `Persona`.
+   - **Vues :** `🏃 Sprint Actif (Board)`, `🗺️ Roadmap Exécutive (Roadmap)`, `🧱 Matrice par Crate (Table)` et `🍎🪟🐧 Parité OS (Table)`.
+2. **Taxonomie des Labels :**
+   - **Types :** `type: feat`, `type: fix`, `type: perf`, `type: sec`, `type: arch`, `type: chore`.
+   - **Priorités :** `prio: P0-blocker`, `prio: P1-high`, `prio: P2-medium`, `prio: P3-low`.
+   - **Domaines :** `area: host-core`, `area: context-mcp`, `area: judge-acp`, `area: sandbox`, `area: editor-cm6`, `area: cockpit-ui`.
+3. **Stratégie de branches (GitHub Flow strict) & Automatisation :**
+   - Branche `main` protégée et toujours verte (`🟢`) ; branches courtes (`feat/<issue>-slug`, `fix/<issue>-slug`, `perf/<issue>-slug`, `sec/<issue>-slug`) fusionnées en *Squash & Merge* avec *Conventional Commits*.
+   - Templates d’Issues/PR et pipelines GitHub Actions versionnés dans [`.github/`](/Users/ilyesameraoui/Desktop/Coloride/.github) : [ci.yml](/Users/ilyesameraoui/Desktop/Coloride/.github/workflows/ci.yml) (Biome + Typecheck + Matrice Rust sur macOS, Ubuntu 24.04 et Windows) et [project-sync.yml](/Users/ilyesameraoui/Desktop/Coloride/.github/workflows/project-sync.yml).
 
 ### Structure cible du Monorepo (Cargo Workspace + pnpm)
 
