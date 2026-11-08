@@ -14,8 +14,11 @@ Les choix confirmés sont les suivants :
 - **Mode local/BYOK et cloud managé disponibles dès le MVP.**
 - **macOS, Windows et Linux disponibles dès le MVP.**
 - **Deux fondateurs au départ**, puis recrutements avant la première sortie.
+- **Éditeur de code propre à Coloride, sans Monaco**, intégré dans l’interface React/Tauri existante dans l’architecture cible ; le chat, l’arborescence et les panneaux restent web.
 - Couverture complète des cinq personas en V1.
 - Nouveau socle applicatif : le dépôt actuel contient des documents stratégiques, sans implémentation à reprendre.
+
+**Décision actualisée le 8 novembre 2026 :** le choix d’un éditeur propre remplace l’intégration de Monaco proposée initialement. Le fonctionnement interne détaillé de cet éditeur reste une proposition à valider par prototype ; aucune application ni mesure de performance n’est encore livrée. Les anciennes estimations calendaires fondées sur Monaco sont remplacées par les jalons de la section 4.
 
 L’étude fournit une direction pertinente : cockpit d’agents, contexte local, isolation et budgets. Quatre propositions doivent être corrigées avant leur traduction technique :
 
@@ -23,7 +26,7 @@ L’étude fournit une direction pertinente : cockpit d’agents, contexte local
 |---|---|
 | Rust garantirait un démarrage inférieur à 100 ms et moins de 150 Mo de RAM | Remplacer ces promesses par des objectifs mesurés sur l’application complète, avec périmètre et matériel documentés. |
 | MCP assurerait l’isolation et l’abstraction des modèles | Séparer connecteurs MCP, adaptateurs de modèles, autorisations et isolation d’exécution. MCP organise les échanges avec les outils et les ressources. |
-| WASM permettrait une compatibilité légère avec les extensions VS Code | Exclure l’émulation générale du programme initial. Monaco ne fournit pas cette compatibilité. |
+| WASM permettrait une compatibilité légère avec les extensions VS Code | Exclure l’émulation générale du programme initial. L’emploi éventuel de WASM pour notre moteur de texte ne fournit pas les API et services attendus par les extensions VS Code. |
 | Local-first et BYOK supprimeraient les risques et les coûts | Mesurer les transferts réels et les coûts d’exploitation ; BYOK transfère le coût d’inférence à l’utilisateur sans supprimer les autres charges. |
 
 Ces distinctions suivent les périmètres documentés de [MCP](https://modelcontextprotocol.io/docs/learn/architecture) et de [Monaco](https://github.com/microsoft/monaco-editor).
@@ -36,7 +39,7 @@ Un même workspace alimente trois présentations : **Créer**, **Apprendre** et 
 |---|---|---|---|
 | **Grand public / No-Code** | Conversation, sélection visuelle, aperçu, historique compréhensible, bouton Publier | Templates React et catalogue de composants ; édition visuelle transformée en modifications de code ; exécution et hébergement managés | Valider le résultat visuel, connaître le coût, revenir à une version publiée |
 | **Développeur débutant** | Éditeur accompagné d’explications, diagnostics contextualisés, corrections guidées | LSP pour les erreurs ; agent pédagogique recevant diagnostic, code pertinent et résultat des tests | Comprendre une correction avant application ; afficher progressivement diff, terminal et debugger |
-| **Développeur senior** | Monaco complet, navigation, diff multi-fichiers, terminal, debugger, supervision des tâches | Graphe du projet, conventions versionnées, workspaces isolés, agents parallèles à partir de la V1 | Définir périmètre, budget, politique d’autonomie et critères de validation |
+| **Développeur senior** | Éditeur Coloride, arborescence complète, navigation, diff multi-fichiers, terminal, debugger, supervision des tâches | Graphe du projet, conventions versionnées, workspaces isolés, agents parallèles à partir de la V1 | Définir périmètre, budget, politique d’autonomie et critères de validation |
 | **Ingénieur DevOps** | Plans d’infrastructure, pipelines, inventaire, incidents et journaux corrélés | Connecteurs Terraform, Ansible, GitHub Actions et Kubernetes ; identités temporaires ; exécuteur de déploiement séparé | Examiner la cible et le plan exact avant toute modification de production |
 | **DBA** | Schémas, SQL, plans d’exécution, comparaison de performances et migrations | Connecteur PostgreSQL, statistiques, clones assainis et exécuteur de migrations | Accès en lecture par défaut ; contrôle des verrous, sauvegardes et changements destructifs |
 
@@ -45,6 +48,7 @@ Un même workspace alimente trois présentations : **Créer**, **Apprendre** et 
 - Le profil initial est choisi explicitement et reste modifiable par workspace.
 - Des suggestions facultatives proposent davantage de détails selon les fonctions utilisées.
 - Aucun panneau ne disparaît automatiquement pendant une tâche.
+- L’arborescence reste disponible dans tous les modes ; elle est affichée par défaut dans le mode Développer et accessible à la demande dans le parcours grand public.
 - Le niveau d’expertise ne modifie jamais les permissions.
 - Les composants visuels s’appuient sur des identifiants stables et des transformations AST. Un composant arbitraire non reconnu reste éditable en code et visible dans l’aperçu.
 
@@ -56,12 +60,15 @@ L’identité Coloride associe couleurs, icônes et libellés : **tests réussis
 
 ### Organisation du système
 
-Le MVP adopte un **monolithe modulaire Rust**, avec des processus séparés pour les composants coûteux ou exposés : indexation, modèles locaux, serveurs de langage et sandboxes.
+Le MVP adopte un **monolithe modulaire Rust côté host**, avec des processus séparés pour les composants coûteux ou exposés : indexation, modèles locaux, serveurs de langage et sandboxes. L’interface reste React/Tauri. La vue de l’éditeur possède un cycle de mise à jour indépendant des panneaux React ; le prototype évaluera un noyau de texte Rust compilé en WebAssembly dans un Web Worker.
 
 ```mermaid
 flowchart TB
-    U["Utilisateur"] --> UI["Interface React / Tauri<br/>Conversation · Monaco · Diff · Aperçu"]
+    U["Utilisateur"] --> UI["Interface React / Tauri<br/>Conversation · Arborescence · Panneaux"]
+    UI --> EV["Éditeur Coloride<br/>Vue web indépendante · Diff"]
+    EV <-->|"Opérations et révisions"| EC["Noyau de texte propre<br/>Rust / WASM Worker à valider"]
     UI <-->|"IPC typé"| H["Host Rust<br/>Workspace · Git · LSP · DAP"]
+    EC <-->|"Via adaptateur TypeScript et IPC<br/>Deltas · Journal · Snapshots"| H
     H --> O["Orchestrateur déterministe<br/>États · Journal · Budgets"]
     O <--> C["Context Engine<br/>Recherche · Symboles · Dépendances"]
     O --> A["Agents spécialisés<br/>Codeur · Reviewer · DevOps · SQL"]
@@ -84,9 +91,11 @@ flowchart TB
 
 | Composant | Responsabilité et choix |
 |---|---|
-| Workspace Service | Fichiers, buffers non enregistrés, sauvegarde atomique, surveillance des changements, récupération après crash |
+| Workspace Service | Fichiers, réplica journalisé des buffers non enregistrés, sauvegarde atomique, surveillance des changements, récupération après crash |
 | Git Service | Instantanés, branches de tâches, diffs et application conditionnée à la version courante ; conservation des modifications utilisateur |
-| Monaco | Édition, diff, navigation, diagnostics et interfaces de complétion |
+| Editor Core Coloride | Noyau de texte propre en Rust : transactions, sélection, historique undo/redo et révisions ; exécution WASM dans un Worker proposée pour le prototype |
+| Editor View Coloride | Vue TypeScript/DOM virtualisée indépendante de React : saisie, curseur, sélection, défilement, coloration, diagnostics et complétion ; intégration clavier, IME et accessibilité |
+| Diff Service / Review View | Calcul des différences sur des snapshots immuables et vue de revue propre ; acceptation de modifications avec contrôle des versions, sans dépendance au diff de Monaco |
 | Language Service | `typescript-language-server` au MVP ; LSP sur JSON-RPC/stdio, supervisé par le host |
 | Debug Service | DAP avec adaptateur JavaScript ; lancement, évaluation et terminal soumis aux permissions |
 | Terminal Service | `xterm.js` et PTY supervisé ; commandes des agents exécutées dans la sandbox |
@@ -95,6 +104,35 @@ flowchart TB
 Tree-sitter produit une structure syntaxique incrémentale ; les informations sémantiques viennent du LSP et des compilateurs. Un lien de dépendance déduit heuristiquement porte un niveau de confiance. [Documentation Tree-sitter](https://tree-sitter.github.io/tree-sitter/).
 
 Les dépôts non approuvés ne peuvent pas déclencher librement hooks Git, scripts de démarrage, extensions ou processus de langage sur l’hôte.
+
+### Éditeur propre dans React/Tauri
+
+**Périmètre confirmé :** Coloride développe son moteur d’édition et sa vue, tout en conservant React pour le chat, les onglets, l’arborescence et les panneaux, et Tauri pour l’application desktop. Le terminal reste fondé sur xterm.js. Tree-sitter, LSP/DAP et les bibliothèques de traitement de texte restent réutilisables ; cette décision ne lance pas une interface native GPUI.
+
+**Architecture interne proposée pour le prototype :**
+
+- Une bibliothèque Rust `editor-core`, sans dépendance à React ni aux API système, implémente les transactions sur le texte et l’historique. Elle est testable en natif et compilable en WASM via `wasm-bindgen`.
+- Un Worker héberge le document actif et ordonne les transactions. La vue TypeScript gère un sous-arbre DOM stable, avec des lignes virtualisées, indépendamment du rendu React. Une projection provisoire permet la saisie et la composition ; elle est réconciliée avec les révisions du noyau.
+- Les échanges transportent des opérations incrémentales et des révisions. La saisie n’attend pas un aller-retour IPC Tauri ; aucun document complet n’est retransmis à chaque frappe. La latence UI → Worker → UI reste à mesurer.
+- Le host Rust conserve un réplica journalisé pour les snapshots, la récupération, Git, LSP et les agents. Il n’est pas une seconde autorité d’édition concurrente. Toutes les mutations d’un document ouvert, y compris les patchs d’agents, passent par les transactions du document actif après contrôle de version.
+- La composition IME reste pilotée par les événements du navigateur. La vue ne réécrit pas le DOM de composition en cours ; la transaction de texte est validée à sa fin. Une sauvegarde ou un snapshot attend cette fin, ou reste explicitement en attente si la composition n’est pas terminée.
+- Les conversions entre octets UTF-8, indices UTF-16, positions LSP et graphèmes sont centralisées. Les déplacements du curseur, fins de ligne, caractères combinés, emoji et texte bidirectionnel font partie du contrat d’édition.
+- Le DOM permet de réutiliser le rendu de texte du navigateur, mais ne garantit pas l’accessibilité d’une vue virtualisée. Clavier, lecteurs d’écran et composition sont des critères bloquants du prototype.
+
+L’exécution de Rust/WASM dans un Worker est documentée par [wasm-bindgen](https://wasm-bindgen.github.io/wasm-bindgen/examples/wasm-in-web-worker.html). Les événements de composition sont décrits dans la [documentation des API web](https://developer.mozilla.org/en-US/docs/Web/API/Element/compositionstart_event). Ces mécanismes ne constituent pas une preuve de performance ou de compatibilité du futur éditeur Coloride.
+
+**Révisions et récupération :** chaque document porte un identifiant et une génération de session. Distinguer la révision appliquée dans le noyau, la révision durablement journalisée par le host et celle sauvegardée sur disque. Le statut « sauvegardé » exige une écriture disque réussie de la révision correspondante ; une édition survenue entre-temps laisse le document modifié. Une réponse tardive d’un ancien document ou Worker ne peut pas remplacer le buffer visible.
+
+Avant une sauvegarde, un contexte agent ou un snapshot de test, une barrière attend les transactions en cours et capture une révision précise. Le contexte peut inclure des changements non enregistrés, sans imposer leur sauvegarde sur disque. Le host doit avoir confirmé la disponibilité de cette même révision. Une modification ultérieure ne change pas le snapshot capturé ; l’application du résultat vérifie de nouveau la version courante. Après un crash, restaurer le dernier journal confirmé et indiquer une éventuelle saisie non encore journalisée ; ne pas promettre une durabilité de données non acquittées.
+
+| Jalon | Fonctions de l’éditeur propre |
+|---|---|
+| **Prototype préalable** | Saisie, sélection, défilement, undo/redo, IME, accents, emoji, arabe/bidi, accessibilité et récupération ; mesure du chemin de saisie sur les trois OS |
+| **MVP** | Curseur unique, onglets, recherche/remplacement, indentation, raccourcis, coloration TypeScript, diagnostics/navigation/complétion LSP, conflits disque, diff multi-fichiers et patchs versionnés ; défilement horizontal pour les longues lignes |
+| **Bêta** | Multicurseur, snippets, pliage, retour visuel à la ligne et optimisation des grands fichiers ; durcissement de l’entrée et de l’accessibilité |
+| **V1** | Coédition via adaptateur Yjs, undo par origine, revues enrichies et intégration des espaces DevOps/SQL ; les opérations distantes entrent dans la même chaîne de transactions, sans CRDT maison |
+
+Le protocole de coédition de V1 doit établir l’ordre partagé via Yjs et projeter les changements dans le noyau d’édition. L’historique undo de collaboration est géré par origine dans l’adaptateur Yjs ; les opérations distantes ne sont pas ajoutées comme saisies locales à annuler.
 
 ### Context Engine : contexte précis, actualisé et traçable
 
@@ -158,6 +196,8 @@ Les traces partagées contiennent plans, décisions résumées, appels d’outil
 
 | Interface/type | Contrat minimal |
 |---|---|
+| `EditorTransaction` | Document, génération de session, révision de base, identifiant d’opération, changements de texte, sélection et origine ; unités de position explicites |
+| `EditorSnapshot` | Document, génération, révision et hash du contenu ; état de journalisation et de sauvegarde distingués ; support des buffers non enregistrés |
 | `TaskSpec` | Objectif, workspace, snapshot de base, cible, politique, budget, critères d’acceptation |
 | `ContextBundle` | Extraits sourcés, versions, fraîcheur, classification et destination autorisée |
 | `ModelProvider` | Capacités déclarées, génération en streaming, appels d’outils structurés, annulation et usage |
@@ -205,7 +245,8 @@ Tauri utilise des moteurs différents selon les plateformes ; son choix ne dispe
 
 | ADR | Choix | Justification et compromis |
 |---|---|---|
-| UI | React, TypeScript, Vite, Monaco, xterm.js | Briques éprouvées ; Monaco chargé à la demande dans le parcours visuel |
+| UI | React, TypeScript, Vite, vue d’édition Coloride et xterm.js | React conserve le chat et les panneaux ; la vue de texte est stable et mise à jour indépendamment |
+| Édition | Noyau Rust propre ; WASM/Worker et vue DOM virtualisée proposés pour le prototype | Maîtrise des transactions et de la revue IA ; coût supplémentaire de saisie, rendu, accessibilité et maintenance multiplateforme |
 | Noyau | Rust, Tokio, interfaces de stockage et d’exécution | Partage des invariants entre poste et cloud ; traitements lourds hors du thread UI |
 | Orchestration | Machine à états persistante, sans framework d’essaim autonome | Contrôle des transitions, des reprises et du coût ; pas de dépendance cloud pour le mode local |
 | API cloud | Rust/Axum, REST/OpenAPI, SSE pour les événements, WebSocket pour les terminaux | Contrats typés, reconnexion par curseur et séparation des flux |
@@ -245,21 +286,23 @@ Les clés BYOK restent dans le coffre du système et les appels partent directem
 
 ## 4. Roadmap en quatre phases
 
-Les durées sont des **estimations de planification**, relatives au démarrage. Le cloud et les trois OS restent des critères de sortie du MVP. Un recrutement tardif décale le calendrier.
+**Le calendrier initial M1–M24+ est à recalibrer : il supposait l’intégration de Monaco.** La construction d’un éditeur propre ajoute un chantier de moteur de texte, de rendu et de saisie multiplateforme. Un prototype de viabilité précède l’engagement sur les durées des quatre phases ; il fait partie de la préparation du MVP. Le cloud et les trois OS restent des critères de sortie. Les dates seront établies après mesure du prototype, estimation du backlog et confirmation des recrutements, sans ajouter arbitrairement un délai fixe.
+
+Une responsabilité dédiée **édition de texte et entrée multiplateforme** est requise avant l’industrialisation. Les effectifs ci-dessous sont des hypothèses de capacité incluant cette responsabilité, à confirmer lors du recalage.
 
 | Phase | Objectifs et livrables | Équipe et compétences | Risques majeurs et atténuation | Critères de sortie |
 |---|---|---|---|---|
-| **1. MVP — M1 à M8** | Tauri sur trois OS ; TypeScript/React ; local/BYOK et cloud ; contexte hybride ; Codeur/Reviewer ; diff, tests, preview et publication statique | **2 → 4 personnes** : fondateur produit/frontend ; fondateur Rust/IA ; plateforme dès M2 ; QA/automatisation dès M4. Expertise sécurité ponctuelle | Dispersion cloud/desktop : stack métier unique. Divergences WebView : prototypes dès M1. Pertes de fichiers : snapshots et application conditionnelle. Coûts : quotas avant ouverture du cloud | Parcours complet sur les trois OS ; reprise après crash ; aucun écrasement utilisateur ; budget appliqué ; revue de sécurité avant accès externe |
-| **2. Bêta fermée — M9 à M12** | 20–50 utilisateurs ; ergonomie débutant ; édition visuelle du catalogue ; mémoire de projet ; synchronisation des tâches ; connecteurs MCP sélectionnés | **6 personnes** : ajout ingénieur IA/contexte et designer produit ; maintien plateforme et QA | Contexte incorrect : corpus de retrieval. Permissions confuses : tests utilisateurs. Instabilité providers : contrats et circuit breakers | Mesures qualité/coût/latence publiées en interne ; onboarding autonome ; restauration et déconnexion réseau validées |
-| **3. V1 multi-rôles — M13 à M18** | Cinq personas ; agents parallèles ; backend Node managé ; PostgreSQL ; Terraform/Ansible/CI ; coédition ; backend Firecracker | **8–10 personnes** : ajout expertise DevOps/SRE, données/PostgreSQL et sécurité | Conflits entre agents : workspaces séparés. Infrastructure ou migrations dangereuses : plans approuvés et rapprochement d’état. Visuel/code : transformations limitées et testées | Scénarios de référence réussis pour chaque persona ; tests de charge ; audit des autorisations ; restauration des applications et bases démontrée |
-| **4. Scale / Enterprise — M19 à M24+** | VPC/on-premise ; SSO/SAML/SCIM ; RBAC/ABAC ; politiques centrales ; audit ; haute disponibilité ; exploitation des modèles privés | **12–15 personnes** : SRE, sécurité, identité, administration plateforme et support entreprise ; accompagnement DPO/juridique | Isolation multi-tenant, mises à jour privées, disponibilité et conformité : tests d’intrusion, déploiements progressifs et exercices de reprise | RPO/RTO vérifiés ; intégration identité ; suppression des données testée ; pilote entreprise accepté ; procédures d’incident opérationnelles |
+| **1. MVP — après prototype validé** | Éditeur propre à curseur unique et diff ; Tauri sur trois OS ; TypeScript/React ; local/BYOK et cloud ; contexte hybride ; Codeur/Reviewer ; tests, preview et publication statique | **2 → 5 personnes** : fondateurs produit/frontend et Rust/IA ; ingénieur édition texte/rendu, plateforme et QA avant la sortie. Expertise sécurité/accessibilité ponctuelle | Fiabilité de l’édition : prototype bloquant et tests de transactions. Dispersion : stack métier unique. WebView : essais sur les trois OS. Pertes de fichiers : versions et journal. Coûts : quotas | Saisie, IME, accessibilité, sauvegarde et reprise validées ; parcours agent complet sur les trois OS ; aucun écrasement utilisateur ; budget appliqué ; revue de sécurité |
+| **2. Bêta fermée — après stabilisation du MVP** | 20–50 utilisateurs ; multicurseur, snippets, pliage et word wrap ; ergonomie débutant ; édition visuelle du catalogue ; mémoire de projet ; synchronisation des tâches ; MCP sélectionné | **7 personnes** : ajout ingénieur IA/contexte et designer produit ; maintien édition, plateforme et QA | Régressions de saisie : fuzzing et tests natifs. Contexte incorrect : corpus de retrieval. Permissions confuses : tests utilisateurs. Providers : contrats et circuit breakers | Mesures qualité/coût/latence ; onboarding autonome ; fonctions avancées de l’éditeur validées ; restauration et déconnexion réseau |
+| **3. V1 multi-rôles — après validation des usages bêta** | Cinq personas ; agents parallèles ; backend Node managé ; PostgreSQL ; Terraform/Ansible/CI ; coédition et undo par origine ; backend Firecracker | **9–11 personnes** : ajout expertise DevOps/SRE, données/PostgreSQL et sécurité ; maintien de la responsabilité éditeur | Conflits agents/coédition : transactions et workspaces séparés. Infrastructure/migrations : plans approuvés et rapprochement d’état. Visuel/code : transformations testées | Scénarios pour chaque persona ; convergence et undo de coédition ; tests de charge ; audit des autorisations ; restauration des applications et bases |
+| **4. Scale / Enterprise — après qualification de la V1** | VPC/on-premise ; SSO/SAML/SCIM ; RBAC/ABAC ; politiques centrales ; audit ; haute disponibilité ; modèles privés | **13–16 personnes** : SRE, sécurité, identité, administration plateforme et support entreprise ; maintien du moteur d’édition ; accompagnement DPO/juridique | Isolation multi-tenant, mises à jour privées, disponibilité et conformité : tests d’intrusion, déploiements progressifs et exercices de reprise | RPO/RTO vérifiés ; identité ; suppression des données testée ; pilote entreprise accepté ; procédures d’incident opérationnelles |
 
 **Ordre de construction du MVP :**
 
-1. **M1 :** valider Tauri/Monaco sur les trois OS, la VM locale, un runner Fargate et les contrats de tâche.
-2. **M2–M3 :** workspace, Git, LSP/DAP, contexte, adaptateurs de modèles et journal durable.
-3. **M4–M5 :** boucle patch → tests → revue → intégration ; budgets, récupération et preview isolée.
-4. **M6–M8 :** parcours cloud complet, publication statique, packaging signé et campagne d’acceptation.
+1. **Prototype de viabilité :** réaliser la tranche saisie → transaction → affichage → journal → récupération de l’éditeur propre ; valider IME, Unicode/bidi, sélection, undo et lecteurs d’écran sur les trois OS. Mesurer la proposition Rust/WASM/Worker avant de figer son implémentation et de chiffrer le calendrier.
+2. **Socle :** industrialiser l’éditeur, les contrats de révision et les conflits disque ; workspace, Git, LSP/DAP, contexte et modèles. Les travaux VM locale et runner Fargate avancent avec la responsabilité plateforme.
+3. **Boucle agent :** développer le diff propre et l’application de patchs versionnés, puis patch → tests → revue → intégration ; budgets, récupération et preview isolée.
+4. **Livraison :** terminer les parcours local et cloud, la publication statique, le packaging signé et l’acceptation native sur les trois OS. Replanifier si un critère de saisie ou d’intégrité échoue ; ne pas le supprimer pour tenir une ancienne date.
 
 Hypothèse de support initial : macOS Apple Silicon, Windows 11 x64 et Ubuntu 24.04 x64. Les autres architectures matérielles seront ajoutées après validation de cette matrice.
 
@@ -287,7 +330,7 @@ Ces valeurs sont des **cibles d’acceptation**, non des performances déjà obt
 
 | Mesure | Cible et périmètre |
 |---|---|
-| Réactivité de saisie | p95 ≤ 16 ms sur le scénario d’édition de référence |
+| Réactivité de saisie | Cible p95 ≤ 16 ms entre événement d’entrée et affichage, sur le scénario de référence ; inclure le passage Worker et mesurer avec chat en streaming, terminal et arborescence actifs |
 | Ouverture d’un fichier | p95 ≤ 150 ms pour un fichier local ≤ 1 Mo, indexation en arrière-plan |
 | Démarrage desktop | p95 ≤ 3 s jusqu’à l’interface utilisable ; chargement des modèles mesuré séparément |
 | Complétion IA | p95 ≤ 700 ms jusqu’à une suggestion courte, modèle 1.5B chargé et matériel compatible documenté |
@@ -317,6 +360,15 @@ Chaque changement de modèle ou de prompt passe par une évaluation hors ligne, 
 
 | Scénario | Résultat attendu |
 |---|---|
+| Édition TypeScript avec chat en streaming, terminal et grand arbre de fichiers | Curseur et scroll stables ; latence de frappe mesurée ; aucun remontage du composant d’édition causé par le chat |
+| Frappe, sélection, annulation et rétablissement sur texte Unicode | Texte exact conservé ; conversions UTF-8/UTF-16/graphèmes cohérentes ; propriétés de transactions vérifiées par fuzzing |
+| Composition IME, touches mortes, accents, emoji et arabe/bidi | Aucun caractère perdu, doublé ou scindé ; sauvegarde et snapshot coordonnés avec la composition |
+| Navigation clavier, zoom, VoiceOver, NVDA et Orca | Lecture et édition utilisables, y compris au-delà du viewport ; validation native sur chaque OS, pas seulement inspection du DOM |
+| Bascule rapide entre fichiers avec lectures ou réponses Worker retardées | Identité du document et génération vérifiées ; aucun ancien contenu affiché ou enregistré sous un nouveau chemin |
+| Crash du Worker ou du host, sauvegarde pendant une nouvelle édition | Restauration de la dernière révision journalisée ; aucun faux statut « sauvegardé » ; modifications plus récentes conservées |
+| Patch IA, diff ou diagnostic reçu après une modification locale | Révision contrôlée ; décoration obsolète écartée, patch réévalué ou conflit présenté ; aucune application sur de mauvais offsets |
+| Coloration syntaxique et états de validation | Couleurs réellement rendues et lisibles vérifiées sur les trois OS ; présence d’une grammaire ou d’un thème insuffisante |
+| Coédition V1, reconnexion et undo local après modifications distantes | Documents convergents ; undo limité à l’origine attendue ; aucun changement distant supprimé accidentellement |
 | L’utilisateur modifie un fichier pendant une tâche | Conflit présenté ; aucune modification utilisateur écrasée |
 | Crash après une action externe | Rapprochement d’état avant reprise ; absence de duplication aveugle |
 | Prompt injection dans un fichier ou une réponse MCP | Incapacité à élargir les permissions ou à exfiltrer des données |
@@ -329,4 +381,4 @@ Chaque changement de modèle ou de prompt passe par une évaluation hors ligne, 
 | Publication puis restauration | Promotion et retour vers des artefacts identifiés et vérifiés |
 | Mise à jour desktop | Installation signée, migration de données compatible et récupération testée sur les trois OS |
 
-La validation combine tests Rust, tests de composants et de parcours web, essais natifs sur chaque OS et tests d’isolation. Aucun résultat de compilation ou de typecheck ne sera présenté comme preuve du fonctionnement réel de ces parcours.
+La validation combine tests Rust et WASM du même noyau, tests de transactions, tests de composants et de parcours web, essais natifs sur chaque OS et tests d’isolation. Les tests d’édition vérifient le texte, la sélection, les révisions et la récupération, au-delà du seul rendu visuel. Aucun résultat de compilation ou de typecheck ne sera présenté comme preuve du fonctionnement réel de ces parcours.
