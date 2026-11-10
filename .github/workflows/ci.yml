@@ -86,3 +86,8 @@ jobs:
 
       - name: Run Cargo workspace tests
         run: cargo test --workspace
+
+      - name: Verify protocol-types bindings are up-to-date (Zero Drift)
+        run: |
+          cargo test --package host-core export_bindings
+          git diff --exit-code packages/protocol-types
