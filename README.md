@@ -1,6 +1,6 @@
 # <img src="./assets/coloride-logo.png" alt="Coloride" width="28" height="28" align="top" /> Coloride
 
-[![CI](https://github.com/Color-IDE/Color-ide/actions/workflows/ci.yml/badge.svg)](https://github.com/Color-IDE/Color-ide/actions/workflows/ci.yml)
+[![CI](https://github.com/Color-IDE/Coloride/actions/workflows/ci.yml/badge.svg)](https://github.com/Color-IDE/Coloride/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-gray.svg)](./LICENSE)
 
 Welcome to Coloride, a high-performance, deterministic AI code editor built with [Tauri v2](https://v2.tauri.app/), a native Rust host, and [CodeMirror 6](https://codemirror.net/). Every AI-proposed change is verified in an isolated OS sandbox (`< 5 ms`) and backed by cryptographic validation proofs (`Evidence`).
@@ -12,8 +12,8 @@ Welcome to Coloride, a high-performance, deterministic AI code editor built with
 Prerequisites: Rust (`>= 1.80`), Node.js (`>= 22`), and pnpm (`>= 10`).
 
 ```bash
-git clone https://github.com/Color-IDE/Color-ide.git
-cd Color-ide
+git clone https://github.com/Color-IDE/Coloride.git
+cd Coloride
 
 pnpm install
 pnpm build
