@@ -6,7 +6,7 @@
 
 <a id="agents-en"></a>
 
-## English — Mandatory Rules for AI Agents & Contributors
+## English — Mandatory Rules for AI Agents & Developers
 
 1. **The Model Proposes; The System Authorizes and Executes:**
    - No LLM output, MCP server response, or extension may directly execute a system command or write outside the worktree without passing through `PolicyEngine` (`crates/judge-orchestrator`) and `sandbox-runner`.
