@@ -1,4 +1,4 @@
-# <img src="./assets/coloride-logo.png" alt="Coloride" width="28" height="28" align="top" /> Coloride
+# Coloride
 
 [![CI](https://github.com/Color-IDE/Coloride/actions/workflows/ci.yml/badge.svg)](https://github.com/Color-IDE/Coloride/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-gray.svg)](./LICENSE)
