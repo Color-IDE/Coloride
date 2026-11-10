@@ -8,7 +8,7 @@ use std::time::Instant;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::contracts::{CONTRACT_SCHEMA_VERSION, EditorSnapshot};
+use crate::contracts::{EditorSnapshot, CONTRACT_SCHEMA_VERSION};
 use crate::document::{DocumentError, DocumentService};
 
 pub const WORKSPACE_SESSION_CACHE_FILENAME: &str = "workspace_session_cache.bin";
