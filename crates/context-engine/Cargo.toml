@@ -1,0 +1,19 @@
+[package]
+name = "context-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Coloride Context Engine: SQLite WAL/mmap, FTS5 BM25, Tree-sitter AST graph, secret filtering & local MCP server (<20ms)"
+
+[lints]
+workspace = true
+
+[dependencies]
+host-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+blake3.workspace = true
+tokio.workspace = true

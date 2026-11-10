@@ -1,0 +1,27 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Coloride",
+  "version": "0.1.0",
+  "identifier": "dev.coloride.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm --filter @coloride/web-ui dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "pnpm --filter @coloride/web-ui build",
+    "frontendDist": "../../web-ui/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Coloride — Deterministic AI IDE Cockpit",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 680,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost"
+    }
+  }
+}

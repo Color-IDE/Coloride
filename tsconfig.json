@@ -1,0 +1,9 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/protocol-types" },
+    { "path": "./packages/editor-cm6" },
+    { "path": "./apps/web-ui" },
+    { "path": "./apps/desktop-tauri" }
+  ]
+}

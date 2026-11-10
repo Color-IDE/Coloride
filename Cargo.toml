@@ -1,0 +1,34 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/host-core",
+    "crates/context-engine",
+    "crates/judge-orchestrator",
+    "crates/sandbox-runner",
+    "apps/desktop-tauri/src-tauri",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Proprietary"
+repository = "https://github.com/Color-IDE/Color-ide"
+rust-version = "1.80"
+
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+tracing = "0.1"
+blake3 = "1.5"
+tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "process"] }
+host-core = { path = "crates/host-core" }
+context-engine = { path = "crates/context-engine" }
+judge-orchestrator = { path = "crates/judge-orchestrator" }
+sandbox-runner = { path = "crates/sandbox-runner" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = "warn"

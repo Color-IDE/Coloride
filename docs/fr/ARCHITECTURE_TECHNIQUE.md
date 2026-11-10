@@ -395,7 +395,7 @@ gantt
    - **Domaines :** `area: host-core`, `area: context-mcp`, `area: judge-acp`, `area: sandbox`, `area: editor-cm6`, `area: cockpit-ui`.
 3. **Stratégie de branches (GitHub Flow strict) & Automatisation :**
    - Branche `main` protégée et toujours verte (`🟢`) ; branches courtes (`feat/<issue>-slug`, `fix/<issue>-slug`, `perf/<issue>-slug`, `sec/<issue>-slug`) fusionnées en *Squash & Merge* avec *Conventional Commits*.
-   - Templates d’Issues/PR et pipelines GitHub Actions versionnés dans [`.github/`](/Users/ilyesameraoui/Desktop/Coloride/.github) : [ci.yml](/Users/ilyesameraoui/Desktop/Coloride/.github/workflows/ci.yml) (Biome + Typecheck + Matrice Rust sur macOS, Ubuntu 24.04 et Windows) et [project-sync.yml](/Users/ilyesameraoui/Desktop/Coloride/.github/workflows/project-sync.yml).
+   - Templates d’Issues/PR et pipelines GitHub Actions versionnés dans [`.github/`](../../.github) : [ci.yml](../../.github/workflows/ci.yml) (Biome + Typecheck + Matrice Rust sur macOS, Ubuntu 24.04 et Windows).
 
 ### Structure cible du Monorepo (Cargo Workspace + pnpm)
 

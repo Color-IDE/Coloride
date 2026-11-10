@@ -1,0 +1,27 @@
+# Rust / Cargo
+target/
+**/*.rs.bk
+
+# Node / pnpm
+node_modules/
+dist/
+dist-ssr/
+*.local
+*.tsbuildinfo
+.pnpm-debug.log*
+
+# Tauri
+apps/desktop-tauri/src-tauri/target/
+apps/desktop-tauri/src-tauri/gen/
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Local databases & test artifacts
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+coverage/
