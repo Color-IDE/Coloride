@@ -74,6 +74,10 @@ pnpm build
 cargo build --workspace
 ```
 
+### License
+
+Licensed under the [Apache License, Version 2.0](./LICENSE).
+
 ---
 
 <a id="francais"></a>
@@ -134,3 +138,7 @@ pnpm test
 pnpm build
 cargo build --workspace
 ```
+
+### Licence
+
+Distribué sous licence [Apache License, Version 2.0](./LICENSE).

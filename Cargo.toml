@@ -11,8 +11,8 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-license = "Proprietary"
-repository = "https://github.com/Color-IDE/Color-ide"
+license = "Apache-2.0"
+repository = "https://github.com/Color-IDE/Coloride"
 rust-version = "1.80"
 
 [workspace.dependencies]
