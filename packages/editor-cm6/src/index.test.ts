@@ -224,8 +224,10 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
     // 1. Lezer syntax highlighting < 2 ms across supported languages
     const sampleTsx =
       "export function App({ title }: { title: string }) { return <div className='cockpit'>{title}</div>; }";
-    // Warm up JIT once
-    highlightSnippetWithLezer(sampleTsx, "tsx");
+    // Warm up V8 JIT before measuring steady-state Lezer parse + highlight
+    for (let w = 0; w < 5; w += 1) {
+      highlightSnippetWithLezer(sampleTsx, "tsx");
+    }
 
     const lezerStart = performance.now();
     const tokens = highlightSnippetWithLezer(sampleTsx, "tsx");
