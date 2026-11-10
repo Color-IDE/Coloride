@@ -31,14 +31,6 @@ cargo test --workspace && pnpm test
 - [`crates/judge-orchestrator`](./crates/judge-orchestrator) — Deterministic state machine, `PolicyEngine`, and `Evidence` verification.
 - [`crates/sandbox-runner`](./crates/sandbox-runner) — Fail-closed OS sandboxing (`Seatbelt`, `Landlock`, `AppContainer`).
 
-### Contributing
-
-See [AGENTS.md](./AGENTS.md) for architectural invariants and workspace rules. All pull requests must pass CI checks locally before submission:
-
-- `pnpm lint` and `pnpm typecheck`
-- `cargo clippy --workspace --all-targets -- -D warnings`
-- `cargo test --workspace` and `pnpm test`
-
 ### Licensing
 
 Coloride source code is licensed under the [Apache License, Version 2.0](./LICENSE).
