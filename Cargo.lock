@@ -134,6 +134,8 @@ dependencies = [
  "sandbox-runner",
  "serde",
  "serde_json",
+ "tempfile",
+ "tokio",
  "tracing",
 ]
 

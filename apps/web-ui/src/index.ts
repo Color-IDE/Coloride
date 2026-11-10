@@ -1,20 +1,19 @@
-import type { ColorideValidationState } from "@coloride/protocol-types";
+import type {
+  CockpitChatTab,
+  CockpitGridMode,
+  CockpitPersonaMode,
+  InspectorTab,
+} from "./stores.js";
 
-export type CockpitGridMode = 1 | 2 | 4 | 8;
-
-export type CockpitPersonaMode = "Create" | "Learn" | "Develop" | "Infrastructure" | "Data";
-
-export interface CockpitChatTab {
-  readonly chatId: string;
-  readonly title: string;
-  readonly modelName: string;
-  readonly validationState: ColorideValidationState;
-}
+export * from "./stores.js";
+export * from "./stream-renderer.js";
+export * from "./virtualizer.js";
+export * from "./cockpit-dom.js";
 
 export interface CockpitShellState {
   readonly activePersona: CockpitPersonaMode;
   readonly gridMode: CockpitGridMode;
-  readonly activeInspectorTab: "preview" | "code-diff";
+  readonly activeInspectorTab: InspectorTab;
   readonly chats: readonly CockpitChatTab[];
 }
 

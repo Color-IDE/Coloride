@@ -1,7 +1,10 @@
+use std::path::Path;
+
 use context_engine::ContextEngineStatus;
 use host_core::{
-    decode_contract_binary, encode_contract_binary, DocumentError, DocumentService, EditorSnapshot,
-    EditorTransaction, HostHealthStatus,
+    decode_contract_binary, encode_contract_binary, BackgroundServicesStatus, DocumentError,
+    DocumentService, EditorSnapshot, EditorTransaction, HostHealthStatus, LazyBootError,
+    LazyBootOrchestrator, LazyBootReadySnapshot,
 };
 use judge_orchestrator::JudgeHealthStatus;
 use sandbox_runner::SandboxCapabilities;
@@ -24,10 +27,12 @@ pub fn collect_system_diagnostics() -> SystemDiagnosticsReport {
     }
 }
 
-/// Binary IPC bridge connecting the Tauri v2 shell and CodeMirror 6 (`LOT-004`) to `host_core::DocumentService`.
+/// Binary IPC bridge connecting the Tauri v2 shell and CodeMirror 6 (`LOT-004`, `LOT-005`)
+/// to `host_core::DocumentService` and `LazyBootOrchestrator`.
 #[derive(Debug)]
 pub struct DesktopBinaryEditorBridge {
     documents: DocumentService,
+    lazy_boot: LazyBootOrchestrator,
 }
 
 impl Default for DesktopBinaryEditorBridge {
@@ -41,7 +46,27 @@ impl DesktopBinaryEditorBridge {
     pub fn new_in_memory() -> Self {
         Self {
             documents: DocumentService::new_in_memory(),
+            lazy_boot: LazyBootOrchestrator::new(),
         }
+    }
+
+    /// Execute Lazy Boot Phase 1 (`workspace_session_cache.bin` + active buffer restoration in `< 3 s`).
+    pub fn lazy_boot_restore(
+        &mut self,
+        cache_dir: Option<&Path>,
+    ) -> Result<LazyBootReadySnapshot, LazyBootError> {
+        self.lazy_boot
+            .restore_interactive_session(cache_dir, &mut self.documents)
+    }
+
+    /// Spawn low-priority Tokio tasks to initialize heavy secondary services after window restoration.
+    pub fn spawn_background_services(&self) -> tokio::task::JoinHandle<BackgroundServicesStatus> {
+        self.lazy_boot.spawn_deferred_background_services()
+    }
+
+    #[must_use]
+    pub fn background_services_status(&self) -> BackgroundServicesStatus {
+        self.lazy_boot.background_status()
     }
 
     pub fn open_document_binary(
@@ -128,5 +153,73 @@ mod tests {
                 .text(),
             "const a = 42;\n"
         );
+    }
+
+    #[tokio::test]
+    async fn desktop_lazy_boot_restores_cached_session_and_accepts_first_keystroke_under_3s() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = host_core::WorkspaceSessionCache {
+            schema_version: CONTRACT_SCHEMA_VERSION,
+            workspace_root: "/workspace/app".to_string(),
+            active_persona: "Develop".to_string(),
+            active_activity_panel: "sessions".to_string(),
+            grid_mode: 4,
+            active_inspector_tab: "code-diff".to_string(),
+            active_chat_id: "chat-1".to_string(),
+            active_document_id: "src/app.ts".to_string(),
+            active_document_content: "const ready = false;\n".to_string(),
+            cursor_utf16_offset: 14,
+            scroll_top_px: 0,
+            ui_zoom_percent: 100,
+            sidebar_visible: true,
+        };
+        host_core::save_workspace_session_cache(dir.path(), &cache).unwrap();
+
+        let boot_start = std::time::Instant::now();
+        let mut bridge = DesktopBinaryEditorBridge::new_in_memory();
+        let boot_snap = bridge.lazy_boot_restore(Some(dir.path())).unwrap();
+        let bg_handle = bridge.spawn_background_services();
+
+        // First keystroke immediately after window restoration (before background services complete)
+        let first_keystroke = EditorTransaction {
+            schema_version: CONTRACT_SCHEMA_VERSION,
+            document_id: boot_snap.session_cache.active_document_id.clone(),
+            session_generation: 1,
+            base_revision: 0,
+            op_id: "first-keystroke".to_string(),
+            changes: vec![TextChange {
+                range_utf16: Utf16Span::new(
+                    Utf16CodeUnitOffset::new(14),
+                    Utf16CodeUnitOffset::new(19),
+                ),
+                range_utf8: None,
+                inserted_text: "true".to_string(),
+            }],
+            selection: EditorSelection::default(),
+            origin: TransactionOrigin::User,
+            ime_composing: false,
+        };
+        let tx_bytes = encode_contract_binary(&first_keystroke).unwrap();
+        let snap_bytes = bridge.apply_binary_transaction(&tx_bytes).unwrap();
+        let first_keystroke_elapsed = boot_start.elapsed();
+        let snap: EditorSnapshot = decode_contract_binary(&snap_bytes).unwrap();
+
+        assert!(
+            first_keystroke_elapsed.as_millis() <= 3_000,
+            "Lazy Boot + first keystroke took {} ms (> 3000 ms)",
+            first_keystroke_elapsed.as_millis()
+        );
+        assert_eq!(snap.interactive_revision, 1);
+        assert_eq!(
+            bridge
+                .document_service()
+                .session("src/app.ts", 1)
+                .unwrap()
+                .text(),
+            "const ready = true;\n"
+        );
+
+        let bg_status = bg_handle.await.unwrap();
+        assert!(bg_status.all_ready());
     }
 }
