@@ -10,9 +10,9 @@
   "scripts": {
     "lint": "biome check .",
     "format": "biome format --write .",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "tsc -b",
     "test": "pnpm -r test",
-    "build": "pnpm --filter @coloride/protocol-types build && pnpm --filter @coloride/editor-cm6 build && pnpm --filter @coloride/web-ui build && pnpm --filter @coloride/desktop-tauri build"
+    "build": "tsc -b"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
