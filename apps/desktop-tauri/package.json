@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@coloride/editor-cm6": "workspace:*",
+    "@coloride/protocol-types": "workspace:*",
     "@coloride/web-ui": "workspace:*"
   },
   "scripts": {

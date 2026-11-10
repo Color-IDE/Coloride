@@ -5,6 +5,10 @@
     "rootDir": "src",
     "outDir": "dist"
   },
-  "references": [{ "path": "../web-ui" }],
+  "references": [
+    { "path": "../../packages/protocol-types" },
+    { "path": "../../packages/editor-cm6" },
+    { "path": "../web-ui" }
+  ],
   "include": ["src"]
 }
