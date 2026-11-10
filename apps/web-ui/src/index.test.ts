@@ -269,6 +269,15 @@ describe("@coloride/web-ui — LOT-005 4-Zone Cockpit, Virtualization & Streamin
         }),
       );
       expect(stores.zone1.getState().activeSection).toBe(expectedSections[i]);
+      const sessionsPanel = zone2.querySelector<HTMLElement>(".coloride-zone-2-sessions");
+      const filesPanel = zone2.querySelector<HTMLElement>(".coloride-zone-2-file-tree");
+      if (expectedSections[i] === "sessions") {
+        expect(sessionsPanel?.hidden).toBe(false);
+        expect(filesPanel?.hidden).toBe(true);
+      } else if (expectedSections[i] === "files") {
+        expect(sessionsPanel?.hidden).toBe(true);
+        expect(filesPanel?.hidden).toBe(false);
+      }
     }
 
     // Alt+ArrowRight navigates to the next chat cell and syncs Zone 4 Inspector in < 10 ms
