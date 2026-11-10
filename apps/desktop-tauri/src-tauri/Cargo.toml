@@ -24,4 +24,8 @@ judge-orchestrator.workspace = true
 sandbox-runner.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+tokio.workspace = true
 tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
