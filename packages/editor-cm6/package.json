@@ -12,7 +12,19 @@
     }
   },
   "dependencies": {
-    "@coloride/protocol-types": "workspace:*"
+    "@codemirror/lang-css": "^6.3.1",
+    "@codemirror/lang-html": "^6.4.9",
+    "@codemirror/lang-javascript": "^6.2.3",
+    "@codemirror/lang-json": "^6.0.1",
+    "@codemirror/lang-markdown": "^6.3.2",
+    "@codemirror/language": "^6.10.8",
+    "@codemirror/state": "^6.5.2",
+    "@codemirror/view": "^6.36.3",
+    "@coloride/protocol-types": "workspace:*",
+    "@lezer/highlight": "^1.2.1"
+  },
+  "devDependencies": {
+    "happy-dom": "^17.1.1"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
