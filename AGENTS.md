@@ -1,8 +1,34 @@
-# AGENTS.md — Règles d'Architecture et Invariants pour Agents IA & Développeurs
+# AGENTS.md — Architectural Rules & Invariants for AI Agents & Developers (🇬🇧 EN | 🇫🇷 FR)
 
-Ce fichier définit les règles obligatoires pour toute contribution (humaine ou par agent IA) dans le monorepo **Coloride**.
+> 🌐 **[🇬🇧 English](#agents-en)** | **[🇫🇷 Français](#agents-fr)**
 
-## 1. Invariants Architecturaux Stricts (Ne jamais violer)
+---
+
+<a id="agents-en"></a>
+
+## 🇬🇧 English — Mandatory Rules for AI Agents & Contributors
+
+1. **The Model Proposes; The System Authorizes and Executes:**
+   - No LLM output, MCP server response, or extension may directly execute a system command or write outside the worktree without passing through `PolicyEngine` (`crates/judge-orchestrator`) and `sandbox-runner`.
+2. **Single Persistence Authority in `crates/host-core`:**
+   - Authoritative document text lives in `ropey::Rope` on the Rust side, backed by a durable Write-Ahead Log (WAL).
+   - **Explicit Offset Units:** Rust and `Tree-sitter` use **UTF-8** bytes; JavaScript, CodeMirror 6, LSP, and the VS Code Extension Emulator use **UTF-16** code units. All conversions must go through `host-core`'s centralized converter.
+3. **Strict Isolation of CodeMirror 6 (`packages/editor-cm6`):**
+   - The CodeMirror 6 `EditorView` must **never** be unmounted/remounted by a React re-render (use isolated atomic stores and `16 ms` `requestAnimationFrame` stream batching).
+   - Keystroke latency target: **p95 ≤ 16 ms**; local Lezer highlighting: **< 2 ms**.
+4. **Coloride 5-State Semantics Bound to the Exact Revision Hash:**
+   - `🟢 ✓ Validated` (`ValidatedGreen`): requires a valid `Evidence` struct (build + `vtsls`/Biome 0 errors + 100% impacted tests passed + `Preview Service` 0 crashes/`console.error`) matching the exact `content_blake3_hash`.
+   - Editing a single character inside a `🟢` range synchronously downgrades it to `🟠 ⟳ Stale Validation` (`StaleOrange`).
+5. **Fail-Closed Sandbox Policy:**
+   - In `crates/sandbox-runner`, if the requested sandbox (macOS Seatbelt, Linux Landlock/bwrap, Windows AppContainer, OCI, Fargate, Firecracker) is unavailable, return an explicit error. **Silent fallback to the unisolated host shell is strictly forbidden.**
+6. **Workspace Trust:**
+   - An untrusted repository cannot trigger Git hooks, startup scripts, workspace-local language servers, or active extensions.
+
+---
+
+<a id="agents-fr"></a>
+
+## 🇫🇷 Français — Règles Obligatoires pour Agents IA & Développeurs
 
 1. **Le modèle propose ; le système autorise et exécute :**
    - Aucune sortie de LLM, de serveur MCP ou d'extension ne peut exécuter directement une commande système ou écrire hors du worktree sans passer par `PolicyEngine` (`crates/judge-orchestrator`) et `sandbox-runner`.
