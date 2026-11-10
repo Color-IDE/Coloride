@@ -109,39 +109,42 @@ function buildLineDecorationSet(
   doc: Text,
   ranges: readonly EditorRangeDecoration[],
 ): DecorationSet {
-  const lineMap = new Map<number, EditorRangeDecoration>();
-  for (const range of ranges) {
-    const startLine = clampLine(doc, range.fromLine);
-    const endLine = clampLine(doc, Math.max(range.fromLine, range.toLine));
-    for (let lineNo = startLine; lineNo <= endLine; lineNo += 1) {
-      lineMap.set(lineNo, range);
-    }
+  if (ranges.length === 0) {
+    return Decoration.none;
   }
 
-  const sortedLines = Array.from(lineMap.keys()).sort((a, b) => a - b);
+  const sortedRanges =
+    ranges.length <= 1
+      ? ranges
+      : [...ranges].sort((a, b) => a.fromLine - b.fromLine || a.toLine - b.toLine);
+
   const builder = new RangeSetBuilder<Decoration>();
-  for (const lineNo of sortedLines) {
-    const dec = lineMap.get(lineNo);
-    if (!dec) {
+  let lastAddedLine = 0;
+
+  for (const dec of sortedRanges) {
+    const startLine = Math.max(lastAddedLine + 1, clampLine(doc, dec.fromLine));
+    const endLine = clampLine(doc, Math.max(dec.fromLine, dec.toLine));
+    if (startLine > endLine) {
       continue;
     }
     const tokens = COLORIDE_STATE_VISUAL_TOKENS[dec.state];
     const ariaLabel = describeDecorationAccessibleLabel(dec);
-    const lineInfo = doc.line(lineNo);
-    builder.add(
-      lineInfo.from,
-      lineInfo.from,
-      Decoration.line({
-        attributes: {
-          class: `cm-coloride-line cm-coloride-state-${dec.state}`,
-          "data-coloride-state": dec.state,
-          "data-coloride-icon": tokens.icon,
-          "data-coloride-bg": tokens.dark.background,
-          "data-coloride-border": tokens.dark.border,
-          "aria-label": ariaLabel,
-        },
-      }),
-    );
+    const lineDec = Decoration.line({
+      attributes: {
+        class: `cm-coloride-line cm-coloride-state-${dec.state}`,
+        "data-coloride-state": dec.state,
+        "data-coloride-icon": tokens.icon,
+        "data-coloride-bg": tokens.dark.background,
+        "data-coloride-border": tokens.dark.border,
+        "aria-label": ariaLabel,
+      },
+    });
+
+    for (let lineNo = startLine; lineNo <= endLine; lineNo += 1) {
+      const lineInfo = doc.line(lineNo);
+      builder.add(lineInfo.from, lineInfo.from, lineDec);
+      lastAddedLine = lineNo;
+    }
   }
   return builder.finish();
 }

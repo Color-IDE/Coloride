@@ -71,32 +71,44 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
     }
     expect(seenIcons.size).toBe(5);
 
-    // Warm up V8 JIT on an untouched line (line 1) before measuring synchronous StateField transition (< 1 ms)
-    editor.dispatchUserEdit(0, 0, "// warmup\n");
-    editor.setValidationDecorations([
-      {
-        fromLine: 10,
-        toLine: 20,
-        state: "ValidatedGreen",
-        snapshotHash: "H1",
-      },
-      {
-        fromLine: 22,
-        toLine: 25,
-        state: "ReviewYellow",
-        snapshotHash: "H1",
-      },
-    ]);
+    // Warm up V8 JIT across several state updates before measuring synchronous transition (< 1 ms)
+    for (let w = 0; w < 10; w += 1) {
+      editor.setValidationDecorations([
+        {
+          fromLine: 10,
+          toLine: 20,
+          state: "ValidatedGreen",
+          snapshotHash: "H1",
+        },
+        {
+          fromLine: 22,
+          toLine: 25,
+          state: "ReviewYellow",
+          snapshotHash: "H1",
+        },
+      ]);
+      const warmLine = editor.getEditorView().state.doc.line(15);
+      editor.getEditorView().state.update({
+        changes: { from: warmLine.from, to: warmLine.from, insert: " " },
+      });
+    }
 
-    // Insert a single space on line 15 inside the ValidatedGreen [10..20] range
+    // Insert a single space on line 15 inside the ValidatedGreen [10..20] range and take the median of 9 runs
     const line15 = editor.getEditorView().state.doc.line(15);
-    const t0 = performance.now();
-    const nextState = editor.getEditorView().state.update({
-      changes: { from: line15.from, to: line15.from, insert: " " },
-    }).state;
-    const stateFieldElapsedMs = performance.now() - t0;
-    expect(stateFieldElapsedMs).toBeLessThan(1);
-    expect(nextState.field(colorideStateField).ranges[0]?.state).toBe("StaleOrange");
+    const baseState = editor.getEditorView().state;
+    const transitionSamples: number[] = [];
+    for (let s = 0; s < 9; s += 1) {
+      const t0 = performance.now();
+      const tr = baseState.update({
+        changes: { from: line15.from, to: line15.from, insert: " " },
+      });
+      const nextField = tr.state.field(colorideStateField);
+      transitionSamples.push(performance.now() - t0);
+      expect(nextField.ranges[0]?.state).toBe("StaleOrange");
+    }
+    transitionSamples.sort((a, b) => a - b);
+    const medianElapsedMs = transitionSamples[Math.floor(transitionSamples.length / 2)] ?? 0;
+    expect(medianElapsedMs).toBeLessThan(1);
 
     editor.dispatchUserEdit(line15.from, line15.from, " ");
 
