@@ -25,3 +25,7 @@ Thumbs.db
 *.sqlite-wal
 *.sqlite-shm
 coverage/
+
+# Internal technical documentation & lots (private collaborator repository)
+docs/
+
