@@ -1,7 +1,8 @@
 # Coloride — Next-Gen Deterministic AI IDE
 
 > 🌐 **Read in:** **[🇬🇧 English](#english)** | **[🇫🇷 Français](#francais)**
-> 📚 **Documentation Hub:** **[🇬🇧 docs/en/](./docs/en/README.md)** | **[🇫🇷 docs/fr/](./docs/fr/README.md)** | **[docs/README.md](./docs/README.md)**
+> 🔒 **Internal Engineering Docs (`docs/` — Collaborators & Core Team only):** Clone the private documentation repository into `docs/` (`git clone https://github.com/Color-IDE/Coloride-docs.git docs`).
+> 📚 **Documentation Hub (local):** **[🇬🇧 docs/en/](./docs/en/README.md)** | **[🇫🇷 docs/fr/](./docs/fr/README.md)** | **[docs/README.md](./docs/README.md)**
 
 | Document | 🇬🇧 English (`docs/en/`) | 🇫🇷 Français (`docs/fr/`) |
 |---|---|---|
