@@ -105,6 +105,59 @@ function clampLine(doc: Text, lineNumber1Based: number): number {
   return lineNumber1Based;
 }
 
+const STATIC_LINE_DECORATION_BY_STATE: Record<ColorideValidationState, Decoration> = {
+  ValidatedGreen: Decoration.line({
+    attributes: {
+      class: "cm-coloride-line cm-coloride-state-ValidatedGreen",
+      "data-coloride-state": "ValidatedGreen",
+      "data-coloride-icon": COLORIDE_STATE_VISUAL_TOKENS.ValidatedGreen.icon,
+      "data-coloride-bg": COLORIDE_STATE_VISUAL_TOKENS.ValidatedGreen.dark.background,
+      "data-coloride-border": COLORIDE_STATE_VISUAL_TOKENS.ValidatedGreen.dark.border,
+      "aria-label": `${COLORIDE_STATE_META.ValidatedGreen.labelFr} | ${COLORIDE_STATE_META.ValidatedGreen.labelEn}`,
+    },
+  }),
+  ReviewYellow: Decoration.line({
+    attributes: {
+      class: "cm-coloride-line cm-coloride-state-ReviewYellow",
+      "data-coloride-state": "ReviewYellow",
+      "data-coloride-icon": COLORIDE_STATE_VISUAL_TOKENS.ReviewYellow.icon,
+      "data-coloride-bg": COLORIDE_STATE_VISUAL_TOKENS.ReviewYellow.dark.background,
+      "data-coloride-border": COLORIDE_STATE_VISUAL_TOKENS.ReviewYellow.dark.border,
+      "aria-label": `${COLORIDE_STATE_META.ReviewYellow.labelFr} | ${COLORIDE_STATE_META.ReviewYellow.labelEn}`,
+    },
+  }),
+  FailedRed: Decoration.line({
+    attributes: {
+      class: "cm-coloride-line cm-coloride-state-FailedRed",
+      "data-coloride-state": "FailedRed",
+      "data-coloride-icon": COLORIDE_STATE_VISUAL_TOKENS.FailedRed.icon,
+      "data-coloride-bg": COLORIDE_STATE_VISUAL_TOKENS.FailedRed.dark.background,
+      "data-coloride-border": COLORIDE_STATE_VISUAL_TOKENS.FailedRed.dark.border,
+      "aria-label": `${COLORIDE_STATE_META.FailedRed.labelFr} | ${COLORIDE_STATE_META.FailedRed.labelEn}`,
+    },
+  }),
+  StaleOrange: Decoration.line({
+    attributes: {
+      class: "cm-coloride-line cm-coloride-state-StaleOrange",
+      "data-coloride-state": "StaleOrange",
+      "data-coloride-icon": COLORIDE_STATE_VISUAL_TOKENS.StaleOrange.icon,
+      "data-coloride-bg": COLORIDE_STATE_VISUAL_TOKENS.StaleOrange.dark.background,
+      "data-coloride-border": COLORIDE_STATE_VISUAL_TOKENS.StaleOrange.dark.border,
+      "aria-label": `${COLORIDE_STATE_META.StaleOrange.labelFr} | ${COLORIDE_STATE_META.StaleOrange.labelEn}`,
+    },
+  }),
+  UnchangedBlue: Decoration.line({
+    attributes: {
+      class: "cm-coloride-line cm-coloride-state-UnchangedBlue",
+      "data-coloride-state": "UnchangedBlue",
+      "data-coloride-icon": COLORIDE_STATE_VISUAL_TOKENS.UnchangedBlue.icon,
+      "data-coloride-bg": COLORIDE_STATE_VISUAL_TOKENS.UnchangedBlue.dark.background,
+      "data-coloride-border": COLORIDE_STATE_VISUAL_TOKENS.UnchangedBlue.dark.border,
+      "aria-label": `${COLORIDE_STATE_META.UnchangedBlue.labelFr} | ${COLORIDE_STATE_META.UnchangedBlue.labelEn}`,
+    },
+  }),
+};
+
 function buildLineDecorationSet(
   doc: Text,
   ranges: readonly EditorRangeDecoration[],
@@ -127,18 +180,7 @@ function buildLineDecorationSet(
     if (startLine > endLine) {
       continue;
     }
-    const tokens = COLORIDE_STATE_VISUAL_TOKENS[dec.state];
-    const ariaLabel = describeDecorationAccessibleLabel(dec);
-    const lineDec = Decoration.line({
-      attributes: {
-        class: `cm-coloride-line cm-coloride-state-${dec.state}`,
-        "data-coloride-state": dec.state,
-        "data-coloride-icon": tokens.icon,
-        "data-coloride-bg": tokens.dark.background,
-        "data-coloride-border": tokens.dark.border,
-        "aria-label": ariaLabel,
-      },
-    });
+    const lineDec = STATIC_LINE_DECORATION_BY_STATE[dec.state];
 
     for (let lineNo = startLine; lineNo <= endLine; lineNo += 1) {
       const lineInfo = doc.line(lineNo);
