@@ -1,4 +1,9 @@
-import { Annotation, EditorSelection as CmSelection, EditorState } from "@codemirror/state";
+import {
+  Annotation,
+  EditorSelection as CmSelection,
+  Compartment,
+  EditorState,
+} from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import {
   CONTRACT_SCHEMA_VERSION,
@@ -21,6 +26,20 @@ import {
   suppressLocalInvalidationAnnotation,
 } from "./decorations.js";
 import { createLezerHighlightingExtensions } from "./languages.js";
+import {
+  type Cm6TranslatedKeybinding,
+  DEFAULT_COLORIDE_CM6_THEME,
+  type DeclarativeVsixBundle,
+  type DeclarativeVsixSnippet,
+  type DeclarativeVsixTheme,
+  KEYMAP_PRESET_BINDINGS,
+  type KeymapPresetId,
+  createKeymapCompartmentExtension,
+  createKeymapExtension,
+  createThemeCompartmentExtension,
+  createThemeExtension,
+  renderSnippetTemplate,
+} from "./onboarding-vsix.js";
 
 const documentSwitchAnnotation = Annotation.define<boolean>();
 const transactionOriginAnnotation = Annotation.define<TransactionOrigin>();
@@ -192,6 +211,9 @@ export interface ColorideEditorStoreSnapshot {
   readonly lastAckSnapshot: EditorSnapshot | null;
   readonly droppedStaleIpcPackets: number;
   readonly mountCount: number;
+  readonly activeKeymapPreset: KeymapPresetId;
+  readonly activeThemeLabel: string;
+  readonly loadedVsixCount: number;
 }
 
 export interface ColorideEditorOptions {
@@ -199,6 +221,8 @@ export interface ColorideEditorOptions {
   readonly initialContent: string;
   readonly ipcChannel: BinaryIpcChannel;
   readonly initialDecorations?: readonly EditorRangeDecoration[];
+  readonly initialKeymapPreset?: KeymapPresetId;
+  readonly initialTheme?: DeclarativeVsixTheme;
 }
 
 /**
@@ -218,6 +242,14 @@ export class ColorideEditorView {
   private lastAckSnapshot: EditorSnapshot | null = null;
   private droppedStaleIpcPackets = 0;
   private mountCount = 0;
+  private activeKeymapPreset: KeymapPresetId;
+  private customKeybindings: Cm6TranslatedKeybinding[] = [];
+  private activeTheme: DeclarativeVsixTheme;
+  private registeredSnippets: DeclarativeVsixSnippet[] = [];
+  private loadedVsixBundles: DeclarativeVsixBundle[] = [];
+  private lastTriggeredKeyCommand: string | null = null;
+  private readonly keymapCompartment = new Compartment();
+  private readonly themeCompartment = new Compartment();
   private unsubscribeIpc: (() => void) | null = null;
   private readonly storeListeners = new Set<() => void>();
   private readonly ipcChannel: BinaryIpcChannel;
@@ -225,6 +257,8 @@ export class ColorideEditorView {
   constructor(options: ColorideEditorOptions) {
     this.documentId = options.initialDocumentId;
     this.ipcChannel = options.ipcChannel;
+    this.activeKeymapPreset = options.initialKeymapPreset ?? "VsCode";
+    this.activeTheme = options.initialTheme ?? DEFAULT_COLORIDE_CM6_THEME;
     this.ipcChannel.openDocument(this.documentId, this.sessionGeneration, options.initialContent);
 
     this.unsubscribeIpc = this.ipcChannel.onBinarySnapshot((payload) => {
@@ -421,7 +455,116 @@ export class ColorideEditorView {
       lastAckSnapshot: this.lastAckSnapshot,
       droppedStaleIpcPackets: this.droppedStaleIpcPackets,
       mountCount: this.mountCount,
+      activeKeymapPreset: this.activeKeymapPreset,
+      activeThemeLabel: this.activeTheme.label,
+      loadedVsixCount: this.loadedVsixBundles.length,
     };
+  }
+
+  /**
+   * Switch active keymap preset (`VS Code`, `Vim`, `JetBrains`) in-place via CodeMirror 6 Compartment
+   * without unmounting or remounting `EditorView` (`mountCount === 1`).
+   */
+  setKeymapPreset(
+    preset: KeymapPresetId,
+    customBindings?: readonly Cm6TranslatedKeybinding[],
+  ): void {
+    const view = this.getEditorView();
+    this.activeKeymapPreset = preset;
+    if (customBindings !== undefined) {
+      this.customKeybindings = [...customBindings];
+    }
+    view.dispatch({
+      effects: this.keymapCompartment.reconfigure(
+        createKeymapExtension(this.activeKeymapPreset, this.customKeybindings, (cmd) => {
+          this.lastTriggeredKeyCommand = cmd;
+        }),
+      ),
+    });
+    this.notifyStoreListeners();
+  }
+
+  getKeymapPreset(): KeymapPresetId {
+    return this.activeKeymapPreset;
+  }
+
+  getActiveKeybindings(): readonly Cm6TranslatedKeybinding[] {
+    return [...KEYMAP_PRESET_BINDINGS[this.activeKeymapPreset], ...this.customKeybindings];
+  }
+
+  getLastTriggeredKeyCommand(): string | null {
+    return this.lastTriggeredKeyCommand;
+  }
+
+  /**
+   * Apply a declarative `.vsix` theme in-place via CodeMirror 6 Compartment.
+   */
+  setTheme(theme: DeclarativeVsixTheme): void {
+    const view = this.getEditorView();
+    this.activeTheme = theme;
+    view.dispatch({
+      effects: this.themeCompartment.reconfigure(createThemeExtension(theme)),
+    });
+    this.notifyStoreListeners();
+  }
+
+  getActiveTheme(): DeclarativeVsixTheme {
+    return this.activeTheme;
+  }
+
+  /**
+   * Load a Tier-1 declarative `.vsix` bundle (`LOT-006`) into CodeMirror 6:
+   * registers its themes, snippets, and keybindings while executing `0` imperative JS entrypoints.
+   */
+  applyDeclarativeVsixBundle(bundle: DeclarativeVsixBundle): void {
+    this.loadedVsixBundles.push(bundle);
+    if (bundle.snippets.length > 0) {
+      this.registeredSnippets.push(...bundle.snippets);
+    }
+    if (bundle.keybindings.length > 0) {
+      this.customKeybindings.push(...bundle.keybindings);
+      this.setKeymapPreset(this.activeKeymapPreset);
+    }
+    const firstTheme = bundle.themes[0];
+    if (firstTheme) {
+      this.setTheme(firstTheme);
+    } else {
+      this.notifyStoreListeners();
+    }
+  }
+
+  getRegisteredSnippets(): readonly DeclarativeVsixSnippet[] {
+    return this.registeredSnippets;
+  }
+
+  /**
+   * Expand a registered `.vsix` snippet by its prefix at the current cursor position.
+   */
+  expandSnippetByPrefix(prefix: string): boolean {
+    const snippet = this.registeredSnippets.find((s) => s.prefix === prefix);
+    if (!snippet) {
+      return false;
+    }
+    const view = this.getEditorView();
+    const head = view.state.selection.main.head;
+    const expanded = renderSnippetTemplate(snippet.body);
+    view.dispatch({
+      changes: { from: head, to: head, insert: expanded.text },
+      selection: CmSelection.cursor(head + expanded.cursorRelativeOffset),
+      annotations: transactionOriginAnnotation.of("User"),
+    });
+    return true;
+  }
+
+  /**
+   * 1-click reset to Coloride default theme, `VS Code` keymap preset, and clean custom bindings/snippets.
+   */
+  resetToColorideDefaults(): void {
+    this.customKeybindings = [];
+    this.registeredSnippets = [];
+    this.loadedVsixBundles = [];
+    this.setKeymapPreset("VsCode", []);
+    this.setTheme(DEFAULT_COLORIDE_CM6_THEME);
   }
 
   subscribe(listener: () => void): () => void {
@@ -453,6 +596,15 @@ export class ColorideEditorView {
       extensions: [
         ...createLezerHighlightingExtensions(documentId),
         ...colorideStateDecorations(),
+        createKeymapCompartmentExtension(
+          this.keymapCompartment,
+          this.activeKeymapPreset,
+          this.customKeybindings,
+          (cmd) => {
+            this.lastTriggeredKeyCommand = cmd;
+          },
+        ),
+        createThemeCompartmentExtension(this.themeCompartment, this.activeTheme),
         this.createHostDeltaSyncExtension(),
       ],
     });

@@ -9,6 +9,7 @@ export * from "./stores.js";
 export * from "./stream-renderer.js";
 export * from "./virtualizer.js";
 export * from "./cockpit-dom.js";
+export * from "./onboarding-modal.js";
 
 export interface CockpitShellState {
   readonly activePersona: CockpitPersonaMode;
