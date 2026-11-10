@@ -1,3 +1,7 @@
+pub mod contracts;
+
+pub use contracts::*;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

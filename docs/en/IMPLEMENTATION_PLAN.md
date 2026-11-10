@@ -27,8 +27,8 @@ Principles enforced after the second optimization pass:
 | ID | Status | Detailed Spec | Lot Name | Milestone | Priority | Dependencies | Estimate | Risk | Verifiable Deliverable |
 |---|---|---|---|---|---|---|---|---|---|
 | **LOT-001** | `🟢 Validated` | [LOT-001.md](./LOTS/LOT-001.md) | Cargo/pnpm Monorepo Foundation, Tauri v2 Shell & 3-OS CI | M1.1 | P0 | None | 2 d (16 h) | Low | Compilable macOS/Win/Linux monorepo + green `ci.yml` |
-| **LOT-002** | `🔜 Ready` | [LOT-002.md](./LOTS/LOT-002.md) | Rust Technical Contracts & TypeScript Generation (`protocol-types`) | M1.1 | P0 | LOT-001 | 2 d (16 h) | Low | Rust contracts + drift-free `@coloride/protocol-types` package |
-| **LOT-003** | `⏳ Planned` | [LOT-003.md](./LOTS/LOT-003.md) | `ropey` Buffer Engine, WAL Journal & Crash Recovery (`host-core`) | M1.1 | P0 | LOT-002 | 4 d (32 h) | High | Rust `DocumentService` with `ropey`, UTF-8/16 offsets & crash recovery |
+| **LOT-002** | `🟢 Validated` | [LOT-002.md](./LOTS/LOT-002.md) | Rust Technical Contracts & TypeScript Generation (`protocol-types`) | M1.1 | P0 | LOT-001 | 2 d (16 h) | Low | Rust contracts + drift-free `@coloride/protocol-types` package |
+| **LOT-003** | `🔜 Ready` | [LOT-003.md](./LOTS/LOT-003.md) | `ropey` Buffer Engine, WAL Journal & Crash Recovery (`host-core`) | M1.1 | P0 | LOT-002 | 4 d (32 h) | High | Rust `DocumentService` with `ropey`, UTF-8/16 offsets & crash recovery |
 | **LOT-004** | `⏳ Planned` | [LOT-004.md](./LOTS/LOT-004.md) | Isolated CodeMirror 6 Editor & Binary IPC Bridge (`editor-cm6`) | M1.1 | P0 | LOT-002, LOT-003 | 4 d (32 h) | High | Binary-synced `@coloride/editor-cm6` (< 16 ms) + Coloride states |
 | **LOT-005** | `⏳ Planned` | [LOT-005.md](./LOTS/LOT-005.md) | 4-Zone Cockpit UI Shell, Lazy Boot & Virtualization (`web-ui`) | M1.1 | P0 | LOT-004 | 3.5 d (28 h) | Medium | 4-zone Cockpit UI (*Lazy Boot* ≤ 3 s, inspector switch < 10 ms) |
 | **LOT-006** | `⏳ Planned` | [LOT-006.md](./LOTS/LOT-006.md) | 1-Click Onboarding & Migration Service (VS Code / Cursor / Claude) | M1.1 | P1 | LOT-003, LOT-005 | 2.5 d (20 h) | Low | 1-click importer (keymaps, themes, rules, quarantined MCP, `.vsix`) |
