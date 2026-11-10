@@ -64,7 +64,9 @@ pub enum DocumentError {
         document_id: String,
         session_generation: u32,
     },
-    #[error("Stale session generation for document '{document_id}': expected {expected}, got {actual}")]
+    #[error(
+        "Stale session generation for document '{document_id}': expected {expected}, got {actual}"
+    )]
     StaleSessionGeneration {
         document_id: String,
         expected: u32,
@@ -76,7 +78,9 @@ pub enum DocumentError {
         expected: u32,
         actual: u32,
     },
-    #[error("UTF-8 span mismatch on change: provided {provided:?} does not match computed {computed:?}")]
+    #[error(
+        "UTF-8 span mismatch on change: provided {provided:?} does not match computed {computed:?}"
+    )]
     Utf8SpanMismatch {
         provided: Utf8Span,
         computed: Utf8Span,
@@ -837,12 +841,13 @@ impl DocumentService {
         }
 
         let session = self.session(document_id, session_generation)?;
-        let disk_path = session
-            .disk_path
-            .clone()
-            .ok_or_else(|| DocumentError::MissingDiskPath {
-                document_id: document_id.to_string(),
-            })?;
+        let disk_path =
+            session
+                .disk_path
+                .clone()
+                .ok_or_else(|| DocumentError::MissingDiskPath {
+                    document_id: document_id.to_string(),
+                })?;
 
         Ok(PendingDiskSave {
             document_id: session.document_id.clone(),

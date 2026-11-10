@@ -484,10 +484,7 @@ fn detects_external_disk_conflict_and_blocks_overwrite() {
         base_revision: 0,
         op_id: "op-1".to_string(),
         changes: vec![TextChange {
-            range_utf16: Utf16Span::new(
-                Utf16CodeUnitOffset::new(10),
-                Utf16CodeUnitOffset::new(11),
-            ),
+            range_utf16: Utf16Span::new(Utf16CodeUnitOffset::new(10), Utf16CodeUnitOffset::new(11)),
             range_utf8: None,
             inserted_text: "2".to_string(),
         }],
@@ -507,7 +504,10 @@ fn detects_external_disk_conflict_and_blocks_overwrite() {
 
     // Attempting an atomic save must fail with ExternalDiskConflict instead of silently overwriting
     let save_err = service.save_document_atomic("conflict.ts", 1).unwrap_err();
-    assert!(matches!(save_err, DocumentError::ExternalDiskConflict { .. }));
+    assert!(matches!(
+        save_err,
+        DocumentError::ExternalDiskConflict { .. }
+    ));
     assert_eq!(
         std::fs::read_to_string(&file_path).unwrap(),
         "const a = 999; // external edit\n"
@@ -691,4 +691,3 @@ fn rejects_stale_session_generation_and_revision_mismatch_and_rolls_back_invalid
     assert_eq!(session.text(), "const count = 10;\n");
     assert_eq!(session.interactive_revision(), 0);
 }
-
