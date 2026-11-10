@@ -52,6 +52,7 @@ Principes appliqués après la seconde passe d'optimisation :
 | **LOT-026** | [LOT-026.md](./LOTS/LOT-026.md) | Backend MicroVM Firecracker & Isolation d'extensions Wasmtime/WASI | M3.0 | P2 | LOT-012, LOT-017 | 4 j (32 h) | Élevé | Runner Firecracker Linux/KVM à snapshots rapides + hôte plugins WASI |
 | **LOT-027** | [LOT-027.md](./LOTS/LOT-027.md) | Gouvernance Enterprise : SSO (OIDC/SAML/SCIM), RBAC/ABAC & vLLM Privé | M4.0 | P2 | LOT-014, LOT-017, LOT-022 | 5 j (40 h) | Moyen | SSO SAML/SCIM, politiques centrales RBAC/ABAC, audit et endpoints vLLM |
 | **LOT-028** | [LOT-028.md](./LOTS/LOT-028.md) | Déploiement Privé VPC/On-Prem, Conformité RGPD (Purge) & Exercices RPO/RTO | M4.0 | P2 | LOT-027 | 4 j (32 h) | Moyen | Déploiement VPC/On-Prem, purge RGPD en cascade et exercice RPO ≤ 15m / RTO ≤ 4h |
+| **LOT-029** | [LOT-029.md](./LOTS/LOT-029.md) | Émulateur d'Extensions VS Code (`VS Code Extension Host Shim` & OpenVSX `.vsix`) | M2.0 / M3.0 | P1 | LOT-004, LOT-006, LOT-010, LOT-012, LOT-013 | 5 j (40 h) | Élevé | Extension Host isolé en Sandbox OS traduisant l'API `vscode.*` vers `ropey` & CM6 |
 
 ---
 
@@ -105,6 +106,9 @@ flowchart TD
         L18 --> L20["LOT-020 : Grille 8 Chats Parallèles & Conflits AST"]
         L18 --> L21["LOT-021 : Modes Créer (Visuel AST) & Apprendre"]
         L18 --> L22["LOT-022 : Prompt Caching, Mémoire Équipe & OTel"]
+        L12 --> L29["LOT-029 : Émulateur Extensions VS Code (Extension Host Shim)"]
+        L13 --> L29
+        L10 --> L29
     end
 
     subgraph M3_0["Jalon M3.0 — V1 Multi-Personas"]
@@ -136,7 +140,7 @@ flowchart TD
 | **Vague 5** | M1.3 | UI budgets, permissions, coffre BYOK et préparation Merge View | [LOT-013](./LOTS/LOT-013.md) (Machine à états, `Policy Engine`, budgets) → [LOT-014](./LOTS/LOT-014.md) (Model Gateway & ACP) | Coupe-circuit confidentialité + complétion ≤ 700 ms |
 | **Vague 6** | M1.3 / M1.4 | Co-réalisation [LOT-015](./LOTS/LOT-015.md) (`@codemirror/merge` & badges) → [LOT-016](./LOTS/LOT-016.md) (`Preview Service`) | [LOT-015](./LOTS/LOT-015.md) (Compilateur `ChangeSet` AST, boucle du Juge, max 2 retries) | **Gate M1.3 validé** + `Evidence` incluant DOM/runtime |
 | **Vague 7** | M1.4 | UI Publication 1-clic + [LOT-018](./LOTS/LOT-018.md) (Packaging signé 3 OS, accessibilité, qualification) | [LOT-017](./LOTS/LOT-017.md) (API Cloud Axum, Fargate, Cloudflare R2/Pages par digest) | **Gate M1.4 (MVP Alpha)** : 19 scénarios bloquants + ≥ 70 % sur 100 tâches TS |
-| **Vague 8** | M2.0 | [LOT-019](./LOTS/LOT-019.md) (CM6 avancé) + [LOT-021](./LOTS/LOT-021.md) (Modes *Créer* & *Apprendre*) | [LOT-020](./LOTS/LOT-020.md) (Grille 8 chats // & conflits AST) + [LOT-022](./LOTS/LOT-022.md) (Prompt Caching & OTel) | **Gate M2.0 (Bêta Fermée)** : 8 chats // sans conflit écrasé |
+| **Vague 8** | M2.0 | [LOT-019](./LOTS/LOT-019.md) (CM6 avancé) + [LOT-021](./LOTS/LOT-021.md) (Modes *Créer* & *Apprendre*) | [LOT-020](./LOTS/LOT-020.md) (Grille 8 chats // & conflits AST) + [LOT-022](./LOTS/LOT-022.md) (Prompt Caching & OTel) + [LOT-029](./LOTS/LOT-029.md) (Émulateur Extensions VS Code) | **Gate M2.0 (Bêta Fermée)** : 8 chats // + Extensions `.vsix` sandboxées |
 | **Vague 9** | M3.0 | [LOT-023](./LOTS/LOT-023.md) (Coédition Yjs & Undo isolé) + UI Espaces DBA/DevOps | [LOT-024](./LOTS/LOT-024.md) (DBA Postgres) + [LOT-025](./LOTS/LOT-025.md) (DevOps Terraform/K8s) + [LOT-026](./LOTS/LOT-026.md) (Firecracker/WASI) | **Gate M3.0 (V1 Publique)** : 5 personas + convergence Yjs |
 | **Vague 10** | M4.0 | Console d'administration Enterprise & tableaux de bord d'audit | [LOT-027](./LOTS/LOT-027.md) (SSO SAML/SCIM, RBAC/ABAC, vLLM) → [LOT-028](./LOTS/LOT-028.md) (VPC/On-Prem, RGPD, RPO/RTO) | **Gate M4.0 (Enterprise)** : Purge RGPD + RPO ≤ 15m / RTO ≤ 4h |
 

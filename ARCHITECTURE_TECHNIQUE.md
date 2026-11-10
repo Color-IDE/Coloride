@@ -26,7 +26,7 @@ L’étude fournit une direction pertinente : cockpit d’agents, contexte local
 |---|---|
 | Rust garantirait un démarrage inférieur à 100 ms et moins de 150 Mo de RAM | Remplacer ces promesses par des objectifs mesurés sur l’application complète, avec périmètre et matériel documentés. |
 | MCP assurerait l’isolation et l’abstraction des modèles | Séparer connecteurs MCP, adaptateurs de modèles, autorisations et isolation d’exécution. MCP organise les échanges avec les outils et les ressources. |
-| WASM permettrait une compatibilité légère avec les extensions VS Code | Exclure l’émulation générale du programme initial. L’isolation éventuelle de plugins via WASI ne fournit pas les API et services attendus par les extensions VS Code. |
+| WASM permettrait une compatibilité légère avec les extensions VS Code | Combiner deux niveaux : (1) plugins natifs confinés via Wasmtime/WASI et chargement déclaratif `.vsix` (OpenVSX : thèmes, icônes, snippets, grammaires, LSP/DAP) dans le Host Rust ; (2) un **VS Code Extension Host Shim** isolé dans la Sandbox OS traduisant la surface API `vscode.*` (`commands`, `workspace`, `languages`, `window`) vers le Host Rust (`ropey`) et CodeMirror 6. |
 | Local-first et BYOK supprimeraient les risques et les coûts | Mesurer les transferts réels et les coûts d’exploitation ; BYOK transfère le coût d’inférence à l’utilisateur sans supprimer les autres charges. |
 
 Ces distinctions suivent les périmètres documentés de [MCP](https://modelcontextprotocol.io/docs/learn/architecture), de [CodeMirror 6](https://codemirror.net/docs/guide/) et de [Monaco](https://github.com/microsoft/monaco-editor).
@@ -133,7 +133,7 @@ flowchart TB
 | Debug Service | DAP avec adaptateur JavaScript ; lancement, évaluation et terminal soumis aux permissions |
 | Terminal Service | `xterm.js` et PTY supervisé via flux binaires Tauri `Channel` ; commandes des agents exécutées dans la sandbox |
 | Preview Service (Browser Loop) | Origine distincte sans pont IPC Tauri ; capture automatique des erreurs runtime (`console.error`, exceptions non gérées, échecs réseau) et de l’arbre DOM/accessibilité pour alimenter les preuves `Evidence` avant d’accorder l’état `🟢 ✓ Validé` |
-| Migration & Onboarding Service | Import en 1 clic au premier lancement depuis VS Code / Cursor / Claude Desktop : raccourcis clavier (presets VS Code / Vim / JetBrains), thèmes, serveurs MCP existants (soumis à validation) et règles projet (`.cursorrules`, `CLAUDE.md`, `AGENTS.md`) |
+| Migration, Onboarding & VS Code Extension Emulator | Import en 1 clic au premier lancement (VS Code / Cursor / Claude Desktop : raccourcis clavier, thèmes, MCP, `.cursorrules` / `CLAUDE.md`) + support des paquets `.vsix` **OpenVSX** (actifs déclaratifs dès le MVP et **VS Code Extension Host Shim** isolé traduisant l’API `vscode.*` vers le Host Rust et CodeMirror 6) |
 
 Tree-sitter produit une structure syntaxique incrémentale directement dans le Host Rust ; les informations sémantiques viennent du LSP et des compilateurs. Un lien de dépendance déduit heuristiquement porte un niveau de confiance. [Documentation Tree-sitter](https://tree-sitter.github.io/tree-sitter/).
 
@@ -251,7 +251,7 @@ Pour garantir un onboarding en un clic sans imposer l’installation de Docker o
 | **2. Local conteneurisé (Optionnel / Multi-services)** | Abstraction OCI automatique compatible avec **OrbStack, Docker Desktop ou Podman** (utilisée uniquement si présente et requise par la tâche) | Pool de conteneurs pré-chauffés (*Warm Sandbox Pool*) avec cache paquets en lecture seule (`pnpm`/`bun`) ; pas de montage du dossier personnel ni de socket de conteneur |
 | **3. Cloud MVP** | Une tâche ECS Fargate par exécution, sans partage entre tenants | Aucun mode privilégié, aucun Docker-in-Docker ; stack TypeScript prédéfinie avec cache d’images et de dépendances pré-positionné |
 | **4. V1/Enterprise** | Backend Firecracker pour les jobs nécessitant davantage de contrôle et les environnements privés compatibles | Workers Linux/KVM durcis avec restauration rapide de snapshots microVM ; jamais présenté comme runtime natif macOS/Windows |
-| **Extensions limitées** | Wasmtime/WASI | Capacités explicites, fichiers préouverts, limites mémoire et temps |
+| **Extensions & Émulateur VS Code** | Wasmtime/WASI + **VS Code Extension Host Shim** (isolé en Sandbox OS) | Plugins natifs WASI à capacités explicites ; émulateur d’API `vscode.*` (`commands`, `workspace`, `languages`, `window`) pour exécuter les extensions `.vsix` d’OpenVSX dans un processus confiné sans accès direct au système hôte |
 
 L’utilisateur peut ainsi utiliser Coloride dès l’installation sans Docker ni Podman grâce à la sandbox native de l’OS. Lorsque des conteneurs sont nécessaires (bases de données de test, environnements multi-services), le Host Rust détecte un runtime OCI existant (OrbStack, Docker, Podman) ou bascule sur le runner cloud autorisé. [Fargate](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/fargate-security-considerations.html), [Firecracker](https://github.com/firecracker-microvm/firecracker/blob/main/docs/prod-host-setup.md).
 
@@ -291,7 +291,7 @@ Tauri utilise des moteurs différents selon les plateformes ; son choix ne dispe
 | Identité | OIDC Authorization Code + PKCE ; fédération SAML/SCIM en Enterprise | Aucun compte requis pour le local ; identité requise pour les services managés |
 | Connecteurs & Agents | MCP (stdio/HTTP) pour les outils ; **ACP (Agent Client Protocol) / SDK** pour intégrer Claude Code, Codex ou agents externes | Catalogue autorisé, scopes et interception systématique des actions par le Juge Rust |
 | Collaboration | Événements synchronisés dès la bêta ; Yjs pour la coédition en V1 | Synchronisation activée par workspace ; Git reste responsable des versions publiées |
-| Onboarding & Extension | Import 1-clic (VS Code / Cursor / Claude Desktop : keymaps, thèmes, MCP, `.cursorrules` / `CLAUDE.md`), LSP/DAP et plugins WASI | Adoption immédiate sans friction ; pas de promesse d’émulation générale du Marketplace VS Code |
+| Onboarding & Extensions VS Code | Import 1-clic (VS Code / Cursor / Claude Desktop : keymaps, thèmes, MCP, `.cursorrules` / `CLAUDE.md`), client **OpenVSX (`.vsix`)**, plugins WASI et **VS Code Extension Host Shim** isolé | Adoption immédiate sans friction : chargement natif Rust des thèmes/grammaires/snippets `.vsix` dès le MVP, et émulation de la surface API `vscode.*` dans un Extension Host sandboxé relié à `ropey` et CodeMirror 6 |
 
 Les instantanés cloud sont envoyés uniquement pour les tâches explicitement hébergées. L’activation du cloud ne synchronise pas automatiquement tous les dépôts.
 
