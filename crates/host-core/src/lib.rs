@@ -2,12 +2,14 @@ pub mod contracts;
 pub mod document;
 pub mod journal;
 pub mod lazy_boot;
+pub mod migration;
 pub mod offsets;
 
 pub use contracts::*;
 pub use document::*;
 pub use journal::*;
 pub use lazy_boot::*;
+pub use migration::*;
 pub use offsets::*;
 
 use serde::{Deserialize, Serialize};
