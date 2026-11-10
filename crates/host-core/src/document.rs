@@ -602,7 +602,7 @@ impl DocumentService {
         Ok(snapshot)
     }
 
-    /// Open a local file from disk into a `ropey::Rope` using streaming `BufReader` chunks (`p95 <= 50 ms` for 1 MB).
+    /// Open a local file from disk into a `ropey::Rope` (`p95 <= 50 ms` for 1 MB).
     pub fn open_document_from_disk(
         &mut self,
         document_id: impl Into<String>,
@@ -611,19 +611,16 @@ impl DocumentService {
     ) -> Result<EditorSnapshot, DocumentError> {
         let document_id = document_id.into();
         let disk_path = disk_path.into();
-        let file = File::open(&disk_path).map_err(|source| DocumentError::Io {
-            path: disk_path.clone(),
-            source,
-        })?;
-        let reader = BufReader::with_capacity(64 * 1024, file);
-        let rope = Rope::from_reader(reader).map_err(|source| DocumentError::Io {
-            path: disk_path.clone(),
-            source,
-        })?;
+        let initial_text =
+            std::fs::read_to_string(&disk_path).map_err(|source| DocumentError::Io {
+                path: disk_path.clone(),
+                source,
+            })?;
+        let content_blake3_hash = blake3::hash(initial_text.as_bytes()).to_hex().to_string();
+        let rope = Rope::from_str(&initial_text);
 
         let initial_revision = 0;
         let disk_saved_revision = 0;
-        let content_blake3_hash = compute_rope_blake3_hex(&rope);
         let last_known_disk_hash = Some(content_blake3_hash.clone());
 
         if let Some(journal) = &mut self.journal {
@@ -633,7 +630,7 @@ impl DocumentService {
                 disk_path: Some(disk_path.clone()),
                 initial_revision,
                 disk_saved_revision,
-                initial_text: rope.to_string(),
+                initial_text,
                 content_blake3_hash: content_blake3_hash.clone(),
                 last_known_disk_hash: last_known_disk_hash.clone(),
             })?;

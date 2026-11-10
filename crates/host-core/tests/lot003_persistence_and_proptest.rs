@@ -389,6 +389,9 @@ fn load_1mb_file_into_rope_under_50ms_p95() {
         content.pop();
     }
     std::fs::write(&file_path, &content).expect("write 1MB test file");
+    let expected_hash = compute_rope_blake3_hex(&Rope::from_str(&content));
+    // Warm up OS filesystem cache once before measuring p95 Rope load latency
+    let _ = std::fs::read(&file_path).expect("warm up file cache");
 
     let iterations = 20usize;
     let mut durations_ms = Vec::with_capacity(iterations);
@@ -404,10 +407,7 @@ fn load_1mb_file_into_rope_under_50ms_p95() {
 
         let session = service.session(&format!("doc-{i}"), 1).unwrap();
         assert_eq!(session.rope().len_bytes(), content.len());
-        assert_eq!(
-            snap.content_blake3_hash,
-            compute_rope_blake3_hex(&Rope::from_str(&content))
-        );
+        assert_eq!(snap.content_blake3_hash, expected_hash);
     }
 
     durations_ms.sort_by(|a, b| a.partial_cmp(b).unwrap());

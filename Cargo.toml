@@ -37,3 +37,13 @@ unsafe_code = "forbid"
 
 [workspace.lints.clippy]
 all = "warn"
+
+[profile.dev.package.ropey]
+opt-level = 2
+
+[profile.dev.package.str_indices]
+opt-level = 2
+
+[profile.dev.package.blake3]
+opt-level = 2
+
