@@ -19,7 +19,7 @@
     "@biomejs/biome": "1.9.4",
     "happy-dom": "^17.1.1",
     "typescript": "5.7.3",
-    "vitest": "3.0.5"
+    "vitest": "4.1.11"
   },
   "pnpm": {
     "onlyBuiltDependencies": ["@biomejs/biome", "esbuild"]
