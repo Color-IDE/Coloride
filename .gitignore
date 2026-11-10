@@ -26,6 +26,6 @@ Thumbs.db
 *.sqlite-shm
 coverage/
 
-# Internal technical documentation & lots (private collaborator repository)
+# Local notes
 docs/
 
