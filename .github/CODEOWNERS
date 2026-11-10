@@ -1,0 +1,19 @@
+# Coloride — Code Ownership
+
+# Project maintainers
+* @IlyesAmeraoui @GitHocine
+
+# Rust backend
+/crates/ @IlyesAmeraoui @GitHocine
+
+# Desktop application
+/apps/desktop-tauri/ @IlyesAmeraoui @GitHocine
+
+# Web interface
+/apps/web-ui/ @IlyesAmeraoui @GitHocine
+
+# Shared packages
+/packages/ @IlyesAmeraoui @GitHocine
+
+# GitHub configuration
+/.github/ @IlyesAmeraoui @GitHocine
