@@ -1,9 +1,20 @@
-import {
-  COLORIDE_STATE_META,
-  type ColorideValidationState,
-  type ConfidenceLevel,
-  type ExcerptFreshness,
+import type {
+  ColorideValidationState,
+  ConfidenceLevel,
+  ExcerptFreshness,
 } from "@coloride/protocol-types";
+import { AtomicStore } from "./atomic-store.js";
+import {
+  extractSymbolsHeuristically,
+  inferImpactedTestsHeuristically,
+} from "./cockpit-analysis.js";
+
+export {
+  extractSymbolsHeuristically as extractAstSymbolsFromSource,
+  inferImpactedTestsHeuristically as computeImpactedTestsForBuffer,
+} from "./cockpit-analysis.js";
+export { AtomicStore, type StoreListener } from "./atomic-store.js";
+export { COLORIDE_DESIGN_TOKENS, type DesignStateTokens } from "./design-state-tokens.js";
 
 export type CockpitGridMode = 1 | 2 | 4 | 8;
 
@@ -12,147 +23,6 @@ export type CockpitPersonaMode = "Create" | "Learn" | "Develop" | "Infrastructur
 export type ActivityBarSection = "sessions" | "files" | "search" | "git" | "debug" | "mcp";
 
 export type InspectorTab = "preview" | "code-diff";
-
-export interface DesignStateTokens {
-  readonly state: ColorideValidationState;
-  readonly icon: "✓" | "!" | "✕" | "⟳" | "•";
-  readonly labelFr: string;
-  readonly labelEn: string;
-  readonly darkBg: string;
-  readonly darkBorder: string;
-  readonly darkText: string;
-  readonly lightBg: string;
-  readonly lightBorder: string;
-  readonly lightText: string;
-}
-
-/**
- * Exact WCAG AA/AAA visual tokens and semantic icons from `DESIGN_SYSTEM.md`.
- * Every state combines background/border/text colors, a distinct geometric icon, and explicit labels.
- */
-export const COLORIDE_DESIGN_TOKENS: Record<ColorideValidationState, DesignStateTokens> = {
-  ValidatedGreen: {
-    state: "ValidatedGreen",
-    icon: COLORIDE_STATE_META.ValidatedGreen.icon,
-    labelFr: COLORIDE_STATE_META.ValidatedGreen.labelFr,
-    labelEn: COLORIDE_STATE_META.ValidatedGreen.labelEn,
-    darkBg: "#052e16",
-    darkBorder: "#22c55e",
-    darkText: "#86efac",
-    lightBg: "#dcfce7",
-    lightBorder: "#16a34a",
-    lightText: "#14532d",
-  },
-  ReviewYellow: {
-    state: "ReviewYellow",
-    icon: COLORIDE_STATE_META.ReviewYellow.icon,
-    labelFr: COLORIDE_STATE_META.ReviewYellow.labelFr,
-    labelEn: COLORIDE_STATE_META.ReviewYellow.labelEn,
-    darkBg: "#422006",
-    darkBorder: "#eab308",
-    darkText: "#fde047",
-    lightBg: "#fef9c3",
-    lightBorder: "#ca8a04",
-    lightText: "#713f12",
-  },
-  FailedRed: {
-    state: "FailedRed",
-    icon: COLORIDE_STATE_META.FailedRed.icon,
-    labelFr: COLORIDE_STATE_META.FailedRed.labelFr,
-    labelEn: COLORIDE_STATE_META.FailedRed.labelEn,
-    darkBg: "#450a0a",
-    darkBorder: "#ef4444",
-    darkText: "#fca5a5",
-    lightBg: "#fee2e2",
-    lightBorder: "#dc2626",
-    lightText: "#7f1d1d",
-  },
-  StaleOrange: {
-    state: "StaleOrange",
-    icon: COLORIDE_STATE_META.StaleOrange.icon,
-    labelFr: COLORIDE_STATE_META.StaleOrange.labelFr,
-    labelEn: COLORIDE_STATE_META.StaleOrange.labelEn,
-    darkBg: "#431407",
-    darkBorder: "#f97316",
-    darkText: "#fdba74",
-    lightBg: "#ffedd5",
-    lightBorder: "#ea580c",
-    lightText: "#7c2d12",
-  },
-  UnchangedBlue: {
-    state: "UnchangedBlue",
-    icon: COLORIDE_STATE_META.UnchangedBlue.icon,
-    labelFr: COLORIDE_STATE_META.UnchangedBlue.labelFr,
-    labelEn: COLORIDE_STATE_META.UnchangedBlue.labelEn,
-    darkBg: "#0f172a",
-    darkBorder: "#3b82f6",
-    darkText: "#93c5fd",
-    lightBg: "#dbeafe",
-    lightBorder: "#2563eb",
-    lightText: "#1e3a8a",
-  },
-};
-
-export type StoreListener<T> = (state: T, prevState: T) => void;
-
-/**
- * Lightweight Zustand/Jotai-style atomic store isolating subscriptions per Cockpit zone
- * so Zone 3 streaming or Zone 2 file tree scrolling never triggers Zone 4 editor container re-renders.
- */
-export class AtomicStore<T> {
-  private state: T;
-  private updateCount = 0;
-  private readonly listeners = new Set<StoreListener<T>>();
-
-  constructor(initialState: T) {
-    this.state = initialState;
-  }
-
-  getState(): T {
-    return this.state;
-  }
-
-  getUpdateCount(): number {
-    return this.updateCount;
-  }
-
-  setState(updater: T | ((prev: T) => T)): T {
-    const prev = this.state;
-    const next = typeof updater === "function" ? (updater as (prev: T) => T)(prev) : updater;
-    if (Object.is(prev, next)) {
-      return prev;
-    }
-    this.state = next;
-    this.updateCount += 1;
-    for (const listener of this.listeners) {
-      listener(next, prev);
-    }
-    return next;
-  }
-
-  subscribe(listener: StoreListener<T>): () => void {
-    this.listeners.add(listener);
-    return () => {
-      this.listeners.delete(listener);
-    };
-  }
-
-  subscribeSelector<S>(
-    selector: (state: T) => S,
-    listener: (selected: S, prevSelected: S) => void,
-    isEqual: (a: S, b: S) => boolean = Object.is,
-  ): () => void {
-    let currentSlice = selector(this.state);
-    return this.subscribe((nextState) => {
-      const nextSlice = selector(nextState);
-      if (!isEqual(currentSlice, nextSlice)) {
-        const prevSlice = currentSlice;
-        currentSlice = nextSlice;
-        listener(nextSlice, prevSlice);
-      }
-    });
-  }
-}
 
 export interface Zone1ActivityState {
   readonly activeSection: ActivityBarSection;
@@ -323,120 +193,6 @@ function redactSecretsInLine(line: string): {
   return { sanitized, redactedCount };
 }
 
-/**
- * Extract syntactic symbols (`LOT-007`) from an in-memory TypeScript/TSX/JS buffer.
- */
-export function extractAstSymbolsFromSource(content: string): readonly CockpitAstSymbolItem[] {
-  const lines = content.split(/\r?\n/);
-  const symbols: CockpitAstSymbolItem[] = [];
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i] ?? "";
-    const fnMatch = /^\s*(export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)/.exec(line);
-    if (fnMatch?.[2]) {
-      const name = fnMatch[2];
-      const firstChar = name[0] ?? "";
-      const isComponent = firstChar >= "A" && firstChar <= "Z";
-      symbols.push({
-        name,
-        kind: isComponent ? "component" : "function",
-        line: i + 1,
-        exported: Boolean(fnMatch[1]),
-        confidence: "ExactAstLsp",
-      });
-      continue;
-    }
-    const classMatch = /^\s*(export\s+)?class\s+([A-Za-z0-9_$]+)/.exec(line);
-    if (classMatch?.[2]) {
-      symbols.push({
-        name: classMatch[2],
-        kind: "class",
-        line: i + 1,
-        exported: Boolean(classMatch[1]),
-        confidence: "ExactAstLsp",
-      });
-      continue;
-    }
-    const ifaceMatch = /^\s*(export\s+)?interface\s+([A-Za-z0-9_$]+)/.exec(line);
-    if (ifaceMatch?.[2]) {
-      symbols.push({
-        name: ifaceMatch[2],
-        kind: "interface",
-        line: i + 1,
-        exported: Boolean(ifaceMatch[1]),
-        confidence: "ExactAstLsp",
-      });
-      continue;
-    }
-    const typeMatch = /^\s*(export\s+)?type\s+([A-Za-z0-9_$]+)\s*=/.exec(line);
-    if (typeMatch?.[2]) {
-      symbols.push({
-        name: typeMatch[2],
-        kind: "type",
-        line: i + 1,
-        exported: Boolean(typeMatch[1]),
-        confidence: "ExactAstLsp",
-      });
-      continue;
-    }
-    const constMatch = /^\s*(export\s+)?const\s+([A-Za-z0-9_$]+)\s*=/.exec(line);
-    if (constMatch?.[2]) {
-      const name = constMatch[2];
-      const firstChar = name[0] ?? "";
-      const isComponent = firstChar >= "A" && firstChar <= "Z" && line.includes("=>");
-      symbols.push({
-        name,
-        kind: isComponent ? "component" : "const",
-        line: i + 1,
-        exported: Boolean(constMatch[1]),
-        confidence: "ExactAstLsp",
-      });
-    }
-  }
-  return symbols;
-}
-
-/**
- * Compute impacted test files (`LOT-007` `ImpactAnalyzer::find_impacted_tests`) for `filePath` and its symbols.
- */
-export function computeImpactedTestsForBuffer(
-  filePath: string,
-  symbols: readonly CockpitAstSymbolItem[],
-  fileTree: readonly CockpitFileTreeNode[],
-): readonly CockpitImpactedTestItem[] {
-  const stem = filePath.replace(/\.(tsx|ts|jsx|js)$/, "");
-  const primarySymbol = symbols[0]?.name ?? (stem.split("/").pop() || "module");
-  const impacted: CockpitImpactedTestItem[] = [];
-  const seen = new Set<string>();
-
-  for (const node of fileTree) {
-    if (node.isDirectory) {
-      continue;
-    }
-    if (/\.(test|spec)\.(ts|tsx|js|jsx)$/.test(node.path)) {
-      const nodeStem = node.path.replace(/\.(test|spec)\.(ts|tsx|js|jsx)$/, "");
-      if (nodeStem === stem || node.path.includes(primarySymbol)) {
-        seen.add(node.path);
-        impacted.push({
-          testFilePath: node.path,
-          coveredSymbol: primarySymbol,
-          confidence: "ExactAstLsp",
-        });
-      }
-    }
-  }
-
-  const canonicalTestPath = `${stem}.test.ts`;
-  if (!seen.has(canonicalTestPath)) {
-    impacted.push({
-      testFilePath: canonicalTestPath,
-      coveredSymbol: primarySymbol,
-      confidence: "ExactAstLsp",
-    });
-  }
-
-  return impacted;
-}
-
 export function createCockpitStoreBundle(options?: {
   initialPersona?: CockpitPersonaMode | undefined;
   initialGridMode?: CockpitGridMode | undefined;
@@ -495,10 +251,10 @@ export function createCockpitStoreBundle(options?: {
   }
 
   const initialFileTree = options?.initialFileTree ?? [];
-  const initialAstSymbols = extractAstSymbolsFromSource(
+  const initialAstSymbols = extractSymbolsHeuristically(
     documentBuffers.get(initialDocId)?.content ?? initialDocContent,
   );
-  const initialImpactedTests = computeImpactedTestsForBuffer(
+  const initialImpactedTests = inferImpactedTestsHeuristically(
     initialDocId,
     initialAstSymbols,
     initialFileTree,
@@ -723,8 +479,8 @@ export function createCockpitStoreBundle(options?: {
         validationState,
       });
 
-      const astSymbols = extractAstSymbolsFromSource(content);
-      const impactedTests = computeImpactedTestsForBuffer(filePath, astSymbols, z2.fileTree);
+      const astSymbols = extractSymbolsHeuristically(content);
+      const impactedTests = inferImpactedTestsHeuristically(filePath, astSymbols, z2.fileTree);
 
       zone2.setState((prev) => ({
         ...prev,
@@ -783,8 +539,8 @@ export function createCockpitStoreBundle(options?: {
     },
 
     refreshAstAndImpactedTests(filePath: string, content: string): void {
-      const astSymbols = extractAstSymbolsFromSource(content);
-      const impactedTests = computeImpactedTestsForBuffer(
+      const astSymbols = extractSymbolsHeuristically(content);
+      const impactedTests = inferImpactedTestsHeuristically(
         filePath,
         astSymbols,
         zone2.getState().fileTree,
