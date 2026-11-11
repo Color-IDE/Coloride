@@ -14,8 +14,10 @@ import {
   type CockpitStoreBundle,
   FrameBatchedStreamRenderer,
   type InspectorTab,
+  OnboardingModalController,
   createCockpitStoreBundle,
   createInitialCockpitShellState,
+  createInitialOnboardingState,
 } from "@coloride/web-ui";
 
 export const WORKSPACE_SESSION_CACHE_FILENAME = "workspace_session_cache.bin";
@@ -78,6 +80,7 @@ export interface LazyBootDesktopHandle {
   readonly ipcChannel: InMemoryBinaryHostBridge;
   readonly stores: CockpitStoreBundle;
   readonly editorView: ColorideEditorView;
+  readonly onboardingController: OnboardingModalController;
   readonly streamRenderer: FrameBatchedStreamRenderer;
   readonly domController: CockpitDomController | null;
   getBackgroundServicesState(): BackgroundServicesState;
@@ -151,6 +154,11 @@ export function lazyBootDesktopCockpit(options?: LazyBootDesktopOptions): LazyBo
     ],
   });
 
+  const onboardingController = new OnboardingModalController(editorView, {
+    ...createInitialOnboardingState(),
+    modalOpen: false,
+  });
+
   const streamRenderer = new FrameBatchedStreamRenderer(stores.zone3);
 
   let domController: CockpitDomController | null = null;
@@ -159,6 +167,7 @@ export function lazyBootDesktopCockpit(options?: LazyBootDesktopOptions): LazyBo
       rootContainer: options.rootContainer,
       stores,
       editorView,
+      onboardingController,
     });
   }
 
@@ -190,6 +199,7 @@ export function lazyBootDesktopCockpit(options?: LazyBootDesktopOptions): LazyBo
     ipcChannel,
     stores,
     editorView,
+    onboardingController,
     streamRenderer,
     domController,
     getBackgroundServicesState(): BackgroundServicesState {
@@ -221,6 +231,7 @@ export function lazyBootDesktopCockpit(options?: LazyBootDesktopOptions): LazyBo
     },
     destroy(): void {
       domController?.destroy();
+      onboardingController.destroy();
       editorView.destroy();
     },
   };

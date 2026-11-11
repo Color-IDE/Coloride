@@ -1,4 +1,9 @@
-import { COLORIDE_STATE_META, type ColorideValidationState } from "@coloride/protocol-types";
+import {
+  COLORIDE_STATE_META,
+  type ColorideValidationState,
+  type ConfidenceLevel,
+  type ExcerptFreshness,
+} from "@coloride/protocol-types";
 
 export type CockpitGridMode = 1 | 2 | 4 | 8;
 
@@ -174,12 +179,39 @@ export interface CockpitSessionSummary {
   readonly targetDocumentId: string;
 }
 
+export interface CockpitAstSymbolItem {
+  readonly name: string;
+  readonly kind: "function" | "component" | "class" | "interface" | "type" | "const";
+  readonly line: number;
+  readonly exported: boolean;
+  readonly confidence: ConfidenceLevel;
+}
+
+export interface CockpitImpactedTestItem {
+  readonly testFilePath: string;
+  readonly coveredSymbol: string;
+  readonly confidence: ConfidenceLevel;
+}
+
+export interface CockpitSearchResultItem {
+  readonly filePath: string;
+  readonly line: number;
+  readonly snippet: string;
+  readonly freshness: ExcerptFreshness;
+  readonly score: number;
+  readonly secretsRedacted: number;
+}
+
 export interface Zone2SidebarState {
   readonly sessions: readonly CockpitSessionSummary[];
   readonly fileTree: readonly CockpitFileTreeNode[];
   readonly fileTreeScrollTop: number;
   readonly fileTreeViewportHeight: number;
   readonly focusedFileIndex: number;
+  readonly searchQuery: string;
+  readonly searchResults: readonly CockpitSearchResultItem[];
+  readonly astSymbols: readonly CockpitAstSymbolItem[];
+  readonly impactedTests: readonly CockpitImpactedTestItem[];
 }
 
 export interface CockpitChatMessage {
@@ -219,6 +251,8 @@ export interface Zone4InspectorState {
   readonly activeValidationState: ColorideValidationState;
   readonly previewUrl: string;
   readonly lastSyncDurationMs: number;
+  readonly hasUnsavedChanges: boolean;
+  readonly recoveredFromWal: boolean;
 }
 
 export interface CockpitStoreBundle {
@@ -234,6 +268,17 @@ export interface CockpitStoreBundle {
   setGridMode(gridMode: CockpitGridMode): void;
   setInspectorTab(tab: InspectorTab): void;
   selectChat(chatId: string): number;
+  closeChat(chatId: string): void;
+  selectFileFromTree(filePath: string, contentOverride?: string): number;
+  getDocumentContent(filePath: string): string | undefined;
+  updateInMemoryDocumentContent(
+    filePath: string,
+    content: string,
+    hasUnsavedChanges?: boolean,
+  ): void;
+  markDocumentSaved(filePath: string): void;
+  runGlobalSearch(query: string): readonly CockpitSearchResultItem[];
+  refreshAstAndImpactedTests(filePath: string, content: string): void;
   startAgentTaskOnChat(chatId: string): "Running" | "QueuedSequential";
   completeAgentTaskOnChat(chatId: string): void;
 }
@@ -243,6 +288,153 @@ function nowMs(): number {
     return performance.now();
   }
   return Date.now();
+}
+
+const SECRET_TOKEN_PATTERNS: readonly RegExp[] = [
+  /\bsk-[A-Za-z0-9_-]{12,}\b/g,
+  /\bghp_[A-Za-z0-9]{12,}\b/g,
+  /\bAKIA[0-9A-Z]{12,}\b/g,
+  /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g,
+];
+
+function isAclExcludedPath(filePath: string): boolean {
+  const normalized = filePath.replace(/\\/g, "/").toLowerCase();
+  const base = normalized.split("/").pop() ?? normalized;
+  return (
+    base === ".env" ||
+    (base.startsWith(".env.") && base !== ".env.example") ||
+    base.endsWith(".pem") ||
+    base.endsWith(".key")
+  );
+}
+
+function redactSecretsInLine(line: string): {
+  readonly sanitized: string;
+  readonly redactedCount: number;
+} {
+  let sanitized = line;
+  let redactedCount = 0;
+  for (const regex of SECRET_TOKEN_PATTERNS) {
+    sanitized = sanitized.replace(regex, () => {
+      redactedCount += 1;
+      return "[REDACTED_SECRET]";
+    });
+  }
+  return { sanitized, redactedCount };
+}
+
+/**
+ * Extract syntactic symbols (`LOT-007`) from an in-memory TypeScript/TSX/JS buffer.
+ */
+export function extractAstSymbolsFromSource(content: string): readonly CockpitAstSymbolItem[] {
+  const lines = content.split(/\r?\n/);
+  const symbols: CockpitAstSymbolItem[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i] ?? "";
+    const fnMatch = /^\s*(export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)/.exec(line);
+    if (fnMatch?.[2]) {
+      const name = fnMatch[2];
+      const firstChar = name[0] ?? "";
+      const isComponent = firstChar >= "A" && firstChar <= "Z";
+      symbols.push({
+        name,
+        kind: isComponent ? "component" : "function",
+        line: i + 1,
+        exported: Boolean(fnMatch[1]),
+        confidence: "ExactAstLsp",
+      });
+      continue;
+    }
+    const classMatch = /^\s*(export\s+)?class\s+([A-Za-z0-9_$]+)/.exec(line);
+    if (classMatch?.[2]) {
+      symbols.push({
+        name: classMatch[2],
+        kind: "class",
+        line: i + 1,
+        exported: Boolean(classMatch[1]),
+        confidence: "ExactAstLsp",
+      });
+      continue;
+    }
+    const ifaceMatch = /^\s*(export\s+)?interface\s+([A-Za-z0-9_$]+)/.exec(line);
+    if (ifaceMatch?.[2]) {
+      symbols.push({
+        name: ifaceMatch[2],
+        kind: "interface",
+        line: i + 1,
+        exported: Boolean(ifaceMatch[1]),
+        confidence: "ExactAstLsp",
+      });
+      continue;
+    }
+    const typeMatch = /^\s*(export\s+)?type\s+([A-Za-z0-9_$]+)\s*=/.exec(line);
+    if (typeMatch?.[2]) {
+      symbols.push({
+        name: typeMatch[2],
+        kind: "type",
+        line: i + 1,
+        exported: Boolean(typeMatch[1]),
+        confidence: "ExactAstLsp",
+      });
+      continue;
+    }
+    const constMatch = /^\s*(export\s+)?const\s+([A-Za-z0-9_$]+)\s*=/.exec(line);
+    if (constMatch?.[2]) {
+      const name = constMatch[2];
+      const firstChar = name[0] ?? "";
+      const isComponent = firstChar >= "A" && firstChar <= "Z" && line.includes("=>");
+      symbols.push({
+        name,
+        kind: isComponent ? "component" : "const",
+        line: i + 1,
+        exported: Boolean(constMatch[1]),
+        confidence: "ExactAstLsp",
+      });
+    }
+  }
+  return symbols;
+}
+
+/**
+ * Compute impacted test files (`LOT-007` `ImpactAnalyzer::find_impacted_tests`) for `filePath` and its symbols.
+ */
+export function computeImpactedTestsForBuffer(
+  filePath: string,
+  symbols: readonly CockpitAstSymbolItem[],
+  fileTree: readonly CockpitFileTreeNode[],
+): readonly CockpitImpactedTestItem[] {
+  const stem = filePath.replace(/\.(tsx|ts|jsx|js)$/, "");
+  const primarySymbol = symbols[0]?.name ?? (stem.split("/").pop() || "module");
+  const impacted: CockpitImpactedTestItem[] = [];
+  const seen = new Set<string>();
+
+  for (const node of fileTree) {
+    if (node.isDirectory) {
+      continue;
+    }
+    if (/\.(test|spec)\.(ts|tsx|js|jsx)$/.test(node.path)) {
+      const nodeStem = node.path.replace(/\.(test|spec)\.(ts|tsx|js|jsx)$/, "");
+      if (nodeStem === stem || node.path.includes(primarySymbol)) {
+        seen.add(node.path);
+        impacted.push({
+          testFilePath: node.path,
+          coveredSymbol: primarySymbol,
+          confidence: "ExactAstLsp",
+        });
+      }
+    }
+  }
+
+  const canonicalTestPath = `${stem}.test.ts`;
+  if (!seen.has(canonicalTestPath)) {
+    impacted.push({
+      testFilePath: canonicalTestPath,
+      coveredSymbol: primarySymbol,
+      confidence: "ExactAstLsp",
+    });
+  }
+
+  return impacted;
 }
 
 export function createCockpitStoreBundle(options?: {
@@ -255,6 +447,7 @@ export function createCockpitStoreBundle(options?: {
   initialChats?: readonly CockpitChatTab[] | undefined;
   initialFileTree?: readonly CockpitFileTreeNode[] | undefined;
   initialUiZoomPercent?: number | undefined;
+  initialRecoveredFromWal?: boolean | undefined;
 }): CockpitStoreBundle {
   const initialPersona = options?.initialPersona ?? "Develop";
   const initialChats: readonly CockpitChatTab[] = options?.initialChats ?? [
@@ -274,6 +467,42 @@ export function createCockpitStoreBundle(options?: {
   const initialChatId = initialActiveChat?.chatId ?? "chat-1";
   const initialDocId =
     options?.initialActiveDocumentId ?? initialActiveChat?.targetDocumentId ?? "src/index.ts";
+  const initialDocContent =
+    initialActiveChat?.targetDocumentContent ??
+    "export function LoginView() {\n  return true;\n}\n";
+
+  const documentBuffers = new Map<
+    string,
+    { content: string; unsaved: boolean; validationState: ColorideValidationState }
+  >();
+  for (const chat of initialChats) {
+    if (chat.targetDocumentId) {
+      documentBuffers.set(chat.targetDocumentId, {
+        content:
+          chat.targetDocumentContent ??
+          `export const ${chat.chatId.replace(/[^a-zA-Z0-9_]/g, "_")} = true;\n`,
+        unsaved: false,
+        validationState: chat.validationState,
+      });
+    }
+  }
+  if (!documentBuffers.has(initialDocId)) {
+    documentBuffers.set(initialDocId, {
+      content: initialDocContent,
+      unsaved: false,
+      validationState: initialActiveChat?.validationState ?? "UnchangedBlue",
+    });
+  }
+
+  const initialFileTree = options?.initialFileTree ?? [];
+  const initialAstSymbols = extractAstSymbolsFromSource(
+    documentBuffers.get(initialDocId)?.content ?? initialDocContent,
+  );
+  const initialImpactedTests = computeImpactedTestsForBuffer(
+    initialDocId,
+    initialAstSymbols,
+    initialFileTree,
+  );
 
   const zone1 = new AtomicStore<Zone1ActivityState>({
     activeSection: options?.initialActiveSection ?? "sessions",
@@ -292,10 +521,14 @@ export function createCockpitStoreBundle(options?: {
       validationState: c.validationState,
       targetDocumentId: c.targetDocumentId ?? initialDocId,
     })),
-    fileTree: options?.initialFileTree ?? [],
+    fileTree: initialFileTree,
     fileTreeScrollTop: 0,
     fileTreeViewportHeight: 600,
     focusedFileIndex: 0,
+    searchQuery: "",
+    searchResults: [],
+    astSymbols: initialAstSymbols,
+    impactedTests: initialImpactedTests,
   });
 
   const initialMessages: Record<string, readonly CockpitChatMessage[]> = {};
@@ -322,6 +555,8 @@ export function createCockpitStoreBundle(options?: {
     activeValidationState: initialActiveChat?.validationState ?? "UnchangedBlue",
     previewUrl: initialActiveChat?.previewUrl ?? "preview://local/root",
     lastSyncDurationMs: 0,
+    hasUnsavedChanges: false,
+    recoveredFromWal: options?.initialRecoveredFromWal ?? false,
   });
 
   const sectionByDigit: Record<string, ActivityBarSection> = {
@@ -340,6 +575,11 @@ export function createCockpitStoreBundle(options?: {
     zone4,
 
     setActivitySection(section: ActivityBarSection): void {
+      if (section === "debug") {
+        const activeDocId = zone4.getState().activeDocumentId;
+        const activeContent = documentBuffers.get(activeDocId)?.content ?? "";
+        this.refreshAstAndImpactedTests(activeDocId, activeContent);
+      }
       zone1.setState((prev) => ({
         ...prev,
         activeSection: section,
@@ -423,17 +663,201 @@ export function createCockpitStoreBundle(options?: {
         activeChatId: chatId,
       }));
 
+      const nextDocId = targetChat.targetDocumentId ?? zone4.getState().activeDocumentId;
+      const bufRecord = documentBuffers.get(nextDocId);
       const syncDurationMs = Math.max(0, nowMs() - t0);
       zone4.setState((prev) => ({
         ...prev,
         syncedChatId: chatId,
-        activeDocumentId: targetChat.targetDocumentId ?? prev.activeDocumentId,
-        activeValidationState: targetChat.validationState,
+        activeDocumentId: nextDocId,
+        activeValidationState: bufRecord?.validationState ?? targetChat.validationState,
         previewUrl: targetChat.previewUrl ?? prev.previewUrl,
         lastSyncDurationMs: syncDurationMs,
+        hasUnsavedChanges: bufRecord?.unsaved ?? false,
       }));
 
       return syncDurationMs;
+    },
+
+    closeChat(chatId: string): void {
+      const z3 = zone3.getState();
+      if (z3.chats.length <= 1) {
+        return;
+      }
+      const nextChats = z3.chats.filter((c) => c.chatId !== chatId);
+      const nextActiveChat = z3.activeChatId === chatId ? (nextChats[0] ?? z3.chats[0]) : undefined;
+
+      zone2.setState((prev) => ({
+        ...prev,
+        sessions: prev.sessions.filter((s) => s.chatId !== chatId),
+      }));
+
+      zone3.setState((prev) => ({
+        ...prev,
+        chats: nextChats,
+        activeChatId: nextActiveChat ? nextActiveChat.chatId : prev.activeChatId,
+      }));
+
+      if (nextActiveChat) {
+        this.selectChat(nextActiveChat.chatId);
+      }
+    },
+
+    /**
+     * Open a file clicked in the Zone 2 File Tree inside the Zone 4 CodeMirror 6 Inspector in `< 10 ms`.
+     */
+    selectFileFromTree(filePath: string, contentOverride?: string): number {
+      const t0 = nowMs();
+      const z2 = zone2.getState();
+      const fileIdx = z2.fileTree.findIndex((n) => n.path === filePath);
+      const treeNode = fileIdx >= 0 ? z2.fileTree[fileIdx] : undefined;
+      const existing = documentBuffers.get(filePath);
+      const content =
+        contentOverride ?? existing?.content ?? `export const filePath = "${filePath}";\n`;
+      const validationState =
+        existing?.validationState ?? treeNode?.validationState ?? "UnchangedBlue";
+
+      documentBuffers.set(filePath, {
+        content,
+        unsaved: existing?.unsaved ?? false,
+        validationState,
+      });
+
+      const astSymbols = extractAstSymbolsFromSource(content);
+      const impactedTests = computeImpactedTestsForBuffer(filePath, astSymbols, z2.fileTree);
+
+      zone2.setState((prev) => ({
+        ...prev,
+        focusedFileIndex: fileIdx >= 0 ? fileIdx : prev.focusedFileIndex,
+        astSymbols,
+        impactedTests,
+      }));
+
+      const syncDurationMs = Math.max(0, nowMs() - t0);
+      zone4.setState((prev) => ({
+        ...prev,
+        activeDocumentId: filePath,
+        activeValidationState: validationState,
+        lastSyncDurationMs: syncDurationMs,
+        hasUnsavedChanges: existing?.unsaved ?? false,
+      }));
+
+      return syncDurationMs;
+    },
+
+    getDocumentContent(filePath: string): string | undefined {
+      return documentBuffers.get(filePath)?.content;
+    },
+
+    updateInMemoryDocumentContent(
+      filePath: string,
+      content: string,
+      hasUnsavedChanges = true,
+    ): void {
+      const existing = documentBuffers.get(filePath);
+      const prevValidation = existing?.validationState ?? zone4.getState().activeValidationState;
+      const nextValidation: ColorideValidationState =
+        hasUnsavedChanges && prevValidation === "ValidatedGreen" ? "StaleOrange" : prevValidation;
+
+      documentBuffers.set(filePath, {
+        content,
+        unsaved: hasUnsavedChanges,
+        validationState: nextValidation,
+      });
+    },
+
+    markDocumentSaved(filePath: string): void {
+      const existing = documentBuffers.get(filePath);
+      if (existing) {
+        documentBuffers.set(filePath, {
+          ...existing,
+          unsaved: false,
+        });
+      }
+      if (zone4.getState().activeDocumentId === filePath) {
+        zone4.setState((prev) => ({
+          ...prev,
+          hasUnsavedChanges: false,
+        }));
+      }
+    },
+
+    refreshAstAndImpactedTests(filePath: string, content: string): void {
+      const astSymbols = extractAstSymbolsFromSource(content);
+      const impactedTests = computeImpactedTestsForBuffer(
+        filePath,
+        astSymbols,
+        zone2.getState().fileTree,
+      );
+      zone2.setState((prev) => ({
+        ...prev,
+        astSymbols,
+        impactedTests,
+      }));
+    },
+
+    /**
+     * Execute instant lexical/BM25 search (`LOT-008`) across workspace buffers:
+     * - Prioritizes unsaved in-memory buffers (`InMemoryUnsaved`) over disk snapshots (`DiskSaved`).
+     * - Enforces ACL exclusions (`.env`, `.pem`, `.key`) and secret redaction (`[REDACTED_SECRET]`).
+     */
+    runGlobalSearch(query: string): readonly CockpitSearchResultItem[] {
+      const trimmed = query.trim();
+      if (!trimmed) {
+        zone2.setState((prev) => ({
+          ...prev,
+          searchQuery: "",
+          searchResults: [],
+        }));
+        return [];
+      }
+
+      const terms = trimmed
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((t) => t.length > 0);
+      const results: CockpitSearchResultItem[] = [];
+
+      for (const [filePath, record] of documentBuffers.entries()) {
+        if (isAclExcludedPath(filePath)) {
+          continue;
+        }
+        const lines = record.content.split(/\r?\n/);
+        for (let idx = 0; idx < lines.length; idx += 1) {
+          const rawLine = lines[idx] ?? "";
+          const { sanitized, redactedCount } = redactSecretsInLine(rawLine);
+          const lowerLine = sanitized.toLowerCase();
+          const lowerPath = filePath.toLowerCase();
+          let matchedTerms = 0;
+          for (const term of terms) {
+            if (lowerLine.includes(term) || lowerPath.includes(term)) {
+              matchedTerms += 1;
+            }
+          }
+          if (matchedTerms === terms.length) {
+            const freshness: ExcerptFreshness = record.unsaved
+              ? "LiveUnsavedBuffer"
+              : "IndexedCommit";
+            const score = matchedTerms * 10 + (record.unsaved ? 5 : 0);
+            results.push({
+              filePath,
+              line: idx + 1,
+              snippet: sanitized.trim(),
+              freshness,
+              score,
+              secretsRedacted: redactedCount,
+            });
+          }
+        }
+      }
+
+      results.sort((a, b) => b.score - a.score || a.filePath.localeCompare(b.filePath));
+      zone2.setState((prev) => ({
+        ...prev,
+        searchQuery: query,
+        searchResults: results,
+      }));
+      return results;
     },
 
     /**

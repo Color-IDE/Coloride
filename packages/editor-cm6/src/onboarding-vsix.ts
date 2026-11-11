@@ -42,10 +42,10 @@ export interface DeclarativeVsixBundle {
 export const DEFAULT_COLORIDE_CM6_THEME: DeclarativeVsixTheme = {
   label: "Coloride Dark (WCAG AAA)",
   uiTheme: "vs-dark",
-  editorBackground: "#090d16",
-  editorForeground: "#e2e8f0",
-  fontFamily: "JetBrains Mono, SF Mono, Cascadia Code, monospace",
-  fontSizePx: 14,
+  editorBackground: "#1e1e1e",
+  editorForeground: "#d4d4d4",
+  fontFamily: '"JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, monospace',
+  fontSizePx: 13,
 };
 
 /**
@@ -218,13 +218,190 @@ export function createKeymapExtension(
 }
 
 export function createThemeExtension(theme: DeclarativeVsixTheme): Extension {
+  const fontFamily =
+    theme.fontFamily ??
+    '"JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, monospace';
+  const fontSizePx = theme.fontSizePx ?? 13;
+  const lineHeightPx = Math.round(fontSizePx * 1.5);
   return EditorView.theme(
     {
       "&": {
+        "--coloride-review-add-bg": "rgba(74, 222, 128, 0.10)",
+        "--coloride-review-mod-bg": "rgba(210, 153, 34, 0.10)",
+        "--coloride-review-del-bg": "rgba(248, 113, 113, 0.10)",
+        "--coloride-review-add-number": "#8ea995",
+        "--coloride-review-mod-number": "#b4a282",
         backgroundColor: theme.editorBackground,
         color: theme.editorForeground,
-        fontFamily: theme.fontFamily ?? "JetBrains Mono, SF Mono, Cascadia Code, monospace",
-        fontSize: `${theme.fontSizePx ?? 14}px`,
+        fontFamily,
+        fontSize: `${fontSizePx}px`,
+        lineHeight: `${lineHeightPx}px`,
+        height: "100%",
+      },
+      "&.cm-focused": {
+        outline: "none",
+      },
+      ".cm-scopeGuideLayer": {
+        pointerEvents: "none",
+        zIndex: "2",
+      },
+      ".cm-scopeGuide": {
+        pointerEvents: "none",
+        backgroundColor: "rgba(255, 255, 255, 0.14)",
+      },
+      ".cm-scopeGuide-active": {
+        backgroundColor: "rgba(255, 255, 255, 0.30)",
+      },
+      ".cm-scroller": {
+        fontFamily,
+        fontSize: `${fontSizePx}px`,
+        lineHeight: `${lineHeightPx}px`,
+        overflow: "auto",
+        scrollbarWidth: "none",
+        scrollbarGutter: "auto",
+      },
+      ".cm-scroller::-webkit-scrollbar": {
+        display: "none",
+        width: "0",
+        height: "0",
+      },
+      ".cm-content": {
+        caretColor: "#f0f4f8",
+        fontFamily,
+        fontSize: `${fontSizePx}px`,
+        lineHeight: `${lineHeightPx}px`,
+        paddingTop: "0px",
+        paddingBottom: "4px",
+        boxSizing: "border-box",
+        minHeight: "100%",
+      },
+      ".cm-widgetBuffer": {
+        display: "inline",
+        verticalAlign: "text-top",
+        height: "1em",
+        width: "0",
+        maxWidth: "none",
+        maxHeight: "none",
+      },
+      ".cm-line": {
+        padding: "0",
+        fontSize: `${fontSizePx}px`,
+        lineHeight: `${lineHeightPx}px`,
+      },
+      ".cm-cursor, .cm-dropCursor": {
+        borderLeftColor: "#f0f4f8",
+        borderLeftWidth: "1.5px",
+      },
+      ".cm-line ::selection, .cm-line::selection, .cm-content ::selection": {
+        backgroundColor: "transparent !important",
+        color: "inherit",
+      },
+      ".cm-textSelectionLayer .cm-selectionPath": {
+        overflow: "visible",
+        pointerEvents: "none",
+      },
+      ".cm-textSelectionLayer .cm-selectionPath-fill": {
+        fill: "rgba(148, 163, 184, 0.24) !important",
+      },
+      ".cm-textSelectionLayer": {
+        zIndex: "1",
+      },
+      ".cm-selectionLayer": {
+        zIndex: "0",
+      },
+      ".cm-activeLine": {
+        backgroundColor: "rgba(255, 255, 255, 0.04)",
+      },
+      "&.cm-has-selection .cm-activeLine": {
+        backgroundColor: "transparent",
+      },
+      "&.cm-has-selection .cm-activeLineGutter": {
+        backgroundColor: "transparent",
+      },
+      ".cm-gutters, .cm-gutters.cm-gutters-before, .cm-gutters.cm-gutters-after": {
+        backgroundColor: theme.editorBackground,
+        color: "#6b6b6b",
+        fontFamily,
+        fontSize: `${fontSizePx}px`,
+        lineHeight: `${lineHeightPx}px`,
+        border: "none",
+        boxShadow: "none",
+        userSelect: "none",
+      },
+      ".cm-gutter": {
+        backgroundColor: "transparent",
+      },
+      ".cm-activeLineGutter": {
+        backgroundColor: "rgba(255, 255, 255, 0.04)",
+        color: "#a0a0a5",
+      },
+      ".cm-lineNumbers .cm-gutterElement": {
+        padding: "0 8px 0 6px",
+        minWidth: "calc(3ch + 16px)",
+        boxSizing: "border-box",
+        fontFamily,
+        fontSize: `${fontSizePx}px`,
+        lineHeight: `${lineHeightPx}px`,
+        textAlign: "right",
+        fontVariantNumeric: "tabular-nums",
+        userSelect: "none",
+        position: "relative",
+      },
+      ".cm-lineNumbers .cm-gutterElement.coloride-selected-line-gutter": {
+        color: "#c8c8cc",
+      },
+      ".cm-foldGutter": {
+        width: "18px",
+        minWidth: "18px",
+        position: "relative",
+        zIndex: "2",
+        userSelect: "none",
+      },
+      ".cm-foldGutter .cm-gutterElement": {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      ".coloride-fold-btn": {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: "14px",
+        height: "14px",
+        borderRadius: "4px",
+        color: "#6b6b6b",
+        cursor: "pointer",
+        lineHeight: "0",
+        opacity: "0",
+      },
+      ".cm-foldGutter:hover .coloride-fold-btn": {
+        opacity: "1",
+      },
+      ".coloride-fold-btn svg": {
+        display: "block",
+        width: "10px",
+        height: "10px",
+        transition: "transform 0.12s ease",
+      },
+      ".coloride-fold-btn.is-closed svg": {
+        transform: "rotate(-90deg)",
+      },
+      ".coloride-fold-btn:hover": {
+        backgroundColor: "rgba(255, 255, 255, 0.10)",
+        color: "#a0a0a5",
+      },
+      ".cm-foldPlaceholder": {
+        backgroundColor: "transparent",
+        border: "none",
+        color: "#6b6b6b !important",
+        margin: "0 2px",
+        padding: "0 4px",
+        borderRadius: "3px",
+        cursor: "pointer",
+      },
+      ".cm-matchingBracket, .cm-nonmatchingBracket": {
+        backgroundColor: "#3b3b3b",
+        outline: "none",
       },
     },
     { dark: theme.uiTheme !== "vs" },

@@ -1,6 +1,10 @@
 use std::path::Path;
 
-use context_engine::ContextEngineStatus;
+use context_engine::{
+    AclAndSecretScanner, ContextEngineStatus, ContextSearchHit, ExtractedSymbol, ImpactAnalyzer,
+    IncrementalAstParser, RopeTextProvider, SqliteWalContextEngine, SupportedAstLanguage,
+    TestFileTarget,
+};
 use host_core::{
     decode_contract_binary, encode_contract_binary, BackgroundServicesStatus, DocumentError,
     DocumentService, EditorSnapshot, EditorTransaction, HostHealthStatus, LazyBootError,
@@ -94,6 +98,54 @@ impl DesktopBinaryEditorBridge {
     #[must_use]
     pub const fn document_service(&self) -> &DocumentService {
         &self.documents
+    }
+
+    /// Analyze AST symbols and impacted tests (`LOT-007`) for a live buffer in `DocumentService`.
+    pub fn analyze_document_ast_impact(
+        &self,
+        document_id: &str,
+        session_generation: u32,
+    ) -> Option<(Vec<ExtractedSymbol>, Vec<TestFileTarget>)> {
+        let session = self
+            .documents
+            .session(document_id, session_generation)
+            .ok()?;
+        let mut parser = IncrementalAstParser::new();
+        let lang = SupportedAstLanguage::from_path(document_id);
+        let provider = RopeTextProvider::new(session.rope());
+        let tree = parser.parse_with(lang, &provider, None);
+        let symbols = tree.symbols();
+        let pairs: Vec<(&str, &str)> = symbols
+            .iter()
+            .map(|s| (document_id, s.name.as_str()))
+            .collect();
+        let mut analyzer = ImpactAnalyzer::new();
+        analyzer.index_file(document_id, session.rope(), &tree);
+        let impacted = analyzer.find_impacted_tests(&pairs, 4);
+        Some((symbols, impacted))
+    }
+
+    /// Query `SqliteWalContextEngine` (`LOT-008`) after synchronizing `UnsavedBufferOverlay`
+    /// from `DocumentService` so unsaved edits in CodeMirror 6 take 100% priority.
+    pub fn search_workspace_hybrid(
+        &self,
+        context_engine: &mut SqliteWalContextEngine,
+        workspace_root: Option<&Path>,
+        query: &str,
+        limit: usize,
+    ) -> Vec<ContextSearchHit> {
+        context_engine
+            .overlay_mut()
+            .sync_from_document_service(workspace_root, &self.documents);
+        context_engine.query_hybrid(query, limit)
+    }
+
+    /// Create an initialized `SqliteWalContextEngine` at `db_path` with default `AclAndSecretScanner`.
+    pub fn open_context_engine(
+        db_path: &Path,
+        git_branch: &str,
+    ) -> Result<SqliteWalContextEngine, context_engine::ContextStorageError> {
+        SqliteWalContextEngine::open(db_path, git_branch, AclAndSecretScanner::default())
     }
 }
 

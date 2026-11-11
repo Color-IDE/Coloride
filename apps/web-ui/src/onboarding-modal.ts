@@ -767,6 +767,13 @@ export class OnboardingModalController {
     }));
   }
 
+  setModalOpen(open: boolean): void {
+    this.store.setState((prev) => ({
+      ...prev,
+      modalOpen: open,
+    }));
+  }
+
   /**
    * 1-click reset to clean Coloride defaults (`Revenir aux paramètres par défaut Coloride`).
    */
@@ -795,6 +802,9 @@ export class OnboardingModalController {
     this.modalEl.innerHTML = "";
     this.modalEl.dataset.keymapPreset = state.activeKeymapPreset;
     this.modalEl.dataset.colorTheme = state.colorTheme;
+    this.modalEl.dataset.modalOpen = String(state.modalOpen);
+    this.modalEl.hidden = !state.modalOpen;
+    this.modalEl.style.display = state.modalOpen ? "block" : "none";
 
     const title = doc.createElement("h2");
     title.textContent = "Import 1-clic (VS Code · Cursor · Claude Desktop)";
@@ -833,7 +843,32 @@ export class OnboardingModalController {
           : server.status === "ApprovedByUser"
             ? "Approuvé"
             : "Rejeté";
-      item.textContent = `${server.serverName}: ${server.command} ${server.args.join(" ")} [${badgeText}]`;
+      const labelSpan = doc.createElement("span");
+      labelSpan.textContent = `${server.serverName}: ${server.command} ${server.args.join(" ")} [${badgeText}]`;
+      item.appendChild(labelSpan);
+
+      const approveBtn = doc.createElement("button");
+      approveBtn.type = "button";
+      approveBtn.className = "coloride-mcp-approve-btn";
+      approveBtn.dataset.action = "approve";
+      approveBtn.dataset.serverName = server.serverName;
+      approveBtn.textContent = "Approuver";
+      approveBtn.addEventListener("click", () => {
+        this.approveQuarantinedMcpServer(server.serverName);
+      });
+
+      const rejectBtn = doc.createElement("button");
+      rejectBtn.type = "button";
+      rejectBtn.className = "coloride-mcp-reject-btn";
+      rejectBtn.dataset.action = "reject";
+      rejectBtn.dataset.serverName = server.serverName;
+      rejectBtn.textContent = "Rejeté";
+      rejectBtn.addEventListener("click", () => {
+        this.rejectQuarantinedMcpServer(server.serverName);
+      });
+
+      item.appendChild(approveBtn);
+      item.appendChild(rejectBtn);
       mcpSection.appendChild(item);
     }
     this.modalEl.appendChild(mcpSection);

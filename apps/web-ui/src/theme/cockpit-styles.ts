@@ -31,6 +31,8 @@ export function buildCockpitThemeCss(
   --color-text-muted: ${palette.textMuted};
   --border-subtle: ${palette.borderSubtle};
   --layout-titlebar-h: ${metrics.macosTitlebarHeightPx}px;
+  --layout-bottom-gap: ${metrics.bottomFrameGapPx}px;
+  --layout-right-gap: ${metrics.rightFrameGapPx}px;
   --layout-shell-h: calc(100vh - ${totalVerticalInsetPx}px);
 }`;
 }

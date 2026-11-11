@@ -110,6 +110,7 @@ export class VirtualFileTreeRenderer {
     scrollTopPx: number,
     viewportHeightPx: number,
     focusedIndex = 0,
+    onSelectNode?: (node: CockpitFileTreeNode, index: number) => void,
   ): VirtualWindowSlice<CockpitFileTreeNode> {
     const slice = computeVirtualWindowSlice(nodes, scrollTopPx, viewportHeightPx, {
       rowHeightPx: this.rowHeightPx,
@@ -161,6 +162,11 @@ export class VirtualFileTreeRenderer {
 
       row.appendChild(badge);
       row.appendChild(label);
+      if (onSelectNode) {
+        row.addEventListener("click", () => {
+          onSelectNode(node, absoluteIndex);
+        });
+      }
       runway.appendChild(row);
     }
 
