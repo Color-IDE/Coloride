@@ -306,8 +306,16 @@ export class CockpitDomController {
 
     this.zone2El.dataset.sidebarOpen = String(z1.sidebarOpen);
     this.zone2El.dataset.fileTreeAccessible = String(z1.fileTreeAccessible);
+    this.zone2El.dataset.activeSection = z1.activeSection;
 
-    // Render session badges
+    const showSessions = z1.activeSection === "sessions";
+    const showFiles = z1.activeSection === "files";
+    this.zone2SessionsEl.hidden = !showSessions;
+    this.zone2SessionsEl.style.display = showSessions ? "block" : "none";
+    this.zone2FileTreeEl.hidden = !showFiles;
+    this.zone2FileTreeEl.style.display = showFiles ? "block" : "none";
+
+    // Render session badges (visible on 1st tab of Z1: "sessions")
     this.zone2SessionsEl.innerHTML = "";
     this.zone2SessionsEl.setAttribute("role", "list");
     this.zone2SessionsEl.setAttribute("aria-label", "Sessions de Chat");
@@ -328,7 +336,7 @@ export class CockpitDomController {
       this.zone2SessionsEl.appendChild(item);
     }
 
-    // Always virtualize the file tree so > 50,000 files render in O(1) DOM nodes
+    // Virtualize the file tree (visible on 2nd tab of Z1: "files") so > 50,000 files render in O(1) DOM nodes
     this.fileTreeVirtualizer.renderInto(
       this.zone2FileTreeEl,
       z2.fileTree,

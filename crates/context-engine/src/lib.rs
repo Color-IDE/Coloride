@@ -1,3 +1,7 @@
+pub mod ast_graph;
+
+pub use ast_graph::*;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
