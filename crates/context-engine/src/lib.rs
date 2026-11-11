@@ -1,6 +1,10 @@
 pub mod ast_graph;
+pub mod secret_scanner;
+pub mod sqlite_wal_store;
 
 pub use ast_graph::*;
+pub use secret_scanner::*;
+pub use sqlite_wal_store::*;
 
 use serde::{Deserialize, Serialize};
 

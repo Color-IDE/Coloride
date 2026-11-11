@@ -10,6 +10,7 @@ description = "Coloride Context Engine: SQLite WAL/mmap, FTS5 BM25, Tree-sitter 
 workspace = true
 
 [dependencies]
+bincode.workspace = true
 host-core.workspace = true
 ropey.workspace = true
 serde.workspace = true
@@ -21,3 +22,4 @@ tokio.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
+tempfile.workspace = true
