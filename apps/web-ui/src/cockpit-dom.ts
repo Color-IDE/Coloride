@@ -24,6 +24,7 @@ const ACTIVITY_ITEMS: readonly {
   readonly iconSvg: StatefulActivityIcon;
   readonly labelFr: string;
   readonly shortcut: string;
+  readonly dividerBefore?: boolean;
 }[] = [
   {
     section: "sessions",
@@ -44,16 +45,17 @@ const ACTIVITY_ITEMS: readonly {
     shortcut: "Cmd/Ctrl+3",
   },
   {
-    section: "git",
-    iconSvg: ACTIVITY_BAR_SVG_ICONS.git,
-    labelFr: "Git & Checkpoints",
-    shortcut: "Cmd/Ctrl+4",
-  },
-  {
     section: "debug",
     iconSvg: ACTIVITY_BAR_SVG_ICONS.debug,
     labelFr: "Debug & Tests",
     shortcut: "Cmd/Ctrl+5",
+  },
+  {
+    section: "git",
+    iconSvg: ACTIVITY_BAR_SVG_ICONS.git,
+    labelFr: "Git & Checkpoints",
+    shortcut: "Cmd/Ctrl+4",
+    dividerBefore: true,
   },
   {
     section: "mcp",
@@ -313,6 +315,13 @@ export class CockpitDomController {
     this.zone1El.innerHTML = "";
 
     for (const item of ACTIVITY_ITEMS) {
+      if (item.dividerBefore) {
+        const divider = doc.createElement("div");
+        divider.className = "coloride-activity-divider";
+        divider.setAttribute("role", "separator");
+        divider.setAttribute("aria-orientation", "horizontal");
+        this.zone1El.appendChild(divider);
+      }
       const isActive = z1.activeSection === item.section;
       const btn = doc.createElement("button");
       btn.type = "button";

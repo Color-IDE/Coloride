@@ -49,7 +49,11 @@
   }
 
   .coloride-activity-btn {
-    @apply w-[36px] h-[36px] rounded-[8px] border-0 bg-transparent text-text-secondary text-[16px] inline-flex items-center justify-center cursor-pointer transition-colors hover:bg-selected hover:text-text-primary aria-pressed:bg-selected aria-pressed:text-text-primary;
+    @apply w-[36px] h-[36px] rounded-[8px] border-0 bg-transparent text-[#858585] text-[16px] inline-flex items-center justify-center cursor-pointer transition-colors hover:bg-selected hover:text-text-primary aria-pressed:bg-selected aria-pressed:text-text-primary;
+  }
+
+  .coloride-activity-divider {
+    @apply w-[24px] h-[1px] bg-white/12 my-1 shrink-0;
   }
 
   .coloride-persona-selector {
