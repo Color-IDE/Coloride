@@ -58,12 +58,12 @@ export interface ColorideLayoutMetrics {
 }
 
 export const COLORIDE_LAYOUT_METRICS: ColorideLayoutMetrics = {
-  macosTitlebarHeightPx: 32,
+  macosTitlebarHeightPx: 35,
   macosTrafficLightsInsetPx: 80,
   navigationRailWidthPx: 48,
   navigationButtonSizePx: 36,
   navigationButtonFontSizePx: 16,
   bottomFrameGapPx: 2,
-  rightFrameGapPx: 0,
+  rightFrameGapPx: 2,
   cardCornerRadiusPx: 12,
 } as const;

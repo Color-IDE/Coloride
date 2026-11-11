@@ -31,17 +31,130 @@
 
 @layer components {
   .coloride-macos-titlebar {
-    @apply h-[32px] min-h-[32px] bg-topbar flex items-center pl-[80px] pr-3;
+    @apply h-[35px] min-h-[35px] bg-topbar pr-[2px] pl-0;
+    display: grid;
+    grid-template-columns: 48px clamp(200px, 19vw, 280px) minmax(0, 1fr) clamp(300px, 45%, 640px);
+    align-items: center;
     -webkit-app-region: drag;
   }
 
+  .coloride-top-header-spacer {
+    @apply h-full;
+    grid-column: 1 / 3;
+  }
+
+  .coloride-zone-3-header {
+    @apply relative h-full px-0 flex items-center justify-between gap-1 overflow-hidden;
+    grid-column: 3 / 4;
+  }
+
+  .coloride-zone-4-header {
+    @apply relative h-full px-0 flex items-center justify-between gap-1 overflow-hidden;
+    grid-column: 4 / 5;
+  }
+
+  .coloride-zone-3-header::before,
+  .coloride-zone-4-header::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 1px;
+    background-color: rgba(255, 255, 255, 0.14);
+    border-radius: 1px;
+    pointer-events: none;
+    z-index: 20;
+  }
+
+  .coloride-zone-3-header::after,
+  .coloride-zone-4-header::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 10;
+    background: none;
+  }
+
+  .coloride-zone-3-header[data-scroll-left="true"][data-scroll-right="false"]::after,
+  .coloride-zone-4-header[data-scroll-left="true"][data-scroll-right="false"]::after {
+    background: linear-gradient(
+      to right,
+      var(--color-topbar) 0px,
+      rgba(38, 38, 38, 0.85) 8px,
+      transparent 28px
+    );
+  }
+
+  .coloride-zone-3-header[data-scroll-left="false"][data-scroll-right="true"]::after,
+  .coloride-zone-4-header[data-scroll-left="false"][data-scroll-right="true"]::after {
+    background: linear-gradient(
+      to left,
+      var(--color-topbar) 0px,
+      rgba(38, 38, 38, 0.85) 8px,
+      transparent 28px
+    );
+  }
+
+  .coloride-zone-3-header[data-scroll-left="true"][data-scroll-right="true"]::after,
+  .coloride-zone-4-header[data-scroll-left="true"][data-scroll-right="true"]::after {
+    background: linear-gradient(
+      to right,
+      var(--color-topbar) 0px,
+      rgba(38, 38, 38, 0.85) 8px,
+      transparent 28px,
+      transparent calc(100% - 28px),
+      rgba(38, 38, 38, 0.85) calc(100% - 8px),
+      var(--color-topbar) 100%
+    );
+  }
+
+  .coloride-header-thin-scrollbar {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: 0px;
+    height: 9px;
+    background: transparent;
+    opacity: 0;
+    pointer-events: auto;
+    cursor: default;
+    z-index: 30;
+    transition: opacity 150ms ease;
+    -webkit-app-region: no-drag;
+  }
+
+  .coloride-zone-3-header[data-scrollable="true"]:hover .coloride-header-thin-scrollbar,
+  .coloride-zone-4-header[data-scrollable="true"]:hover .coloride-header-thin-scrollbar,
+  .coloride-zone-3-header[data-dragging-scroll="true"] .coloride-header-thin-scrollbar,
+  .coloride-zone-4-header[data-dragging-scroll="true"] .coloride-header-thin-scrollbar {
+    opacity: 1;
+  }
+
+  .coloride-header-thin-scrollbar-thumb {
+    position: absolute;
+    bottom: 1px;
+    height: 2px;
+    border-radius: 9999px;
+    background-color: rgba(255, 255, 255, 0.32);
+  }
+
+  .coloride-zone-3-header [role="tab"],
+  .coloride-zone-3-header button,
+  .coloride-zone-4-header [role="tab"],
+  .coloride-zone-4-header button,
+  .coloride-inspector-doc-badge {
+    -webkit-app-region: no-drag;
+  }
+
   #coloride-root {
-    @apply flex-1 min-h-0 pr-0 pb-[2px] pl-0 bg-nav-rail;
+    @apply flex-1 min-h-0 pr-[2px] pb-[2px] pl-0 bg-nav-rail;
   }
 
   .coloride-cockpit-shell {
     @apply bg-nav-rail;
-    height: calc(100vh - 34px) !important;
+    height: calc(100vh - 37px) !important;
   }
 
   .coloride-zone-1-activity-bar {
@@ -61,7 +174,7 @@
   }
 
   .coloride-zone-2-sidebar {
-    @apply bg-sidebar border border-white/8 rounded-tl-[12px] rounded-bl-[12px] p-2.5 h-full;
+    @apply bg-sidebar border-y border-l border-r-0 border-white/8 rounded-tl-[12px] rounded-bl-[12px] p-2.5 h-full;
   }
 
   .coloride-zone-2-sessions {
@@ -73,24 +186,71 @@
   }
 
   .coloride-zone-3-multichat {
-    @apply bg-main border-t border-b border-white/8 flex flex-col h-full;
-  }
-
-  .coloride-zone-3-header,
-  .coloride-zone-4-header {
-    @apply bg-main border-b border-white/8 py-2 px-3.5 flex items-center justify-between gap-2 flex-wrap;
+    @apply bg-main border-t border-b border-l border-white/8 flex flex-col h-full;
   }
 
   .coloride-chat-tab-bar,
   .coloride-grid-mode-selector {
-    @apply flex gap-1 flex-wrap;
+    @apply flex items-center gap-1 flex-nowrap overflow-x-auto px-2;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .coloride-chat-tab-bar::-webkit-scrollbar,
+  .coloride-grid-mode-selector::-webkit-scrollbar {
+    display: none;
   }
 
   .coloride-chat-tab,
   .coloride-chat-tab-btn,
   .coloride-grid-mode-btn,
   .coloride-inspector-tab-btn {
-    @apply bg-transparent text-text-secondary border border-transparent rounded-[7px] py-1 px-2.5 text-[12px] cursor-pointer hover:bg-selected hover:text-text-primary aria-selected:bg-selected aria-selected:text-text-primary aria-selected:border-white/8 aria-pressed:bg-selected aria-pressed:text-text-primary aria-pressed:border-white/8;
+    @apply relative inline-flex items-center gap-1.5 h-[25px] bg-transparent text-text-secondary rounded-[6px] py-0.5 pl-2.5 pr-1.5 text-[12px] whitespace-nowrap cursor-pointer transition-colors hover:bg-selected hover:text-text-primary aria-selected:bg-selected aria-selected:text-text-primary aria-pressed:bg-selected aria-pressed:text-text-primary;
+    border: 0.5px solid transparent;
+  }
+
+  .coloride-chat-tab + .coloride-chat-tab::before,
+  .coloride-inspector-tab-btn + .coloride-inspector-tab-btn::before {
+    content: "";
+    position: absolute;
+    left: -2.5px;
+    top: 6px;
+    bottom: 6px;
+    width: 1px;
+    background-color: rgba(255, 255, 255, 0.11);
+    border-radius: 1px;
+    pointer-events: none;
+    transition: opacity 120ms ease;
+  }
+
+  .coloride-chat-tab[aria-selected="true"]::before,
+  .coloride-chat-tab[aria-selected="true"] + .coloride-chat-tab::before,
+  .coloride-chat-tab:hover::before,
+  .coloride-chat-tab:hover + .coloride-chat-tab::before,
+  .coloride-inspector-tab-btn[aria-pressed="true"]::before,
+  .coloride-inspector-tab-btn[aria-pressed="true"] + .coloride-inspector-tab-btn::before,
+  .coloride-inspector-tab-btn:hover::before,
+  .coloride-inspector-tab-btn:hover + .coloride-inspector-tab-btn::before {
+    opacity: 0;
+  }
+
+  .coloride-chat-tab[aria-selected="true"],
+  .coloride-chat-tab-btn[aria-selected="true"],
+  .coloride-grid-mode-btn[aria-pressed="true"],
+  .coloride-inspector-tab-btn[aria-pressed="true"] {
+    border-color: rgba(255, 255, 255, 0.028);
+  }
+
+  .coloride-tab-icon {
+    @apply inline-flex items-center justify-center text-[11.5px] shrink-0;
+  }
+
+  .coloride-tab-label {
+    @apply truncate;
+  }
+
+  .coloride-tab-close-btn {
+    @apply w-[18px] h-[18px] rounded-[5px] !border-0 bg-transparent text-text-muted inline-flex items-center justify-center shrink-0 cursor-pointer transition-colors hover:bg-white/12 hover:text-text-primary;
   }
 
   .coloride-zone-3-grid {
@@ -116,19 +276,36 @@
   }
 
   .coloride-zone-4-inspector {
-    @apply bg-main border border-white/8 rounded-tr-none rounded-br-none flex flex-col h-full overflow-hidden;
+    @apply bg-main border border-white/8 rounded-tr-[12px] rounded-br-[12px] flex flex-col h-full overflow-hidden;
   }
 
   .coloride-zone-4-editor-host,
   .coloride-zone-4-preview-host {
-    @apply flex-1 overflow-auto p-2 bg-main select-text;
+    @apply flex-1 w-full h-full overflow-hidden p-0 m-0 bg-main;
+  }
+
+  .coloride-zone-4-editor-host,
+  .coloride-zone-4-preview-host,
+  .cm-editor,
+  .cm-scroller,
+  .cm-content,
+  .cm-line,
+  .cm-line * {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+  }
+
+  .cm-gutters,
+  .cm-gutters * {
+    user-select: none !important;
+    -webkit-user-select: none !important;
   }
 
   .cm-editor {
-    @apply h-full !bg-main font-mono text-[13px];
+    @apply w-full h-full !bg-main font-mono text-[13px];
   }
 
   .cm-gutters {
-    @apply !bg-main !border-r !border-white/8;
+    @apply !bg-main !border-0;
   }
 }

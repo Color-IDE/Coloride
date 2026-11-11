@@ -1,10 +1,23 @@
+import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
+import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { indentUnit } from "@codemirror/language";
 import {
   Annotation,
   EditorSelection as CmSelection,
   Compartment,
   EditorState,
 } from "@codemirror/state";
-import { EditorView } from "@codemirror/view";
+import {
+  EditorView,
+  drawSelection,
+  dropCursor,
+  highlightActiveLine,
+  highlightActiveLineGutter,
+  highlightSpecialChars,
+  keymap,
+  lineNumbers,
+  rectangularSelection,
+} from "@codemirror/view";
 import {
   CONTRACT_SCHEMA_VERSION,
   type EditorSnapshot,
@@ -594,8 +607,23 @@ export class ColorideEditorView {
     const baseState = EditorState.create({
       doc: initialContent,
       extensions: [
-        ...createLezerHighlightingExtensions(documentId),
+        EditorState.tabSize.of(2),
+        indentUnit.of("  "),
         ...colorideStateDecorations(),
+        lineNumbers({
+          formatNumber: (lineNo) => String(lineNo).padStart(4, " "),
+        }),
+        highlightActiveLineGutter(),
+        highlightSpecialChars(),
+        history(),
+        drawSelection(),
+        dropCursor(),
+        EditorState.allowMultipleSelections.of(true),
+        rectangularSelection(),
+        closeBrackets(),
+        highlightActiveLine(),
+        keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
+        ...createLezerHighlightingExtensions(documentId),
         createKeymapCompartmentExtension(
           this.keymapCompartment,
           this.activeKeymapPreset,
