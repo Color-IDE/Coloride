@@ -24,7 +24,7 @@
     "@lezer/highlight": "^1.2.1"
   },
   "devDependencies": {
-    "happy-dom": "^17.1.1"
+    "happy-dom": "^21.0.4"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
