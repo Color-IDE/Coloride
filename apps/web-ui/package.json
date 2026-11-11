@@ -15,8 +15,13 @@
     "@coloride/editor-cm6": "workspace:*",
     "@coloride/protocol-types": "workspace:*"
   },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.11",
+    "tailwindcss": "^4.1.11"
+  },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && tailwindcss -i ./src/theme/tailwind.css -o ./dist/tailwind.css",
+    "build:css": "tailwindcss -i ./src/theme/tailwind.css -o ./dist/tailwind.css",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run src"
   }

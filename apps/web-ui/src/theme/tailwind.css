@@ -1,0 +1,130 @@
+@import "tailwindcss";
+@source "../**/*.ts";
+
+@theme {
+  --color-exterior: #000000;
+  --color-main: #1e1e1e;
+  --color-sidebar: #212121;
+  --color-nav-rail: #262626;
+  --color-topbar: #262626;
+  --color-selected: #303030;
+  --color-card: #313131;
+  --color-composer: #323232;
+  --color-text-primary: #ececec;
+  --color-text-secondary: #b4b4b4;
+  --color-text-muted: #8e8e8e;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    user-select: none;
+  }
+
+  body {
+    @apply bg-topbar text-text-primary h-screen overflow-hidden flex flex-col antialiased;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, sans-serif;
+  }
+}
+
+@layer components {
+  .coloride-macos-titlebar {
+    @apply h-[32px] min-h-[32px] bg-topbar flex items-center pl-[80px] pr-3;
+    -webkit-app-region: drag;
+  }
+
+  #coloride-root {
+    @apply flex-1 min-h-0 pr-0 pb-[2px] pl-0 bg-nav-rail;
+  }
+
+  .coloride-cockpit-shell {
+    @apply bg-nav-rail;
+    height: calc(100vh - 34px) !important;
+  }
+
+  .coloride-zone-1-activity-bar {
+    @apply bg-nav-rail flex flex-col items-center pt-1.5 pb-2.5 px-1 gap-1.5 border-r-0;
+  }
+
+  .coloride-activity-btn {
+    @apply w-[36px] h-[36px] rounded-[8px] border-0 bg-transparent text-text-secondary text-[16px] inline-flex items-center justify-center cursor-pointer transition-colors hover:bg-selected hover:text-text-primary aria-pressed:bg-selected aria-pressed:text-text-primary;
+  }
+
+  .coloride-persona-selector {
+    @apply mt-auto w-[40px] bg-selected text-text-secondary border border-white/8 rounded-[6px] text-[10px] py-1 px-0.5;
+  }
+
+  .coloride-zone-2-sidebar {
+    @apply bg-sidebar border border-white/8 rounded-tl-[12px] rounded-bl-[12px] p-2.5 h-full;
+  }
+
+  .coloride-zone-2-sessions {
+    @apply flex flex-col gap-1;
+  }
+
+  .coloride-sidebar-session-item {
+    @apply w-full text-left !bg-transparent !text-text-secondary !border-0 rounded-[8px] py-2 px-2.5 text-[13px] font-normal cursor-pointer transition-colors hover:!bg-selected hover:!text-text-primary first:!bg-selected first:!text-text-primary;
+  }
+
+  .coloride-zone-3-multichat {
+    @apply bg-main border-t border-b border-white/8 flex flex-col h-full;
+  }
+
+  .coloride-zone-3-header,
+  .coloride-zone-4-header {
+    @apply bg-main border-b border-white/8 py-2 px-3.5 flex items-center justify-between gap-2 flex-wrap;
+  }
+
+  .coloride-chat-tab-bar,
+  .coloride-grid-mode-selector {
+    @apply flex gap-1 flex-wrap;
+  }
+
+  .coloride-chat-tab,
+  .coloride-chat-tab-btn,
+  .coloride-grid-mode-btn,
+  .coloride-inspector-tab-btn {
+    @apply bg-transparent text-text-secondary border border-transparent rounded-[7px] py-1 px-2.5 text-[12px] cursor-pointer hover:bg-selected hover:text-text-primary aria-selected:bg-selected aria-selected:text-text-primary aria-selected:border-white/8 aria-pressed:bg-selected aria-pressed:text-text-primary aria-pressed:border-white/8;
+  }
+
+  .coloride-zone-3-grid {
+    @apply flex-1 p-3.5 !gap-3 overflow-auto;
+  }
+
+  .coloride-chat-cell {
+    @apply !bg-card !border !border-white/8 rounded-[12px] p-3.5 flex flex-col gap-2.5 cursor-pointer !text-text-primary hover:!border-white/16;
+  }
+
+  .coloride-chat-cell-header,
+  .coloride-chat-cell-badge {
+    @apply text-[12.5px] font-medium !text-text-primary pb-2 border-b border-white/8;
+  }
+
+  .coloride-chat-cell-messages {
+    @apply flex-1 text-[13px] leading-[1.55] !text-text-secondary select-text;
+  }
+
+  .coloride-chat-cell-logs,
+  .coloride-chat-cell-terminal {
+    @apply font-mono text-[11.5px] bg-composer border border-white/8 py-2 px-2.5 rounded-[8px] text-text-secondary select-text;
+  }
+
+  .coloride-zone-4-inspector {
+    @apply bg-main border border-white/8 rounded-tr-none rounded-br-none flex flex-col h-full overflow-hidden;
+  }
+
+  .coloride-zone-4-editor-host,
+  .coloride-zone-4-preview-host {
+    @apply flex-1 overflow-auto p-2 bg-main select-text;
+  }
+
+  .cm-editor {
+    @apply h-full !bg-main font-mono text-[13px];
+  }
+
+  .cm-gutters {
+    @apply !bg-main !border-r !border-white/8;
+  }
+}
