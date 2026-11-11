@@ -12,7 +12,9 @@
   "app": {
     "windows": [
       {
-        "title": "Coloride — Deterministic AI IDE Cockpit",
+        "title": "Coloride",
+        "hiddenTitle": true,
+        "titleBarStyle": "Overlay",
         "width": 1440,
         "height": 900,
         "minWidth": 1024,

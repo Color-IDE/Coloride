@@ -6,6 +6,11 @@ import {
   type CockpitPersonaMode,
   type CockpitStoreBundle,
 } from "./stores.js";
+import {
+  ACTIVITY_BAR_SVG_ICONS,
+  type StatefulActivityIcon,
+  injectCockpitThemeStyles,
+} from "./theme/index.js";
 import { VirtualChatMessageListRenderer, VirtualFileTreeRenderer } from "./virtualizer.js";
 
 export interface CockpitDomControllerOptions {
@@ -16,16 +21,46 @@ export interface CockpitDomControllerOptions {
 
 const ACTIVITY_ITEMS: readonly {
   readonly section: ActivityBarSection;
-  readonly icon: string;
+  readonly iconSvg: StatefulActivityIcon;
   readonly labelFr: string;
   readonly shortcut: string;
 }[] = [
-  { section: "sessions", icon: "💬", labelFr: "Sessions de Chat", shortcut: "Cmd/Ctrl+1" },
-  { section: "files", icon: "📁", labelFr: "Explorateur de fichiers", shortcut: "Cmd/Ctrl+2" },
-  { section: "search", icon: "🔍", labelFr: "Recherche globale", shortcut: "Cmd/Ctrl+3" },
-  { section: "git", icon: "🌿", labelFr: "Git & Checkpoints", shortcut: "Cmd/Ctrl+4" },
-  { section: "debug", icon: "🐛", labelFr: "Debug & Tests", shortcut: "Cmd/Ctrl+5" },
-  { section: "mcp", icon: "🔌", labelFr: "Connecteurs MCP / Modèles", shortcut: "Cmd/Ctrl+6" },
+  {
+    section: "sessions",
+    iconSvg: ACTIVITY_BAR_SVG_ICONS.sessions,
+    labelFr: "Sessions de Chat",
+    shortcut: "Cmd/Ctrl+1",
+  },
+  {
+    section: "files",
+    iconSvg: ACTIVITY_BAR_SVG_ICONS.files,
+    labelFr: "Explorateur de fichiers",
+    shortcut: "Cmd/Ctrl+2",
+  },
+  {
+    section: "search",
+    iconSvg: ACTIVITY_BAR_SVG_ICONS.search,
+    labelFr: "Recherche globale",
+    shortcut: "Cmd/Ctrl+3",
+  },
+  {
+    section: "git",
+    iconSvg: ACTIVITY_BAR_SVG_ICONS.git,
+    labelFr: "Git & Checkpoints",
+    shortcut: "Cmd/Ctrl+4",
+  },
+  {
+    section: "debug",
+    iconSvg: ACTIVITY_BAR_SVG_ICONS.debug,
+    labelFr: "Debug & Tests",
+    shortcut: "Cmd/Ctrl+5",
+  },
+  {
+    section: "mcp",
+    iconSvg: ACTIVITY_BAR_SVG_ICONS.mcp,
+    labelFr: "Connecteurs MCP / Modèles",
+    shortcut: "Cmd/Ctrl+6",
+  },
 ];
 
 const PERSONA_OPTIONS: readonly {
@@ -157,6 +192,7 @@ export class CockpitDomController {
 
   private buildStaticSkeleton(): void {
     const doc = this.rootContainer.ownerDocument;
+    injectCockpitThemeStyles(doc);
     this.rootContainer.innerHTML = "";
 
     this.cockpitShellEl = doc.createElement("div");
@@ -193,20 +229,22 @@ export class CockpitDomController {
 
     // Zone 1: Activity Bar (48px fixed)
     this.zone1El = doc.createElement("nav");
-    this.zone1El.className = "coloride-zone-1-activity-bar";
+    this.zone1El.className =
+      "coloride-zone-1-activity-bar bg-nav-rail flex flex-col items-center pt-1.5 pb-2.5 px-1 gap-1.5";
     this.zone1El.setAttribute("aria-label", "Zone 1 — Activity Bar");
     this.zone1El.style.width = "48px";
     this.zone1El.style.minWidth = "48px";
 
     // Zone 2: Dynamic Sidebar (Virtualized Sessions & File Tree)
     this.zone2El = doc.createElement("aside");
-    this.zone2El.className = "coloride-zone-2-sidebar";
+    this.zone2El.className =
+      "coloride-zone-2-sidebar bg-sidebar border border-white/8 rounded-tl-[12px] rounded-bl-[12px] p-2.5 h-full";
     this.zone2El.setAttribute("aria-label", "Zone 2 — Dynamic Sidebar");
     this.zone2El.style.minWidth = "0";
     this.zone2El.style.overflow = "auto";
 
     this.zone2SessionsEl = doc.createElement("div");
-    this.zone2SessionsEl.className = "coloride-zone-2-sessions";
+    this.zone2SessionsEl.className = "coloride-zone-2-sessions flex flex-col gap-1";
     this.zone2FileTreeEl = doc.createElement("div");
     this.zone2FileTreeEl.className = "coloride-zone-2-file-tree";
     this.zone2El.appendChild(this.zone2SessionsEl);
@@ -214,33 +252,39 @@ export class CockpitDomController {
 
     // Zone 3: Center Multi-Chat Grid (1 | 2 | 4 | 8)
     this.zone3El = doc.createElement("main");
-    this.zone3El.className = "coloride-zone-3-multichat";
+    this.zone3El.className =
+      "coloride-zone-3-multichat bg-main border-t border-b border-white/8 flex flex-col h-full";
     this.zone3El.setAttribute("aria-label", "Zone 3 — Multi-Chat Grid");
     this.zone3El.style.minWidth = "0";
     this.zone3El.style.overflow = "hidden";
 
     this.zone3HeaderEl = doc.createElement("header");
-    this.zone3HeaderEl.className = "coloride-zone-3-header";
+    this.zone3HeaderEl.className =
+      "coloride-zone-3-header bg-main border-b border-white/8 py-2 px-3.5 flex items-center justify-between gap-2 flex-wrap";
     this.zone3GridEl = doc.createElement("section");
-    this.zone3GridEl.className = "coloride-zone-3-grid";
+    this.zone3GridEl.className = "coloride-zone-3-grid flex-1 p-3.5 gap-3 overflow-auto";
     this.zone3El.appendChild(this.zone3HeaderEl);
     this.zone3El.appendChild(this.zone3GridEl);
 
     // Zone 4: Right Contextual Inspector ([ 👁 Preview | 💻 Code & Diff ])
     this.zone4El = doc.createElement("section");
-    this.zone4El.className = "coloride-zone-4-inspector";
+    this.zone4El.className =
+      "coloride-zone-4-inspector bg-main border border-white/8 rounded-tr-none rounded-br-none flex flex-col h-full overflow-hidden";
     this.zone4El.setAttribute("aria-label", "Zone 4 — Contextual Inspector");
     this.zone4El.style.minWidth = "0";
     this.zone4El.style.overflow = "hidden";
 
     this.zone4HeaderEl = doc.createElement("header");
-    this.zone4HeaderEl.className = "coloride-zone-4-header";
+    this.zone4HeaderEl.className =
+      "coloride-zone-4-header bg-main border-b border-white/8 py-2 px-3.5 flex items-center justify-between gap-2 flex-wrap";
 
     this.zone4PreviewHostEl = doc.createElement("div");
-    this.zone4PreviewHostEl.className = "coloride-zone-4-preview-host";
+    this.zone4PreviewHostEl.className =
+      "coloride-zone-4-preview-host flex-1 overflow-auto p-2 bg-main select-text";
 
     this.zone4EditorHostEl = doc.createElement("div");
-    this.zone4EditorHostEl.className = "coloride-zone-4-editor-host";
+    this.zone4EditorHostEl.className =
+      "coloride-zone-4-editor-host flex-1 overflow-auto p-2 bg-main select-text";
     this.zone4EditorHostEl.dataset.isolatedCm6Container = "true";
 
     this.zone4El.appendChild(this.zone4HeaderEl);
@@ -269,13 +313,14 @@ export class CockpitDomController {
     this.zone1El.innerHTML = "";
 
     for (const item of ACTIVITY_ITEMS) {
+      const isActive = z1.activeSection === item.section;
       const btn = doc.createElement("button");
       btn.type = "button";
-      btn.className = "coloride-activity-btn";
+      btn.className = "coloride-activity-btn flex items-center justify-center";
       btn.dataset.section = item.section;
       btn.setAttribute("aria-label", `${item.labelFr} (${item.shortcut})`);
-      btn.setAttribute("aria-pressed", z1.activeSection === item.section ? "true" : "false");
-      btn.textContent = item.icon;
+      btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+      btn.innerHTML = isActive ? item.iconSvg.active : item.iconSvg.inactive;
       btn.addEventListener("click", () => {
         this.stores.setActivitySection(item.section);
       });
