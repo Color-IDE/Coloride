@@ -83,6 +83,45 @@ export interface OneClickOnboardingInput {
   }>;
 }
 
+export interface NativeMigrationReport {
+  readonly settings: {
+    readonly color_theme: string;
+    readonly icon_theme: string;
+    readonly font_family: string;
+    readonly font_size: number;
+    readonly tab_size: number;
+    readonly insert_spaces: boolean;
+    readonly keymap_preset: KeymapPresetId;
+  };
+  readonly keybindings: ReadonlyArray<{
+    readonly raw_key: string;
+    readonly cm6_key: string;
+    readonly command: string;
+    readonly when_clause: string | null;
+  }>;
+  readonly quarantined_mcp_servers: ReadonlyArray<{
+    readonly server_name: string;
+    readonly command: string;
+    readonly args: readonly string[];
+    readonly redacted_env: Readonly<Record<string, string>>;
+    readonly status: McpQuarantineStatusId;
+    readonly enabled: boolean;
+    readonly approval_required: boolean;
+    readonly security_warnings: readonly string[];
+  }>;
+  readonly project_conventions: ReadonlyArray<{
+    readonly file_name: string;
+    readonly content: string;
+    readonly can_modify_policy_engine: boolean;
+    readonly security_permissions_changed: number;
+    readonly flagged_injection_directives: readonly string[];
+  }>;
+  readonly degraded_files: ReadonlyArray<{ readonly file_label: string; readonly reason: string }>;
+  readonly elapsed_ms: number;
+  readonly processes_launched: number;
+  readonly security_permissions_changed: number;
+}
+
 /**
  * Resolve standard read-only configuration paths for VS Code, Cursor, and Claude Desktop
  * across macOS, Windows, and Linux (`LOT-006`).
@@ -487,10 +526,69 @@ export class OnboardingModalController {
   private readonly editorView: ColorideEditorView;
   private modalEl: HTMLElement | null = null;
   private unsubscribe: (() => void) | null = null;
+  private nativeImportLoader: (() => Promise<NativeMigrationReport>) | null = null;
 
   constructor(editorView: ColorideEditorView, initialState?: OnboardingState) {
     this.editorView = editorView;
     this.store = new AtomicStore<OnboardingState>(initialState ?? createInitialOnboardingState());
+  }
+
+  setNativeImportLoader(loader: () => Promise<NativeMigrationReport>): void {
+    this.nativeImportLoader = loader;
+  }
+
+  applyNativeMigrationReport(report: NativeMigrationReport): OnboardingState {
+    const importedKeybindings: Cm6TranslatedKeybinding[] = report.keybindings.map((binding) => ({
+      rawKey: binding.raw_key,
+      cm6Key: binding.cm6_key,
+      command: binding.command,
+      ...(binding.when_clause ? { whenClause: binding.when_clause } : {}),
+    }));
+    this.editorView.setKeymapPreset(report.settings.keymap_preset, importedKeybindings);
+    this.editorView.setTheme({
+      label: report.settings.color_theme,
+      uiTheme: "vs-dark",
+      editorBackground: DEFAULT_COLORIDE_CM6_THEME.editorBackground,
+      editorForeground: DEFAULT_COLORIDE_CM6_THEME.editorForeground,
+      fontFamily: report.settings.font_family,
+      fontSizePx: report.settings.font_size,
+    });
+    return this.store.setState((prev) => ({
+      ...prev,
+      activeKeymapPreset: report.settings.keymap_preset,
+      colorTheme: report.settings.color_theme,
+      iconTheme: report.settings.icon_theme,
+      fontFamily: report.settings.font_family,
+      fontSizePx: report.settings.font_size,
+      tabSize: report.settings.tab_size,
+      insertSpaces: report.settings.insert_spaces,
+      importedKeybindings,
+      quarantinedMcpServers: report.quarantined_mcp_servers.map((server) => ({
+        serverName: server.server_name,
+        command: server.command,
+        args: server.args,
+        redactedEnv: server.redacted_env,
+        status: server.status,
+        enabled: server.enabled,
+        approvalRequired: server.approval_required,
+        securityWarnings: server.security_warnings,
+      })),
+      projectConventions: report.project_conventions.map((convention) => ({
+        fileName: convention.file_name,
+        provenance: "UntrustedProjectConvention",
+        content: convention.content,
+        canModifyPolicyEngine: false,
+        securityPermissionsChanged: 0,
+        flaggedInjectionDirectives: convention.flagged_injection_directives,
+      })),
+      degradedFiles: report.degraded_files.map((file) => ({
+        fileLabel: file.file_label,
+        reason: file.reason,
+      })),
+      lastImportDurationMs: report.elapsed_ms,
+      processesLaunchedDuringImport: 0,
+      securityPermissionsChanged: 0,
+    }));
   }
 
   mountModal(hostContainer: HTMLElement): HTMLElement {
@@ -826,6 +924,27 @@ export class OnboardingModalController {
       presetBar.appendChild(btn);
     }
     this.modalEl.appendChild(presetBar);
+
+    if (this.nativeImportLoader) {
+      const importButton = doc.createElement("button");
+      importButton.type = "button";
+      importButton.className = "coloride-onboarding-import-btn";
+      importButton.textContent = "Importer les réglages détectés";
+      importButton.addEventListener("click", () => {
+        importButton.disabled = true;
+        importButton.textContent = "Import en cours…";
+        void this.nativeImportLoader?.()
+          .then((report) => this.applyNativeMigrationReport(report))
+          .catch((error: unknown) => {
+            importButton.title = error instanceof Error ? error.message : "Import impossible";
+            importButton.textContent = "Import impossible — réessayer";
+          })
+          .finally(() => {
+            importButton.disabled = false;
+          });
+      });
+      this.modalEl.appendChild(importButton);
+    }
 
     // Quarantined MCP servers list
     const mcpSection = doc.createElement("section");

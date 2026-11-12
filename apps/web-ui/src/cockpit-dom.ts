@@ -18,6 +18,18 @@ export interface CockpitDomControllerOptions {
   readonly stores: CockpitStoreBundle;
   readonly editorView: ColorideEditorView;
   readonly onboardingController?: OnboardingModalController;
+  readonly openWorkspace?: () => Promise<readonly import("./stores.js").CockpitFileTreeNode[]>;
+  readonly readWorkspaceFile?: (path: string) => Promise<string>;
+  readonly searchWorkspace?: (
+    query: string,
+  ) => Promise<readonly import("./stores.js").CockpitSearchResultItem[]>;
+  readonly analyzeDocument?: (
+    documentId: string,
+    sessionGeneration: number,
+  ) => Promise<{
+    readonly symbols: readonly import("./stores.js").CockpitAstSymbolItem[];
+    readonly impactedTests: readonly import("./stores.js").CockpitImpactedTestItem[];
+  }>;
 }
 
 const ACTIVITY_ITEMS: readonly {
@@ -93,6 +105,10 @@ export class CockpitDomController {
   private readonly stores: CockpitStoreBundle;
   private readonly editorView: ColorideEditorView;
   private readonly onboardingController: OnboardingModalController;
+  private readonly openWorkspace?: CockpitDomControllerOptions["openWorkspace"];
+  private readonly readWorkspaceFile?: CockpitDomControllerOptions["readWorkspaceFile"];
+  private readonly searchWorkspace?: CockpitDomControllerOptions["searchWorkspace"];
+  private readonly analyzeDocument?: CockpitDomControllerOptions["analyzeDocument"];
   private readonly ownsOnboardingController: boolean;
   private readonly fileTreeVirtualizer = new VirtualFileTreeRenderer();
   private readonly messageVirtualizer = new VirtualChatMessageListRenderer();
@@ -116,11 +132,16 @@ export class CockpitDomController {
   private zone4PreviewHostEl!: HTMLElement;
   private zone4EditorHostEl!: HTMLElement;
   private zone4RenderCount = 0;
+  private analysisRequestSequence = 0;
 
   constructor(options: CockpitDomControllerOptions) {
     this.rootContainer = options.rootContainer;
     this.stores = options.stores;
     this.editorView = options.editorView;
+    this.openWorkspace = options.openWorkspace;
+    this.readWorkspaceFile = options.readWorkspaceFile;
+    this.searchWorkspace = options.searchWorkspace;
+    this.analyzeDocument = options.analyzeDocument;
     this.ownsOnboardingController = !options.onboardingController;
     this.onboardingController =
       options.onboardingController ??
@@ -186,6 +207,8 @@ export class CockpitDomController {
           hasUnsaved,
         );
         this.syncZone4UnsavedIndicatorInPlace(hasUnsaved);
+        if (snap.lastIpcError) this.zone4HeaderEl.title = snap.lastIpcError;
+        if (snap.lastAckSnapshot) this.requestNativeAnalysis(snap.documentId);
       }),
       this.onboardingController.store.subscribe(() => {
         if (this.stores.zone1.getState().activeSection === "mcp") {
@@ -312,7 +335,9 @@ export class CockpitDomController {
     this.cockpitShellEl.addEventListener("keydown", (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
-        void this.saveActiveDocument();
+        void this.saveActiveDocument().catch((error: unknown) => {
+          this.zone4HeaderEl.title = error instanceof Error ? error.message : "Save failed";
+        });
         return;
       }
       if (this.stores.handleActivityBarShortcut(event.key, event.metaKey || event.ctrlKey)) {
@@ -346,7 +371,7 @@ export class CockpitDomController {
     // Zone 2: Dynamic Sidebar (Virtualized Sessions, File Tree, Search, AST/Debug, MCP/Onboarding)
     this.zone2El = doc.createElement("aside");
     this.zone2El.className =
-      "coloride-zone-2-sidebar bg-sidebar border-y border-l border-r-0 border-white/8 rounded-tl-[12px] rounded-bl-[12px] p-2.5 h-full";
+      "coloride-zone-2-sidebar bg-sidebar border-y border-l border-r-0 border-white/8 rounded-tl-[16px] rounded-bl-[16px] p-2.5 h-full";
     this.zone2El.setAttribute("aria-label", "Zone 2 — Dynamic Sidebar");
     this.zone2El.style.minWidth = "0";
     this.zone2El.style.overflow = "auto";
@@ -382,7 +407,7 @@ export class CockpitDomController {
     // Zone 4: Right Contextual Inspector ([ 👁 Preview | 💻 Code & Diff ])
     this.zone4El = doc.createElement("section");
     this.zone4El.className =
-      "coloride-zone-4-inspector bg-main border border-white/8 rounded-tr-[12px] rounded-br-[12px] flex flex-col h-full overflow-hidden";
+      "coloride-zone-4-inspector bg-main border border-white/8 rounded-tr-[16px] rounded-br-[16px] flex flex-col h-full overflow-hidden";
     this.zone4El.setAttribute("aria-label", "Zone 4 — Contextual Inspector");
     this.zone4El.style.minWidth = "0";
     this.zone4El.style.overflow = "hidden";
@@ -509,18 +534,53 @@ export class CockpitDomController {
     }
 
     // Virtualize the file tree (visible on 2nd tab of Z1: "files") so > 50,000 files render in O(1) DOM nodes
-    this.fileTreeVirtualizer.renderInto(
-      this.zone2FileTreeEl,
-      z2.fileTree,
-      z2.fileTreeScrollTop,
-      z2.fileTreeViewportHeight,
-      z2.focusedFileIndex,
-      (node) => {
-        if (!node.isDirectory) {
-          this.stores.selectFileFromTree(node.path);
-        }
-      },
-    );
+    if (z2.fileTree.length === 0 && this.openWorkspace) {
+      this.zone2FileTreeEl.innerHTML = "";
+      const openButton = doc.createElement("button");
+      openButton.type = "button";
+      openButton.className = "coloride-open-workspace-btn";
+      openButton.textContent = "Open folder";
+      openButton.addEventListener("click", () => {
+        openButton.disabled = true;
+        openButton.textContent = "Opening…";
+        void this.openWorkspace?.()
+          .then((fileTree) => this.stores.setFileTree(fileTree))
+          .catch((error: unknown) => {
+            openButton.textContent =
+              error instanceof Error ? error.message : "Unable to open folder";
+            openButton.title = openButton.textContent;
+          })
+          .finally(() => {
+            openButton.disabled = false;
+            if (openButton.textContent === "Opening…") openButton.textContent = "Open folder";
+          });
+      });
+      this.zone2FileTreeEl.appendChild(openButton);
+    } else {
+      this.fileTreeVirtualizer.renderInto(
+        this.zone2FileTreeEl,
+        z2.fileTree,
+        z2.fileTreeScrollTop,
+        z2.fileTreeViewportHeight,
+        z2.focusedFileIndex,
+        (node) => {
+          if (node.isDirectory) return;
+          if (this.readWorkspaceFile) {
+            void this.readWorkspaceFile(node.path)
+              .then((content) => {
+                this.stores.selectFileFromTree(node.path, content);
+                this.requestNativeAnalysis(node.path);
+              })
+              .catch((error: unknown) => {
+                this.zone2FileTreeEl.title =
+                  error instanceof Error ? error.message : "Unable to read file";
+              });
+          } else {
+            this.stores.selectFileFromTree(node.path);
+          }
+        },
+      );
+    }
 
     if (showSearch) {
       this.renderZone2SearchPanel(doc, z2.searchQuery, z2.searchResults);
@@ -548,7 +608,16 @@ export class CockpitDomController {
     input.value = searchQuery;
     input.setAttribute("aria-label", "Champ de recherche globale FTS5");
     input.addEventListener("change", () => {
-      this.stores.runGlobalSearch(input.value);
+      if (this.searchWorkspace) {
+        const query = input.value;
+        void this.searchWorkspace(query)
+          .then((results) => this.stores.setGlobalSearchResults(query, results))
+          .catch((error: unknown) => {
+            input.title = error instanceof Error ? error.message : "Workspace search failed";
+          });
+      } else {
+        this.stores.runGlobalSearch(input.value);
+      }
     });
 
     const resultsList = doc.createElement("div");
@@ -569,13 +638,35 @@ export class CockpitDomController {
         hit.freshness === "LiveUnsavedBuffer" ? "● Mémoire (non sauvegardé)" : "Disque";
       btn.textContent = `${hit.filePath}:${hit.line} [${freshnessTag}] — ${hit.snippet}`;
       btn.addEventListener("click", () => {
-        this.stores.selectFileFromTree(hit.filePath);
+        if (this.readWorkspaceFile) {
+          void this.readWorkspaceFile(hit.filePath).then((content) => {
+            this.stores.selectFileFromTree(hit.filePath, content);
+          });
+        } else {
+          this.stores.selectFileFromTree(hit.filePath);
+        }
       });
       resultsList.appendChild(btn);
     }
 
     this.zone2SearchEl.appendChild(input);
     this.zone2SearchEl.appendChild(resultsList);
+  }
+
+  private requestNativeAnalysis(documentId: string): void {
+    if (!this.analyzeDocument) return;
+    const snapshot = this.editorView.getStoreSnapshot();
+    if (snapshot.documentId !== documentId) return;
+    const requestId = ++this.analysisRequestSequence;
+    void this.analyzeDocument(documentId, snapshot.sessionGeneration)
+      .then((analysis) => {
+        if (requestId !== this.analysisRequestSequence) return;
+        if (this.editorView.getStoreSnapshot().documentId !== documentId) return;
+        this.stores.setAstAnalysis(analysis.symbols, analysis.impactedTests);
+      })
+      .catch(() => {
+        // A newer document switch or edit may invalidate this request; the next host snapshot retries.
+      });
   }
 
   private renderZone2DebugPanel(

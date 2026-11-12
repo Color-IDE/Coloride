@@ -13,6 +13,8 @@ pub struct SandboxCapabilities {
     pub native_os_kind: OsSandboxKind,
     pub fail_closed_enforced: bool,
     pub target_startup_ms: u32,
+    /// False until the native runner can actually create and verify the requested isolation.
+    pub execution_available: bool,
 }
 
 pub fn detect_native_os_sandbox() -> OsSandboxKind {
@@ -31,6 +33,7 @@ pub fn healthcheck() -> SandboxCapabilities {
         native_os_kind: detect_native_os_sandbox(),
         fail_closed_enforced: true,
         target_startup_ms: 5,
+        execution_available: false,
     }
 }
 
@@ -43,6 +46,7 @@ mod tests {
         let caps = healthcheck();
         assert_eq!(caps.subsystem, "sandbox-runner");
         assert!(caps.fail_closed_enforced);
+        assert!(!caps.execution_available);
         assert!(caps.target_startup_ms <= 5);
     }
 }

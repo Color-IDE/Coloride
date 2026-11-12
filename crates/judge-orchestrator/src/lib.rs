@@ -5,6 +5,8 @@ pub struct JudgeHealthStatus {
     pub subsystem: String,
     pub max_auto_retries: u8,
     pub deterministic_evidence_required: bool,
+    /// False while the task state machine and authorization engine are not yet implemented.
+    pub policy_engine_operational: bool,
 }
 
 pub fn healthcheck() -> JudgeHealthStatus {
@@ -12,6 +14,7 @@ pub fn healthcheck() -> JudgeHealthStatus {
         subsystem: "judge-orchestrator".to_string(),
         max_auto_retries: 2,
         deterministic_evidence_required: true,
+        policy_engine_operational: false,
     }
 }
 
@@ -25,5 +28,6 @@ mod tests {
         assert_eq!(status.subsystem, "judge-orchestrator");
         assert_eq!(status.max_auto_retries, 2);
         assert!(status.deterministic_evidence_required);
+        assert!(!status.policy_engine_operational);
     }
 }
