@@ -112,7 +112,7 @@ function ColorideDesktopApp() {
           ...(restoredWorkspaceNodes ? { initialFileTree: restoredWorkspaceNodes } : {}),
           openWorkspace: async () => {
             const selected = await open({ directory: true, multiple: false });
-            if (!selected) return [];
+            if (!selected) return null;
             const nodes = await invoke<NativeWorkspaceNode[]>("load_workspace_command", {
               root: selected,
             });

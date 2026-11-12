@@ -1,3 +1,9 @@
+import {
+  type WorkspaceNavigationActions,
+  type WorkspaceNavigationState,
+  createWorkspaceNavigation,
+} from "./workspace-navigation.js";
+export type { WorkGroup, WorkspaceNavigationState } from "./workspace-navigation.js";
 import type {
   ColorideValidationState,
   ConfidenceLevel,
@@ -125,7 +131,8 @@ export interface Zone4InspectorState {
   readonly recoveredFromWal: boolean;
 }
 
-export interface CockpitStoreBundle {
+export interface CockpitStoreBundle extends WorkspaceNavigationActions {
+  renameChat(id: string, title: string): void;
   readonly zone1: AtomicStore<Zone1ActivityState>;
   readonly zone2: AtomicStore<Zone2SidebarState>;
   readonly zone3: AtomicStore<Zone3MultiChatState>;
@@ -200,6 +207,7 @@ function redactSecretsInLine(line: string): {
 }
 
 export function createCockpitStoreBundle(options?: {
+  initialNavigation?: WorkspaceNavigationState | undefined;
   initialPersona?: CockpitPersonaMode | undefined;
   initialGridMode?: CockpitGridMode | undefined;
   initialInspectorTab?: InspectorTab | undefined;
@@ -321,6 +329,14 @@ export function createCockpitStoreBundle(options?: {
     recoveredFromWal: options?.initialRecoveredFromWal ?? false,
   });
 
+  const navigationActions = createWorkspaceNavigation(
+    options?.initialNavigation,
+    initialChats.map((chat) => chat.chatId),
+    () => zone3.getState().chats.map((chat) => chat.chatId),
+    (chatId) => bundle.selectChat(chatId),
+  );
+  const { navigation } = navigationActions;
+
   const sectionByDigit: Record<string, ActivityBarSection> = {
     "1": "sessions",
     "2": "files",
@@ -330,7 +346,26 @@ export function createCockpitStoreBundle(options?: {
     "6": "mcp",
   };
 
-  return {
+  const bundle: CockpitStoreBundle = {
+    ...navigationActions,
+    renameChat(id: string, title: string): void {
+      const trimmed = title.trim();
+      if (
+        !trimmed ||
+        !zone3.getState().chats.some((chat) => chat.chatId === id && chat.title !== trimmed)
+      )
+        return;
+      zone3.setState((prev) => ({
+        ...prev,
+        chats: prev.chats.map((chat) => (chat.chatId === id ? { ...chat, title: trimmed } : chat)),
+      }));
+      zone2.setState((prev) => ({
+        ...prev,
+        sessions: prev.sessions.map((session) =>
+          session.chatId === id ? { ...session, title: trimmed } : session,
+        ),
+      }));
+    },
     zone1,
     zone2,
     zone3,
@@ -429,10 +464,22 @@ export function createCockpitStoreBundle(options?: {
         return 0;
       }
 
-      zone3.setState((prev) => ({
-        ...prev,
-        activeChatId: chatId,
-      }));
+      const currentNavigation = navigation.getState();
+      const group = currentNavigation.groups.find((group) => group.chatIds.includes(chatId));
+      if (
+        group &&
+        (currentNavigation.activeGroupId !== group.id || group.lastActiveChatId !== chatId)
+      ) {
+        navigation.setState((prev) => ({
+          ...prev,
+          activeGroupId: group.id,
+          groups: prev.groups.map((item) =>
+            item.id === group.id ? { ...item, lastActiveChatId: chatId } : item,
+          ),
+        }));
+      }
+      if (chatState.activeChatId !== chatId)
+        zone3.setState((prev) => ({ ...prev, activeChatId: chatId }));
 
       const nextDocId = targetChat.targetDocumentId ?? zone4.getState().activeDocumentId;
       const bufRecord = documentBuffers.get(nextDocId);
@@ -456,7 +503,11 @@ export function createCockpitStoreBundle(options?: {
         return;
       }
       const nextChats = z3.chats.filter((c) => c.chatId !== chatId);
-      const nextActiveChat = z3.activeChatId === chatId ? (nextChats[0] ?? z3.chats[0]) : undefined;
+      const group = navigation.getState().groups.find((group) => group.chatIds.includes(chatId));
+      const nextActiveChat =
+        z3.activeChatId === chatId
+          ? (nextChats.find((chat) => group?.chatIds.includes(chat.chatId)) ?? nextChats[0])
+          : undefined;
 
       zone2.setState((prev) => ({
         ...prev,
@@ -469,6 +520,21 @@ export function createCockpitStoreBundle(options?: {
         activeChatId: nextActiveChat ? nextActiveChat.chatId : prev.activeChatId,
       }));
 
+      navigation.setState((prev) => ({
+        ...prev,
+        groups: prev.groups.map((group) =>
+          group.chatIds.includes(chatId)
+            ? {
+                ...group,
+                chatIds: group.chatIds.filter((id) => id !== chatId),
+                lastActiveChatId:
+                  group.lastActiveChatId === chatId
+                    ? group.chatIds.find((id) => id !== chatId)
+                    : group.lastActiveChatId,
+              }
+            : group,
+        ),
+      }));
       if (nextActiveChat) {
         this.selectChat(nextActiveChat.chatId);
       }
@@ -705,4 +771,5 @@ export function createCockpitStoreBundle(options?: {
       });
     },
   };
+  return bundle;
 }
