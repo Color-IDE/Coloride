@@ -4,12 +4,24 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@tauri-apps/api": "2.12.4",
+    "@tauri-apps/plugin-dialog": "2.8.4",
     "@coloride/editor-cm6": "workspace:*",
     "@coloride/protocol-types": "workspace:*",
-    "@coloride/web-ui": "workspace:*"
+    "@coloride/web-ui": "workspace:*",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.2",
+    "@vitejs/plugin-react": "5.1.1",
+    "vite": "7.2.2"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "dev": "vite --host 127.0.0.1 --port 1420 --strictPort",
+    "tauri": "tauri",
+    "build": "tsc -p tsconfig.json && vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run src"
   }

@@ -605,3 +605,58 @@ describe("@coloride/web-ui — LOT-005 4-Zone Cockpit, Virtualization & Streamin
     rootContainer.remove();
   });
 });
+
+describe("@coloride/web-ui — native onboarding bridge", () => {
+  it("imports a redacted native migration report without launching a process", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const editorView = new ColorideEditorView({
+      initialDocumentId: "untitled:test.ts",
+      initialContent: "",
+      ipcChannel: new InMemoryBinaryHostBridge(),
+    });
+    const controller = new OnboardingModalController(editorView);
+    controller.setNativeImportLoader(async () => ({
+      settings: {
+        color_theme: "Imported Dark",
+        icon_theme: "Imported Icons",
+        font_family: "JetBrains Mono",
+        font_size: 15,
+        tab_size: 2,
+        insert_spaces: true,
+        keymap_preset: "VsCode",
+      },
+      keybindings: [],
+      quarantined_mcp_servers: [
+        {
+          server_name: "local-tools",
+          command: "node",
+          args: ["server.js"],
+          redacted_env: { API_TOKEN: REDACTED_ENV_VALUE },
+          status: "PendingApproval",
+          enabled: false,
+          approval_required: true,
+          security_warnings: [],
+        },
+      ],
+      project_conventions: [],
+      degraded_files: [],
+      elapsed_ms: 4,
+      processes_launched: 0,
+      security_permissions_changed: 0,
+    }));
+    const modal = controller.mountModal(host);
+    modal.querySelector<HTMLButtonElement>(".coloride-onboarding-import-btn")?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const state = controller.store.getState();
+    expect(state.colorTheme).toBe("Imported Dark");
+    expect(state.quarantinedMcpServers[0]?.redactedEnv.API_TOKEN).toBe(REDACTED_ENV_VALUE);
+    expect(state.quarantinedMcpServers[0]?.enabled).toBe(false);
+    expect(state.processesLaunchedDuringImport).toBe(0);
+
+    controller.destroy();
+    editorView.destroy();
+    host.remove();
+  });
+});

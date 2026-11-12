@@ -139,6 +139,7 @@ export interface CockpitStoreBundle {
   setInspectorTab(tab: InspectorTab): void;
   selectChat(chatId: string): number;
   closeChat(chatId: string): void;
+  setFileTree(fileTree: readonly CockpitFileTreeNode[]): void;
   selectFileFromTree(filePath: string, contentOverride?: string): number;
   getDocumentContent(filePath: string): string | undefined;
   updateInMemoryDocumentContent(
@@ -148,6 +149,11 @@ export interface CockpitStoreBundle {
   ): void;
   markDocumentSaved(filePath: string): void;
   runGlobalSearch(query: string): readonly CockpitSearchResultItem[];
+  setGlobalSearchResults(query: string, results: readonly CockpitSearchResultItem[]): void;
+  setAstAnalysis(
+    symbols: readonly CockpitAstSymbolItem[],
+    impactedTests: readonly CockpitImpactedTestItem[],
+  ): void;
   refreshAstAndImpactedTests(filePath: string, content: string): void;
   startAgentTaskOnChat(chatId: string): "Running" | "QueuedSequential";
   completeAgentTaskOnChat(chatId: string): void;
@@ -211,7 +217,7 @@ export function createCockpitStoreBundle(options?: {
       chatId: "chat-1",
       title: "#1 Login UI",
       modelName: "Codex",
-      validationState: "ValidatedGreen",
+      validationState: "UnchangedBlue",
       targetDocumentId: options?.initialActiveDocumentId ?? "src/auth/login.tsx",
       targetDocumentContent: "export function LoginView() {\n  return true;\n}\n",
       previewUrl: "preview://local/login",
@@ -329,6 +335,15 @@ export function createCockpitStoreBundle(options?: {
     zone2,
     zone3,
     zone4,
+
+    setFileTree(fileTree: readonly CockpitFileTreeNode[]): void {
+      zone2.setState((prev) => ({
+        ...prev,
+        fileTree,
+        focusedFileIndex: 0,
+        fileTreeScrollTop: 0,
+      }));
+    },
 
     setActivitySection(section: ActivityBarSection): void {
       if (section === "debug") {
@@ -614,6 +629,25 @@ export function createCockpitStoreBundle(options?: {
         searchResults: results,
       }));
       return results;
+    },
+
+    setGlobalSearchResults(query: string, results: readonly CockpitSearchResultItem[]): void {
+      zone2.setState((prev) => ({
+        ...prev,
+        searchQuery: query,
+        searchResults: results,
+      }));
+    },
+
+    setAstAnalysis(
+      astSymbols: readonly CockpitAstSymbolItem[],
+      impactedTests: readonly CockpitImpactedTestItem[],
+    ): void {
+      zone2.setState((prev) => ({
+        ...prev,
+        astSymbols,
+        impactedTests,
+      }));
     },
 
     /**

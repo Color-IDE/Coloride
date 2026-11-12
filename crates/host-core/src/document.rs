@@ -98,6 +98,8 @@ pub enum DocumentError {
     Offset(#[from] OffsetConversionError),
     #[error("WAL journal error: {0}")]
     Journal(#[from] JournalError),
+    #[error("Editor IPC codec error: {0}")]
+    EditorIpc(String),
     #[error("Disk I/O error at {path}: {source}")]
     Io {
         path: PathBuf,

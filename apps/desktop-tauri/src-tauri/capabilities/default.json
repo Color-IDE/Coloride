@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main-capability",
+  "description": "Minimal capability for the local Coloride control window",
+  "windows": ["main"],
+  "permissions": ["core:default", "dialog:allow-open"]
+}

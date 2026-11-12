@@ -227,6 +227,7 @@ export interface ColorideEditorStoreSnapshot {
   readonly activeKeymapPreset: KeymapPresetId;
   readonly activeThemeLabel: string;
   readonly loadedVsixCount: number;
+  readonly lastIpcError: string | null;
 }
 
 export interface ColorideEditorOptions {
@@ -253,6 +254,7 @@ export class ColorideEditorView {
   private imePreviewLength = 0;
   private pendingSaveWaiters: Array<() => void> = [];
   private lastAckSnapshot: EditorSnapshot | null = null;
+  private lastIpcError: string | null = null;
   private droppedStaleIpcPackets = 0;
   private mountCount = 0;
   private activeKeymapPreset: KeymapPresetId;
@@ -272,7 +274,9 @@ export class ColorideEditorView {
     this.ipcChannel = options.ipcChannel;
     this.activeKeymapPreset = options.initialKeymapPreset ?? "VsCode";
     this.activeTheme = options.initialTheme ?? DEFAULT_COLORIDE_CM6_THEME;
-    this.ipcChannel.openDocument(this.documentId, this.sessionGeneration, options.initialContent);
+    this.trackIpcOperation(
+      this.ipcChannel.openDocument(this.documentId, this.sessionGeneration, options.initialContent),
+    );
 
     this.unsubscribeIpc = this.ipcChannel.onBinarySnapshot((payload) => {
       this.handleIncomingBinarySnapshot(payload);
@@ -342,7 +346,9 @@ export class ColorideEditorView {
     this.imePreviewLength = 0;
     this.lastAckSnapshot = null;
 
-    this.ipcChannel.openDocument(this.documentId, this.sessionGeneration, nextContent);
+    this.trackIpcOperation(
+      this.ipcChannel.openDocument(this.documentId, this.sessionGeneration, nextContent),
+    );
 
     view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: nextContent },
@@ -471,6 +477,7 @@ export class ColorideEditorView {
       activeKeymapPreset: this.activeKeymapPreset,
       activeThemeLabel: this.activeTheme.label,
       loadedVsixCount: this.loadedVsixBundles.length,
+      lastIpcError: this.lastIpcError,
     };
   }
 
@@ -717,7 +724,7 @@ export class ColorideEditorView {
         };
 
         const binaryPayload = encodeEditorTransactionBinary(tx);
-        void this.ipcChannel.sendBinaryTransaction(binaryPayload);
+        this.trackIpcOperation(this.ipcChannel.sendBinaryTransaction(binaryPayload));
         this.notifyStoreListeners();
       }),
     ];
@@ -737,7 +744,16 @@ export class ColorideEditorView {
     }
 
     this.lastAckSnapshot = snapshot;
+    this.lastIpcError = null;
     this.notifyStoreListeners();
+  }
+
+  private trackIpcOperation(operation: void | Promise<void>): void {
+    if (!operation) return;
+    void operation.catch((error: unknown) => {
+      this.lastIpcError = error instanceof Error ? error.message : "Editor IPC operation failed";
+      this.notifyStoreListeners();
+    });
   }
 
   private notifyStoreListeners(): void {

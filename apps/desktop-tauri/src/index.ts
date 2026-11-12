@@ -1,4 +1,5 @@
 import {
+  type BinaryIpcChannel,
   ColorideEditorView,
   type EditorRangeDecoration,
   InMemoryBinaryHostBridge,
@@ -8,12 +9,14 @@ import {
   type ActivityBarSection,
   type CockpitChatTab,
   CockpitDomController,
+  type CockpitDomControllerOptions,
   type CockpitFileTreeNode,
   type CockpitGridMode,
   type CockpitPersonaMode,
   type CockpitStoreBundle,
   FrameBatchedStreamRenderer,
   type InspectorTab,
+  type NativeMigrationReport,
   OnboardingModalController,
   createCockpitStoreBundle,
   createInitialCockpitShellState,
@@ -71,13 +74,20 @@ export interface LazyBootDesktopOptions {
   readonly initialChats?: readonly CockpitChatTab[];
   readonly initialFileTree?: readonly CockpitFileTreeNode[];
   readonly initialDecorations?: readonly EditorRangeDecoration[];
+  readonly ipcChannel?: BinaryIpcChannel;
+  readonly openWorkspace?: CockpitDomControllerOptions["openWorkspace"];
+  readonly readWorkspaceFile?: CockpitDomControllerOptions["readWorkspaceFile"];
+  readonly searchWorkspace?: CockpitDomControllerOptions["searchWorkspace"];
+  readonly analyzeDocument?: CockpitDomControllerOptions["analyzeDocument"];
+  readonly loadNativeMigrationReport?: () => Promise<NativeMigrationReport>;
+  readonly initializeBackgroundServices?: () => Promise<BackgroundServicesState>;
 }
 
-export interface LazyBootDesktopHandle {
+export interface LazyBootDesktopHandle<TChannel extends BinaryIpcChannel = BinaryIpcChannel> {
   readonly appId: "dev.coloride.desktop";
   readonly bootToInteractiveMs: number;
   readonly restoredSessionCache: WorkspaceSessionCacheSnapshot;
-  readonly ipcChannel: InMemoryBinaryHostBridge;
+  readonly ipcChannel: TChannel;
   readonly stores: CockpitStoreBundle;
   readonly editorView: ColorideEditorView;
   readonly onboardingController: OnboardingModalController;
@@ -85,6 +95,7 @@ export interface LazyBootDesktopHandle {
   readonly domController: CockpitDomController | null;
   getBackgroundServicesState(): BackgroundServicesState;
   waitForBackgroundServices(): Promise<BackgroundServicesState>;
+  setWorkspaceRoot(workspaceRoot: string): void;
   exportSessionCacheBinary(): Uint8Array;
   destroy(): void;
 }
@@ -101,7 +112,15 @@ function nowMs(): number {
  * 1. Immediately decode `workspace_session_cache.bin` (if provided) and restore window layout + active `ColorideEditorView` buffer (`p95 ≤ 3 s`).
  * 2. Schedule low-priority background initialization of `vtsls`, `Biome`, `SQLite FTS5`, and `Sandbox warm pool` after interactive boot.
  */
-export function lazyBootDesktopCockpit(options?: LazyBootDesktopOptions): LazyBootDesktopHandle {
+export function lazyBootDesktopCockpit(
+  options?: LazyBootDesktopOptions & { readonly ipcChannel?: undefined },
+): LazyBootDesktopHandle<InMemoryBinaryHostBridge>;
+export function lazyBootDesktopCockpit<TChannel extends BinaryIpcChannel>(
+  options: LazyBootDesktopOptions & { readonly ipcChannel: TChannel },
+): LazyBootDesktopHandle<TChannel>;
+export function lazyBootDesktopCockpit(
+  options?: LazyBootDesktopOptions,
+): LazyBootDesktopHandle<BinaryIpcChannel> {
   const t0 = nowMs();
   const defaultCache: WorkspaceSessionCacheSnapshot = {
     schemaVersion: CONTRACT_SCHEMA_VERSION,
@@ -122,8 +141,9 @@ export function lazyBootDesktopCockpit(options?: LazyBootDesktopOptions): LazyBo
   const restoredSessionCache = options?.cachedSessionBytes
     ? decodeWorkspaceSessionCacheBinary(options.cachedSessionBytes)
     : defaultCache;
+  let workspaceRoot = restoredSessionCache.workspaceRoot;
 
-  const ipcChannel = new InMemoryBinaryHostBridge();
+  const ipcChannel = options?.ipcChannel ?? new InMemoryBinaryHostBridge();
   const stores = createCockpitStoreBundle({
     initialPersona: restoredSessionCache.activePersona,
     initialGridMode: restoredSessionCache.gridMode,
@@ -148,8 +168,8 @@ export function lazyBootDesktopCockpit(options?: LazyBootDesktopOptions): LazyBo
       {
         fromLine: 1,
         toLine: 1,
-        state: "ValidatedGreen",
-        snapshotHash: "lazy-boot-init",
+        state: "UnchangedBlue",
+        snapshotHash: "unvalidated-local-buffer",
       },
     ],
   });
@@ -158,6 +178,9 @@ export function lazyBootDesktopCockpit(options?: LazyBootDesktopOptions): LazyBo
     ...createInitialOnboardingState(),
     modalOpen: false,
   });
+  if (options?.loadNativeMigrationReport) {
+    onboardingController.setNativeImportLoader(options.loadNativeMigrationReport);
+  }
 
   const streamRenderer = new FrameBatchedStreamRenderer(stores.zone3);
 
@@ -168,6 +191,10 @@ export function lazyBootDesktopCockpit(options?: LazyBootDesktopOptions): LazyBo
       stores,
       editorView,
       onboardingController,
+      ...(options?.openWorkspace ? { openWorkspace: options.openWorkspace } : {}),
+      ...(options?.readWorkspaceFile ? { readWorkspaceFile: options.readWorkspaceFile } : {}),
+      ...(options?.searchWorkspace ? { searchWorkspace: options.searchWorkspace } : {}),
+      ...(options?.analyzeDocument ? { analyzeDocument: options.analyzeDocument } : {}),
     });
   }
 
@@ -180,17 +207,20 @@ export function lazyBootDesktopCockpit(options?: LazyBootDesktopOptions): LazyBo
     sandboxWarmPoolReady: false,
   };
 
-  const bgPromise = new Promise<BackgroundServicesState>((resolve) => {
-    setTimeout(() => {
-      bgState = {
-        vtslsLspReady: true,
-        biomeDaemonReady: true,
-        sqliteFts5Ready: true,
-        sandboxWarmPoolReady: true,
-      };
-      resolve(bgState);
-    }, 5);
-  });
+  const bgPromise = options?.initializeBackgroundServices
+    ? options.initializeBackgroundServices().then((state) => {
+        bgState = state;
+        return state;
+      })
+    : Promise.resolve().then(() => {
+        bgState = {
+          vtslsLspReady: true,
+          biomeDaemonReady: true,
+          sqliteFts5Ready: true,
+          sandboxWarmPoolReady: true,
+        };
+        return bgState;
+      });
 
   return {
     appId: "dev.coloride.desktop",
@@ -208,6 +238,9 @@ export function lazyBootDesktopCockpit(options?: LazyBootDesktopOptions): LazyBo
     waitForBackgroundServices(): Promise<BackgroundServicesState> {
       return bgPromise;
     },
+    setWorkspaceRoot(nextWorkspaceRoot: string): void {
+      workspaceRoot = nextWorkspaceRoot;
+    },
     exportSessionCacheBinary(): Uint8Array {
       const z1 = stores.zone1.getState();
       const z2 = stores.zone2.getState();
@@ -215,7 +248,7 @@ export function lazyBootDesktopCockpit(options?: LazyBootDesktopOptions): LazyBo
       const z4 = stores.zone4.getState();
       return encodeWorkspaceSessionCacheBinary({
         schemaVersion: CONTRACT_SCHEMA_VERSION,
-        workspaceRoot: restoredSessionCache.workspaceRoot,
+        workspaceRoot,
         activePersona: z1.activePersona,
         activeActivityPanel: z1.activeSection,
         gridMode: z3.gridMode,
