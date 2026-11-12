@@ -1,5 +1,6 @@
 import type { ColorideEditorView } from "@coloride/editor-cm6";
 import { OnboardingModalController, createInitialOnboardingState } from "./onboarding-modal.js";
+import { WorkspaceSidebar } from "./sidebar/workspace-sidebar.js";
 import {
   type ActivityBarSection,
   COLORIDE_DESIGN_TOKENS,
@@ -18,7 +19,9 @@ export interface CockpitDomControllerOptions {
   readonly stores: CockpitStoreBundle;
   readonly editorView: ColorideEditorView;
   readonly onboardingController?: OnboardingModalController;
-  readonly openWorkspace?: () => Promise<readonly import("./stores.js").CockpitFileTreeNode[]>;
+  readonly openWorkspace?: () => Promise<
+    readonly import("./stores.js").CockpitFileTreeNode[] | null
+  >;
   readonly readWorkspaceFile?: (path: string) => Promise<string>;
   readonly searchWorkspace?: (
     query: string,
@@ -89,9 +92,6 @@ const PERSONA_OPTIONS: readonly {
   { mode: "Data", labelFr: "Données" },
 ];
 
-const TAB_CLOSE_ICON_SVG =
-  '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.25 3.25l5.5 5.5M8.75 3.25l-5.5 5.5"/></svg>';
-
 /**
  * 4-Zone Multi-Chat Cockpit DOM Controller enforcing:
  * - Zone 1 (`48px` Activity Bar) with keyboard navigation (`Cmd/Ctrl+1..6`, arrow keys).
@@ -118,9 +118,9 @@ export class CockpitDomController {
   private outerTopBarEl!: HTMLElement;
   private zone3HeaderEl!: HTMLElement;
   private zone4HeaderEl!: HTMLElement;
-  private zone4FileBadgeEl: HTMLElement | null = null;
   private zone1El!: HTMLElement;
   private zone2El!: HTMLElement;
+  private zone2ProjectControlsEl!: HTMLElement;
   private zone2SessionsEl!: HTMLElement;
   private zone2FileTreeEl!: HTMLElement;
   private zone2SearchEl!: HTMLElement;
@@ -133,6 +133,7 @@ export class CockpitDomController {
   private zone4EditorHostEl!: HTMLElement;
   private zone4RenderCount = 0;
   private analysisRequestSequence = 0;
+  private readonly workspaceSidebar: WorkspaceSidebar;
 
   constructor(options: CockpitDomControllerOptions) {
     this.rootContainer = options.rootContainer;
@@ -158,6 +159,12 @@ export class CockpitDomController {
     );
 
     this.buildStaticSkeleton();
+    this.workspaceSidebar = new WorkspaceSidebar({
+      controlsHost: this.zone2ProjectControlsEl,
+      treeHost: this.zone2SessionsEl,
+      stores: this.stores,
+      ...(this.openWorkspace ? { openWorkspace: this.openWorkspace } : {}),
+    });
     this.onboardingController.mountModal(this.cockpitShellEl);
     this.renderZone1();
     this.renderZone2();
@@ -168,6 +175,15 @@ export class CockpitDomController {
     this.editorView.mount(this.zone4EditorHostEl);
 
     this.unsubscribers.push(
+      this.stores.navigation.subscribeSelector(
+        (state) =>
+          [
+            state.activeGroupId,
+            state.groups.map((group) => `${group.id}:${group.title}`).join("|"),
+          ] as const,
+        () => this.renderZone3(),
+        (a, b) => a[0] === b[0] && a[1] === b[1],
+      ),
       this.stores.zone1.subscribe(() => {
         this.renderZone1();
         this.renderZone2();
@@ -175,9 +191,7 @@ export class CockpitDomController {
       this.stores.zone2.subscribe(() => {
         this.renderZone2();
       }),
-      this.stores.zone3.subscribe(() => {
-        this.renderZone3();
-      }),
+      this.stores.zone3.subscribe(() => this.renderZone3()),
       this.stores.zone4.subscribe((next, prev) => {
         this.zone4RenderCount += 1;
         this.renderZone4HeaderAndVisibility();
@@ -263,6 +277,7 @@ export class CockpitDomController {
       unsub();
     }
     this.unsubscribers.length = 0;
+    this.workspaceSidebar.destroy();
     if (this.ownsOnboardingController) {
       this.onboardingController.destroy();
     }
@@ -361,7 +376,7 @@ export class CockpitDomController {
     this.zone2El.style.overflow = "auto";
 
     this.zone2SessionsEl = doc.createElement("div");
-    this.zone2SessionsEl.className = "coloride-zone-2-sessions flex flex-col gap-1";
+    this.zone2SessionsEl.className = "sidebar-navigation";
     this.zone2FileTreeEl = doc.createElement("div");
     this.zone2FileTreeEl.className = "coloride-zone-2-file-tree";
     this.zone2SearchEl = doc.createElement("div");
@@ -370,6 +385,9 @@ export class CockpitDomController {
     this.zone2DebugEl.className = "coloride-zone-2-debug flex flex-col gap-2";
     this.zone2McpEl = doc.createElement("div");
     this.zone2McpEl.className = "coloride-zone-2-mcp flex flex-col gap-2";
+    this.zone2ProjectControlsEl = doc.createElement("div");
+    this.zone2ProjectControlsEl.className = "sidebar-project-controls";
+    this.zone2El.appendChild(this.zone2ProjectControlsEl);
     this.zone2El.appendChild(this.zone2SessionsEl);
     this.zone2El.appendChild(this.zone2FileTreeEl);
     this.zone2El.appendChild(this.zone2SearchEl);
@@ -485,6 +503,8 @@ export class CockpitDomController {
     const showDebug = z1.activeSection === "debug";
     const showMcp = z1.activeSection === "mcp";
 
+    this.zone2ProjectControlsEl.hidden = !showSessions;
+    this.zone2ProjectControlsEl.style.display = showSessions ? "flex" : "none";
     this.zone2SessionsEl.hidden = !showSessions;
     this.zone2SessionsEl.style.display = showSessions ? "block" : "none";
     this.zone2FileTreeEl.hidden = !showFiles;
@@ -495,27 +515,6 @@ export class CockpitDomController {
     this.zone2DebugEl.style.display = showDebug ? "flex" : "none";
     this.zone2McpEl.hidden = !showMcp;
     this.zone2McpEl.style.display = showMcp ? "flex" : "none";
-
-    // Render session badges (visible on 1st tab of Z1: "sessions")
-    this.zone2SessionsEl.innerHTML = "";
-    this.zone2SessionsEl.setAttribute("role", "list");
-    this.zone2SessionsEl.setAttribute("aria-label", "Sessions de Chat");
-    for (const session of z2.sessions) {
-      const token = COLORIDE_DESIGN_TOKENS[session.validationState];
-      const item = doc.createElement("button");
-      item.type = "button";
-      item.className = "coloride-sidebar-session-item";
-      item.setAttribute("role", "listitem");
-      item.dataset.chatId = session.chatId;
-      item.dataset.validationState = session.validationState;
-      item.setAttribute("aria-label", `${session.title} — ${token.labelFr}`);
-      item.style.borderLeft = `3px solid ${token.darkBorder}`;
-      item.textContent = `${token.icon} ${session.title} (${session.modelName})`;
-      item.addEventListener("click", () => {
-        this.stores.selectChat(session.chatId);
-      });
-      this.zone2SessionsEl.appendChild(item);
-    }
 
     // Virtualize the file tree (visible on 2nd tab of Z1: "files") so > 50,000 files render in O(1) DOM nodes
     if (z2.fileTree.length === 0 && this.openWorkspace) {
@@ -528,7 +527,9 @@ export class CockpitDomController {
         openButton.disabled = true;
         openButton.textContent = "Opening…";
         void this.openWorkspace?.()
-          .then((fileTree) => this.stores.setFileTree(fileTree))
+          .then((fileTree) => {
+            if (fileTree) this.stores.setFileTree(fileTree);
+          })
           .catch((error: unknown) => {
             openButton.textContent =
               error instanceof Error ? error.message : "Unable to open folder";
@@ -737,23 +738,17 @@ export class CockpitDomController {
     tabBar.setAttribute("data-tauri-drag-region", "");
     tabBar.setAttribute("role", "tablist");
 
-    for (const chat of z3.chats) {
-      const token = COLORIDE_DESIGN_TOKENS[chat.validationState];
-      const tabBtn = this.createHeaderTabButton(doc, {
-        className: "coloride-chat-tab",
-        iconText: token.icon,
-        labelText: chat.title,
-        selected: z3.activeChatId === chat.chatId,
-        ariaLabel: `${chat.title} — ${token.labelFr}`,
-        dataset: { chatId: chat.chatId },
-        onSelect: () => {
-          this.stores.selectChat(chat.chatId);
-        },
-        onClose: () => {
-          this.stores.closeChat(chat.chatId);
-        },
-      });
-      tabBar.appendChild(tabBtn);
+    const navigation = this.stores.navigation.getState();
+    const activeGroup = navigation.groups.find((group) => group.id === navigation.activeGroupId);
+    for (const group of navigation.groups) {
+      const tab = doc.createElement("button");
+      tab.type = "button";
+      tab.className = "coloride-chat-tab coloride-work-group-tab";
+      tab.setAttribute("role", "tab");
+      tab.setAttribute("aria-selected", String(group.id === navigation.activeGroupId));
+      tab.textContent = group.title;
+      tab.addEventListener("click", () => this.stores.selectWorkGroup(group.id));
+      tabBar.appendChild(tab);
     }
 
     this.zone3HeaderEl.appendChild(tabBar);
@@ -766,7 +761,16 @@ export class CockpitDomController {
     const columns = z3.gridMode === 1 ? 1 : z3.gridMode === 2 ? 2 : 2;
     this.zone3GridEl.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
 
-    const visibleChats = z3.chats.slice(0, z3.gridMode);
+    const groupChats = z3.chats.filter((chat) => activeGroup?.chatIds.includes(chat.chatId));
+    const visibleChats = groupChats.slice(0, z3.gridMode);
+    const selectedChat = groupChats.find((chat) => chat.chatId === z3.activeChatId);
+    if (selectedChat && !visibleChats.includes(selectedChat)) visibleChats[0] = selectedChat;
+    if (visibleChats.length === 0) {
+      const empty = doc.createElement("div");
+      empty.className = "coloride-group-empty";
+      empty.textContent = "This group is empty. Agent and terminal panels will appear here.";
+      this.zone3GridEl.appendChild(empty);
+    }
     for (const chat of visibleChats) {
       const token = COLORIDE_DESIGN_TOKENS[chat.validationState];
       const cell = doc.createElement("section");
@@ -806,9 +810,7 @@ export class CockpitDomController {
   }
 
   private renderZone4HeaderAndVisibility(): void {
-    const doc = this.zone4El.ownerDocument;
     const z4 = this.stores.zone4.getState();
-    const token = COLORIDE_DESIGN_TOKENS[z4.activeValidationState];
 
     this.zone4El.dataset.syncedChatId = z4.syncedChatId;
     this.zone4El.dataset.activeDocumentId = z4.activeDocumentId;
@@ -816,99 +818,11 @@ export class CockpitDomController {
     this.zone4El.dataset.unsavedChanges = String(z4.hasUnsavedChanges);
     this.zone4El.dataset.recoveredFromWal = String(z4.recoveredFromWal);
 
-    // Outer Header above Z4 (separated from Z3's header by `::before`): File tab only
-    this.zone4HeaderEl.innerHTML = "";
-
-    const z4ScrollTrack = doc.createElement("div");
-    z4ScrollTrack.className = "coloride-chat-tab-bar w-full";
-    z4ScrollTrack.setAttribute("data-tauri-drag-region", "");
-
-    const unsavedDot = z4.hasUnsavedChanges ? " ●" : "";
-    const fileTab = this.createHeaderTabButton(doc, {
-      className: "coloride-inspector-doc-badge coloride-chat-tab",
-      iconText: token.icon,
-      labelText: `${z4.activeDocumentId}${unsavedDot}`,
-      selected: true,
-      ariaLabel: `${z4.activeDocumentId} — ${token.labelFr}`,
-      dataset: {
-        unsavedChanges: String(z4.hasUnsavedChanges),
-        recoveredFromWal: String(z4.recoveredFromWal),
-      },
-      onSelect: () => {
-        this.stores.setInspectorTab("code-diff");
-      },
-      onClose: () => {},
-    });
-    this.zone4FileBadgeEl = fileTab;
-
-    z4ScrollTrack.appendChild(fileTab);
-    this.zone4HeaderEl.appendChild(z4ScrollTrack);
-    this.attachDynamicScrollShadows(this.zone4HeaderEl, z4ScrollTrack);
+    this.zone4HeaderEl.replaceChildren();
 
     // CodeMirror 6 editor container is always shown
     this.zone4PreviewHostEl.style.display = "none";
     this.zone4EditorHostEl.style.display = "block";
-  }
-
-  private createHeaderTabButton(
-    doc: Document,
-    options: {
-      readonly className: string;
-      readonly iconText: string;
-      readonly labelText: string;
-      readonly selected: boolean;
-      readonly ariaLabel: string;
-      readonly dataset?: Readonly<Record<string, string>>;
-      readonly onSelect: () => void;
-      readonly onClose: () => void;
-    },
-  ): HTMLElement {
-    const tabEl = doc.createElement("div");
-    tabEl.className = options.className;
-    tabEl.setAttribute("role", "tab");
-    tabEl.setAttribute("tabindex", "0");
-    tabEl.setAttribute("aria-selected", options.selected ? "true" : "false");
-    tabEl.setAttribute("aria-label", options.ariaLabel);
-    if (options.dataset) {
-      for (const [k, v] of Object.entries(options.dataset)) {
-        tabEl.dataset[k] = v;
-      }
-    }
-
-    const iconSpan = doc.createElement("span");
-    iconSpan.className = "coloride-tab-icon";
-    iconSpan.setAttribute("aria-hidden", "true");
-    iconSpan.textContent = options.iconText;
-
-    const labelSpan = doc.createElement("span");
-    labelSpan.className = "coloride-tab-label";
-    labelSpan.textContent = options.labelText;
-
-    const closeBtn = doc.createElement("button");
-    closeBtn.type = "button";
-    closeBtn.className = "coloride-tab-close-btn";
-    closeBtn.setAttribute("aria-label", `Fermer ${options.labelText}`);
-    closeBtn.innerHTML = TAB_CLOSE_ICON_SVG;
-    closeBtn.addEventListener("click", (event: MouseEvent) => {
-      event.stopPropagation();
-      options.onClose();
-    });
-
-    tabEl.appendChild(iconSpan);
-    tabEl.appendChild(labelSpan);
-    tabEl.appendChild(closeBtn);
-
-    tabEl.addEventListener("click", () => {
-      options.onSelect();
-    });
-    tabEl.addEventListener("keydown", (event: KeyboardEvent) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        options.onSelect();
-      }
-    });
-
-    return tabEl;
   }
 
   private attachDynamicScrollShadows(headerEl: HTMLElement, scrollEl: HTMLElement): void {
@@ -1025,15 +939,6 @@ export class CockpitDomController {
   }
 
   private syncZone4UnsavedIndicatorInPlace(hasUnsavedChanges: boolean): void {
-    const z4 = this.stores.zone4.getState();
     this.zone4El.dataset.unsavedChanges = String(hasUnsavedChanges);
-    if (this.zone4FileBadgeEl) {
-      this.zone4FileBadgeEl.dataset.unsavedChanges = String(hasUnsavedChanges);
-      const labelEl = this.zone4FileBadgeEl.querySelector<HTMLElement>(".coloride-tab-label");
-      const unsavedDot = hasUnsavedChanges ? " ●" : "";
-      if (labelEl) {
-        labelEl.textContent = `${z4.activeDocumentId}${unsavedDot}`;
-      }
-    }
   }
 }

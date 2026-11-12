@@ -8,6 +8,60 @@ import {
 } from "./index.js";
 
 describe("@coloride/desktop-tauri — LOT-005 Lazy Boot & Inspector Sync", () => {
+  it("restores work groups and their selected header tab from the session cache", () => {
+    const first = lazyBootDesktopCockpit();
+    first.stores.createWorkGroup("Authentication");
+    const cachedSessionBytes = first.exportSessionCacheBinary();
+    first.destroy();
+    const restored = lazyBootDesktopCockpit({ cachedSessionBytes });
+    expect(restored.stores.navigation.getState().groups.at(-1)?.title).toBe("Authentication");
+    const previousId = restored.stores.navigation.getState().activeGroupId;
+    restored.stores.createWorkGroup("Sidebar");
+    expect(restored.stores.navigation.getState().activeGroupId).not.toBe(previousId);
+    restored.destroy();
+  });
+
+  it("persists folder/group expansion, names, and the last selected session per group", () => {
+    const first = lazyBootDesktopCockpit({
+      initialChats: [
+        {
+          chatId: "a",
+          title: "Implementation",
+          modelName: "Codex",
+          validationState: "UnchangedBlue",
+        },
+        { chatId: "b", title: "Review", modelName: "Claude", validationState: "UnchangedBlue" },
+      ],
+    });
+    first.setWorkspaceRoot("/projects/Coloride");
+    first.stores.renameWorkGroup("initial-group", "Authentication");
+    first.stores.selectChat("b");
+    first.stores.renameChat("b", "Security review");
+    first.stores.setWorkGroupExpanded("initial-group", false);
+    first.stores.setProjectExpanded(false);
+    first.stores.createWorkGroup("Sidebar");
+    const bytes = first.exportSessionCacheBinary();
+    first.destroy();
+    const restored = lazyBootDesktopCockpit({ cachedSessionBytes: bytes });
+    const navigation = restored.stores.navigation.getState();
+    expect(navigation.projectPath).toBe("/projects/Coloride");
+    expect(navigation.expanded).toBe(false);
+    expect(navigation.groups[0]).toMatchObject({
+      title: "Authentication",
+      expanded: false,
+      lastActiveChatId: "b",
+    });
+    expect(restored.stores.zone3.getState().chats.find((chat) => chat.chatId === "b")?.title).toBe(
+      "Security review",
+    );
+    restored.stores.selectWorkGroup("initial-group");
+    expect(restored.stores.zone3.getState().activeChatId).toBe("b");
+    restored.stores.selectWorkGroup("group-1");
+    restored.stores.selectWorkGroup("initial-group");
+    expect(restored.stores.zone3.getState().activeChatId).toBe("b");
+    restored.destroy();
+  });
+
   it("bootstraps the desktop shell with dev.coloride.desktop identifier and isolated CM6 bridge", () => {
     const boot = bootstrapDesktopShell();
     expect(boot.appId).toBe("dev.coloride.desktop");

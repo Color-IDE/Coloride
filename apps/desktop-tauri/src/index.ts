@@ -18,6 +18,7 @@ import {
   type InspectorTab,
   type NativeMigrationReport,
   OnboardingModalController,
+  type WorkspaceNavigationState,
   createCockpitStoreBundle,
   createInitialCockpitShellState,
   createInitialOnboardingState,
@@ -26,6 +27,8 @@ import {
 export const WORKSPACE_SESSION_CACHE_FILENAME = "workspace_session_cache.bin";
 
 export interface WorkspaceSessionCacheSnapshot {
+  readonly navigation?: WorkspaceNavigationState;
+  readonly chats?: readonly CockpitChatTab[];
   readonly schemaVersion: number;
   readonly workspaceRoot: string;
   readonly activePersona: CockpitPersonaMode;
@@ -145,13 +148,14 @@ export function lazyBootDesktopCockpit(
 
   const ipcChannel = options?.ipcChannel ?? new InMemoryBinaryHostBridge();
   const stores = createCockpitStoreBundle({
+    initialNavigation: restoredSessionCache.navigation,
     initialPersona: restoredSessionCache.activePersona,
     initialGridMode: restoredSessionCache.gridMode,
     initialInspectorTab: restoredSessionCache.activeInspectorTab,
     initialActiveSection: restoredSessionCache.activeActivityPanel,
     initialActiveChatId: restoredSessionCache.activeChatId,
     initialActiveDocumentId: restoredSessionCache.activeDocumentId,
-    initialChats: options?.initialChats,
+    initialChats: options?.initialChats ?? restoredSessionCache.chats,
     initialFileTree: options?.initialFileTree,
     initialUiZoomPercent: restoredSessionCache.uiZoomPercent,
   });
@@ -181,6 +185,8 @@ export function lazyBootDesktopCockpit(
   if (options?.loadNativeMigrationReport) {
     onboardingController.setNativeImportLoader(options.loadNativeMigrationReport);
   }
+
+  stores.setProjectPath(workspaceRoot === "/workspace/coloride" ? "" : workspaceRoot);
 
   const streamRenderer = new FrameBatchedStreamRenderer(stores.zone3);
 
@@ -240,6 +246,7 @@ export function lazyBootDesktopCockpit(
     },
     setWorkspaceRoot(nextWorkspaceRoot: string): void {
       workspaceRoot = nextWorkspaceRoot;
+      stores.setProjectPath(nextWorkspaceRoot);
     },
     exportSessionCacheBinary(): Uint8Array {
       const z1 = stores.zone1.getState();
@@ -247,6 +254,8 @@ export function lazyBootDesktopCockpit(
       const z3 = stores.zone3.getState();
       const z4 = stores.zone4.getState();
       return encodeWorkspaceSessionCacheBinary({
+        navigation: stores.navigation.getState(),
+        chats: z3.chats,
         schemaVersion: CONTRACT_SCHEMA_VERSION,
         workspaceRoot,
         activePersona: z1.activePersona,
