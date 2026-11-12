@@ -285,41 +285,25 @@ export class CockpitDomController {
       this.rootContainer.appendChild(this.outerTopBarEl);
     }
 
+    this.outerTopBarEl.setAttribute("data-tauri-drag-region", "");
+
     const topSpacerEl = doc.createElement("div");
     topSpacerEl.className = "coloride-top-header-spacer";
+    topSpacerEl.setAttribute("data-tauri-drag-region", "");
 
     this.zone3HeaderEl = doc.createElement("div");
     this.zone3HeaderEl.className = "coloride-zone-3-header";
+    this.zone3HeaderEl.setAttribute("data-tauri-drag-region", "");
     this.zone3HeaderEl.setAttribute("aria-label", "Header Zone 3 — Onglets de Chat");
 
     this.zone4HeaderEl = doc.createElement("div");
     this.zone4HeaderEl.className = "coloride-zone-4-header";
+    this.zone4HeaderEl.setAttribute("data-tauri-drag-region", "");
     this.zone4HeaderEl.setAttribute("aria-label", "Header Zone 4 — Onglets de l'Inspecteur");
 
     this.outerTopBarEl.appendChild(topSpacerEl);
     this.outerTopBarEl.appendChild(this.zone3HeaderEl);
     this.outerTopBarEl.appendChild(this.zone4HeaderEl);
-
-    this.outerTopBarEl.addEventListener("mousedown", (event: MouseEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target?.closest('[role="tab"], button, input, select, .coloride-header-thin-scrollbar')) {
-        return;
-      }
-      const webkitBridge = (
-        doc.defaultView as unknown as {
-          webkit?: {
-            messageHandlers?: {
-              windowDrag?: { postMessage: (msg: string) => void };
-            };
-          };
-        }
-      )?.webkit?.messageHandlers?.windowDrag;
-      if (event.detail === 2) {
-        webkitBridge?.postMessage("zoom");
-      } else {
-        webkitBridge?.postMessage("drag");
-      }
-    });
 
     this.cockpitShellEl = doc.createElement("div");
     this.cockpitShellEl.className = "coloride-cockpit-shell";
@@ -750,6 +734,7 @@ export class CockpitDomController {
     this.zone3HeaderEl.innerHTML = "";
     const tabBar = doc.createElement("div");
     tabBar.className = "coloride-chat-tab-bar";
+    tabBar.setAttribute("data-tauri-drag-region", "");
     tabBar.setAttribute("role", "tablist");
 
     for (const chat of z3.chats) {
@@ -836,6 +821,7 @@ export class CockpitDomController {
 
     const z4ScrollTrack = doc.createElement("div");
     z4ScrollTrack.className = "coloride-chat-tab-bar w-full";
+    z4ScrollTrack.setAttribute("data-tauri-drag-region", "");
 
     const unsavedDot = z4.hasUnsavedChanges ? " ●" : "";
     const fileTab = this.createHeaderTabButton(doc, {

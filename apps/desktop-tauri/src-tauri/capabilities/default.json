@@ -3,5 +3,5 @@
   "identifier": "main-capability",
   "description": "Minimal capability for the local Coloride control window",
   "windows": ["main"],
-  "permissions": ["core:default", "dialog:allow-open"]
+  "permissions": ["core:default", "core:window:allow-start-dragging", "dialog:allow-open"]
 }
