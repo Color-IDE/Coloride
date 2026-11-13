@@ -48,6 +48,8 @@ export class Inspector {
   private readonly unsavedByProject = new Map<string, Map<string, string>>();
   /** Files shown in the current project, whose in-memory buffer can be trusted. */
   private loadedPaths = new Set<string>();
+  /** Bumped by every open and scope change: a disk read that finishes late is dropped. */
+  private openRequest = 0;
 
   constructor(
     doc: Document,
@@ -85,7 +87,8 @@ export class Inspector {
     this.tree = new FileTreePanel(doc, {
       className: "coloride-zone-4-tree-column",
       withFilter: true,
-      onOpenFile: (node) => this.openFile(node.path, (message) => this.tree.reportError(message)),
+      onOpenFile: (node) =>
+        void this.openFile(node.path, (message) => this.tree.reportError(message)),
       onScroll: options.onTreeScroll,
     });
 
@@ -99,7 +102,7 @@ export class Inspector {
       dataKey: "path",
       closeLabel: uiText.closeTab,
       unsavedLabel: UI_STRINGS.editor.unsaved,
-      onSelect: (path) => this.openFile(path),
+      onSelect: (path) => void this.openFile(path),
       onClose: (path) => this.requestCloseTab(path),
     });
   }
@@ -162,6 +165,11 @@ export class Inspector {
     );
   }
 
+  /** Whether a file is shown in the editor (false for an empty group or after the last tab). */
+  isShowingFile(): boolean {
+    return this.closedDocId === null;
+  }
+
   reportError(message: string): void {
     this.options.header.title = message;
   }
@@ -199,6 +207,7 @@ export class Inspector {
 
     this.projectPath = projectPath;
     this.groupId = groupId;
+    this.openRequest += 1;
     const saved = this.tabsByScope.get(this.scopeKey());
     this.openTabs = saved?.tabs ?? [];
     if (projectChanged) {
@@ -214,15 +223,22 @@ export class Inspector {
     // shown (the one it had open is restored below).
     this.closedDocId = activeId;
     this.update();
-    if (saved?.active) this.openFile(saved.active);
+    if (saved?.active) void this.openFile(saved.active);
   }
 
   /**
    * Shows a file and keeps it as a tab. A file already shown in this project keeps its
    * in-memory content (including unsaved edits); otherwise it is read from disk first.
+   * Resolves to whether the file ended up shown: a read that fails, or that a later open or a
+   * project/group change overtook, shows nothing.
    */
-  openFile(path: string, onError: (message: string) => void = (m) => this.reportError(m)): void {
+  openFile(
+    path: string,
+    onError: (message: string) => void = (m) => this.reportError(m),
+  ): Promise<boolean> {
     const { stores, readWorkspaceFile } = this.options;
+    this.openRequest += 1;
+    const request = this.openRequest;
     const show = (content?: string) => {
       this.closedDocId = null;
       this.loadedPaths.add(path);
@@ -236,13 +252,21 @@ export class Inspector {
     const trusted = this.loadedPaths.has(path) && stores.getDocumentContent(path) !== undefined;
     if (trusted || !readWorkspaceFile) {
       show();
-      return;
+      return Promise.resolve(true);
     }
-    void readWorkspaceFile(path)
-      .then((content) => show(content))
-      .catch((error: unknown) => {
-        onError(error instanceof Error ? error.message : UI_STRINGS.files.readFailed);
-      });
+    return readWorkspaceFile(path).then(
+      (content) => {
+        if (request !== this.openRequest) return false;
+        show(content);
+        return true;
+      },
+      (error: unknown) => {
+        if (request === this.openRequest) {
+          onError(error instanceof Error ? error.message : UI_STRINGS.files.readFailed);
+        }
+        return false;
+      },
+    );
   }
 
   destroy(): void {
@@ -280,9 +304,9 @@ export class Inspector {
       if (choice === "cancel") return;
       if (choice === "save") {
         try {
-          // Only the shown document can be saved: bring the tab forward first.
+          // Only the shown document can be saved: bring the tab forward, and wait until it is.
           if (stores.zone4.getState().activeDocumentId !== path || this.closedDocId !== null) {
-            this.openFile(path);
+            if (!(await this.openFile(path))) return;
           }
           await this.options.saveActiveDocument();
         } catch (error: unknown) {
@@ -308,7 +332,7 @@ export class Inspector {
     }
     const next = this.openTabs[index] ?? this.openTabs[index - 1];
     if (next) {
-      this.openFile(next);
+      void this.openFile(next);
     } else {
       this.closedDocId = path;
       this.update();

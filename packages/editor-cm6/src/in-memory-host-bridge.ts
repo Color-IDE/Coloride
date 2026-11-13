@@ -5,6 +5,9 @@ import {
   encodeEditorSnapshotBinary,
 } from "./binary-ipc.js";
 
+/** Mirrors host-core's `NEVER_SAVED_REVISION`: no interactive revision ever equals it. */
+const NEVER_SAVED_REVISION = 0xffffffff;
+
 function fnv1aHex(text: string): string {
   let hash = 0x811c9dc5;
   for (let i = 0; i < text.length; i += 1) {
@@ -34,6 +37,8 @@ export class InMemoryBinaryHostBridge implements BinaryIpcChannel {
   private readonly latestGenByDoc = new Map<string, number>();
   private readonly artificialDelaysMs = new Map<string, number>();
   private readonly listeners = new Set<(payload: Uint8Array) => void>();
+  /** What "disk" holds per document: the first opened text, then each saved text. */
+  private readonly diskTextByDoc = new Map<string, string>();
 
   setArtificialDelayMs(documentId: string, delayMs: number): void {
     this.artificialDelaysMs.set(documentId, delayMs);
@@ -45,14 +50,17 @@ export class InMemoryBinaryHostBridge implements BinaryIpcChannel {
 
   openDocument(documentId: string, sessionGeneration: number, initialContent: string): void {
     this.latestGenByDoc.set(documentId, sessionGeneration);
+    // Like host-core: a buffer reopened with text that differs from disk starts out unsaved.
+    const diskText = this.diskTextByDoc.get(documentId) ?? initialContent;
+    this.diskTextByDoc.set(documentId, diskText);
     this.buffers.set(this.key(documentId, sessionGeneration), {
       documentId,
       sessionGeneration,
       text: initialContent,
       interactiveRevision: 0,
       journaledRevision: 0,
-      diskSavedRevision: 0,
-      savedDiskText: initialContent,
+      diskSavedRevision: diskText === initialContent ? 0 : NEVER_SAVED_REVISION,
+      savedDiskText: diskText,
     });
   }
 
@@ -113,8 +121,12 @@ export class InMemoryBinaryHostBridge implements BinaryIpcChannel {
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
 
-    record.diskSavedRevision = Math.max(record.diskSavedRevision, targetRev);
+    record.diskSavedRevision =
+      record.diskSavedRevision === NEVER_SAVED_REVISION
+        ? targetRev
+        : Math.max(record.diskSavedRevision, targetRev);
     record.savedDiskText = snapshotText;
+    this.diskTextByDoc.set(documentId, snapshotText);
 
     const snapshot: EditorSnapshot = {
       schema_version: CONTRACT_SCHEMA_VERSION,

@@ -45,7 +45,8 @@ export function createDocumentActions(ctx: StoreContext): DocumentActions {
 
       documents.set(filePath, {
         content,
-        unsaved: existing?.unsaved ?? false,
+        // Content passed in is fresh from disk: it replaces (never inherits) a buffer's edits.
+        unsaved: contentOverride === undefined ? (existing?.unsaved ?? false) : false,
         validationState,
       });
 

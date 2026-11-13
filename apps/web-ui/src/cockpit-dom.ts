@@ -63,11 +63,14 @@ export class CockpitDomController {
   private readonly inspector: Inspector;
   private zone4RenderCount = 0;
   private analysisRequestSequence = 0;
+  /** Project whose file the editor holds (document ids alone do not say which). */
+  private editorProjectPath: string;
 
   constructor(options: CockpitDomControllerOptions) {
     const { rootContainer, stores, editorView } = options;
     this.stores = stores;
     this.editorView = editorView;
+    this.editorProjectPath = stores.navigation.getState().projectPath;
     this.analyzeDocument = options.analyzeDocument;
     this.ownsOnboardingController = !options.onboardingController;
     this.onboardingController =
@@ -101,7 +104,7 @@ export class CockpitDomController {
     this.sidebar = new SidebarPanels(doc, {
       stores,
       onboarding: this.onboardingController,
-      openFile: (path, onError) => this.inspector.openFile(path, onError),
+      openFile: (path, onError) => void this.inspector.openFile(path, onError),
       ...(options.openWorkspace ? { openWorkspace: options.openWorkspace } : {}),
       ...(options.switchWorkspace ? { switchWorkspace: options.switchWorkspace } : {}),
       ...(options.searchWorkspace ? { searchWorkspace: options.searchWorkspace } : {}),
@@ -173,11 +176,23 @@ export class CockpitDomController {
       stores.zone4.subscribe((next, prev) => {
         this.zone4RenderCount += 1;
         this.inspector.update();
-        if (next.activeDocumentId !== prev.activeDocumentId) this.syncEditorDocument(next);
+        // Document ids are paths relative to the project, so the same id in another project is
+        // another file: once one is shown there, the editor must load it too.
+        const projectPath = stores.navigation.getState().projectPath;
+        const otherProjectsFile =
+          this.editorProjectPath !== projectPath && this.inspector.isShowingFile();
+        if (next.activeDocumentId !== prev.activeDocumentId || otherProjectsFile) {
+          this.editorProjectPath = projectPath;
+          this.syncEditorDocument(next);
+        }
       }),
       editorView.subscribe(() => {
         const snap = editorView.getStoreSnapshot();
-        const hasUnsaved = Boolean(snap.lastAckSnapshot?.has_unsaved_changes);
+        // Until host-core acknowledges the shown document (just after a switch), keep the flag the
+        // buffer already had: a file reopened with unsaved edits must not look saved.
+        const hasUnsaved = snap.lastAckSnapshot
+          ? snap.lastAckSnapshot.has_unsaved_changes
+          : stores.isDocumentUnsaved(snap.documentId);
         stores.updateInMemoryDocumentContent(
           snap.documentId,
           editorView.getDocumentText(),
@@ -198,6 +213,8 @@ export class CockpitDomController {
   }
 
   async saveActiveDocument(): Promise<void> {
+    // With no file shown the editor may still hold another group's or project's document.
+    if (!this.inspector.isShowingFile()) return;
     const snap = await this.editorView.requestSave();
     this.stores.markDocumentSaved(snap.document_id);
     this.inspector.setUnsaved(false);

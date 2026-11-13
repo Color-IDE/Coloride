@@ -2,6 +2,7 @@
 import { ColorideEditorView, InMemoryBinaryHostBridge } from "@coloride/editor-cm6";
 import { afterEach, describe, expect, it } from "vitest";
 import { CockpitDomController, createCockpitStoreBundle } from "../index.js";
+import type { Inspector } from "./inspector.js";
 
 describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () => {
   it("shows the project file tree next to the editor and opens files from it", () => {
@@ -376,5 +377,111 @@ describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () =
     expect(stores.navigation.getState().activeGroupId).toBe(emptyId);
     expect(z4Tabs()).toEqual([]);
     expect(empty()).toBe(true);
+  });
+
+  function setupWithDisk(read: (path: string) => Promise<string>) {
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const stores = createCockpitStoreBundle();
+    const ipcChannel = new InMemoryBinaryHostBridge();
+    const editorView = new ColorideEditorView({
+      initialDocumentId: "src/main.ts",
+      initialContent: "const ready = true;",
+      ipcChannel,
+    });
+    const controller = new CockpitDomController({
+      rootContainer: root,
+      stores,
+      editorView,
+      readWorkspaceFile: read,
+    });
+    cleanups.push(() => {
+      controller.destroy();
+      root.remove();
+    });
+    // The Zone 4 inspector's own open, which the tree, the tabs and the search all go through.
+    const inspector = (controller as unknown as { inspector: Inspector }).inspector;
+    const openFile = (path: string) => inspector.openFile(path);
+    return { stores, editorView, ipcChannel, openFile, root };
+  }
+
+  it("loads the other project's file into the editor when both have the same relative path", async () => {
+    const disk: Record<string, string> = {
+      "/projects/a": "name = A",
+      "/projects/b": "name = B",
+    };
+    let project = "/projects/a";
+    const { stores, editorView, openFile } = setupWithDisk(async () => disk[project] as string);
+    stores.setProjectPath(project);
+    expect(await openFile("package.json")).toBe(true);
+    expect(editorView.getDocumentText()).toBe("name = A");
+    const generationInA = editorView.getStoreSnapshot().sessionGeneration;
+
+    project = "/projects/b";
+    stores.setProjectPath(project);
+    expect(await openFile("package.json")).toBe(true);
+    // Same id, other file: the editor (and the host session it saves through) moved to B.
+    expect(editorView.getDocumentText()).toBe("name = B");
+    expect(editorView.getStoreSnapshot().sessionGeneration).toBeGreaterThan(generationInA);
+    expect(stores.isDocumentUnsaved("package.json")).toBe(false);
+  });
+
+  it("drops a disk read that a later open overtook, and saves only the file it waited for", async () => {
+    const pending = new Map<string, (text: string) => void>();
+    const { stores, editorView, openFile } = setupWithDisk(
+      (path) => new Promise((resolve) => pending.set(path, resolve)),
+    );
+    stores.setProjectPath("/projects/a");
+    const big = openFile("big.ts");
+    const small = openFile("small.ts");
+    pending.get("small.ts")?.("small");
+    expect(await small).toBe(true);
+    pending.get("big.ts")?.("big");
+    expect(await big).toBe(false);
+    expect(stores.zone4.getState().activeDocumentId).toBe("small.ts");
+    expect(editorView.getDocumentText()).toBe("small");
+
+    // A read still running when the group changes never lands in the new group.
+    const late = openFile("late.ts");
+    stores.createWorkGroup("Other");
+    pending.get("late.ts")?.("late");
+    expect(await late).toBe(false);
+    expect(stores.zone4.getState().activeDocumentId).toBe("small.ts");
+  });
+
+  it("saving from the close dialog waits for the tab to be shown, then saves that file", async () => {
+    const pending = new Map<string, (text: string) => void>();
+    const saved: string[] = [];
+    const { stores, editorView, ipcChannel, root, openFile } = setupWithDisk(
+      (path) => new Promise((resolve) => pending.set(path, resolve)),
+    );
+    const requestSave = ipcChannel.requestAtomicSave.bind(ipcChannel);
+    ipcChannel.requestAtomicSave = (documentId, generation) => {
+      saved.push(documentId);
+      return requestSave(documentId, generation);
+    };
+    stores.setProjectPath("/projects/a");
+    const first = openFile("one.ts");
+    pending.get("one.ts")?.("one");
+    await first;
+    stores.updateInMemoryDocumentContent("one.ts", "one edited", true);
+    const second = openFile("two.ts");
+    pending.get("two.ts")?.("two");
+    await second;
+    editorView.dispatchUserEdit(0, 0, "2 ");
+    expect(stores.isDocumentUnsaved("two.ts")).toBe(true);
+
+    // Close the unsaved one.ts tab (not shown) and choose Save: one.ts comes forward, then saves.
+    root.querySelector<HTMLButtonElement>('[aria-label="Close one.ts"]')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    root.querySelector<HTMLButtonElement>('[data-choice="save"]')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // one.ts was saved (not the file that happened to be shown) and its tab closed; two.ts is
+    // shown again and keeps its own unsaved edit.
+    expect(saved).toEqual(["one.ts"]);
+    expect(root.querySelector('[aria-label="Close one.ts"]')).toBeNull();
+    expect(stores.zone4.getState().activeDocumentId).toBe("two.ts");
+    expect(stores.isDocumentUnsaved("two.ts")).toBe(true);
   });
 });
