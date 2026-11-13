@@ -279,7 +279,6 @@
 
   .coloride-group-empty {
     @apply flex items-center justify-center h-full text-center text-[13px] text-text-muted p-6;
-    grid-column: 1 / -1;
   }
 
   .coloride-open-workspace-btn {
@@ -415,18 +414,29 @@
     opacity: 0.35;
     cursor: default;
   }
+  /* The empty state fills the (flex) panel area and centers its content. */
   .coloride-group-empty {
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
+  }
+  .coloride-group-empty p {
+    margin: 0;
   }
   .coloride-group-empty-add {
-    padding: 6px 12px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 8px;
-    background: var(--color-selected);
-    color: var(--color-text-primary);
+    padding: 2px 9px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-text-secondary);
     font-size: 12px;
     cursor: pointer;
+  }
+  .coloride-group-empty-add:hover:not(:disabled) {
+    border-color: rgba(255, 255, 255, 0.24);
+    color: var(--color-text-primary);
   }
   .coloride-group-empty-add:disabled {
     opacity: 0.4;
