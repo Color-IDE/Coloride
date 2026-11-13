@@ -34,7 +34,10 @@ export interface HeaderTabsOptions {
   readonly unsavedLabel: string;
   readonly onSelect: (key: string) => void;
   readonly onClose: (key: string) => void;
-  /** Controls kept after the last tab, inside the scrolling strip (e.g. a "+" button). */
+  /**
+   * Controls placed right after the last tab, inside the scrolling strip (e.g. a "+" button). The
+   * stylesheet makes them stick to the right edge once the tabs overflow.
+   */
   readonly trailing?: readonly HTMLElement[];
 }
 

@@ -98,10 +98,16 @@
   .coloride-header-tab-close:hover {
     background: rgba(255, 255, 255, 0.12);
   }
-  /* "+" at the end of the strip (new session in Zone 3) */
+  /* "+" right after the last tab. Once the tabs fill the strip it sticks to the right edge
+     instead of scrolling away; the shadow hides the tabs sliding under it. */
   .coloride-header-tab-add {
+    position: sticky;
+    right: 8px;
+    z-index: 15; /* above the header edge shadow (z-index 10) */
     display: inline-flex;
     flex: none;
+    background: var(--color-topbar);
+    box-shadow: -10px 0 8px var(--color-topbar);
     align-items: center;
     justify-content: center;
     width: 26px;
