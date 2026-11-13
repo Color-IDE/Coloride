@@ -79,6 +79,7 @@ export interface LazyBootDesktopOptions {
   readonly initialDecorations?: readonly EditorRangeDecoration[];
   readonly ipcChannel?: BinaryIpcChannel;
   readonly openWorkspace?: CockpitDomControllerOptions["openWorkspace"];
+  readonly switchWorkspace?: CockpitDomControllerOptions["switchWorkspace"];
   readonly readWorkspaceFile?: CockpitDomControllerOptions["readWorkspaceFile"];
   readonly searchWorkspace?: CockpitDomControllerOptions["searchWorkspace"];
   readonly analyzeDocument?: CockpitDomControllerOptions["analyzeDocument"];
@@ -198,6 +199,7 @@ export function lazyBootDesktopCockpit(
       editorView,
       onboardingController,
       ...(options?.openWorkspace ? { openWorkspace: options.openWorkspace } : {}),
+      ...(options?.switchWorkspace ? { switchWorkspace: options.switchWorkspace } : {}),
       ...(options?.readWorkspaceFile ? { readWorkspaceFile: options.readWorkspaceFile } : {}),
       ...(options?.searchWorkspace ? { searchWorkspace: options.searchWorkspace } : {}),
       ...(options?.analyzeDocument ? { analyzeDocument: options.analyzeDocument } : {}),

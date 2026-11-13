@@ -147,6 +147,17 @@
   .sidebar-group-toggle:focus-visible .sidebar-chevron {
     visibility: visible;
   }
+  /* Projects sit further apart than the rows inside them. */
+  .sidebar-projects {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .sidebar-project {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sidebar-row-gap);
+  }
   .sidebar-group-tree,
   .sidebar-group,
   .sidebar-sessions {

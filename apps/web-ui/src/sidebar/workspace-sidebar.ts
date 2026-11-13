@@ -1,6 +1,7 @@
+import { attribute, button, reconcile, visibility } from "../dom-utils.js";
 import type { CockpitChatTab, CockpitFileTreeNode, CockpitStoreBundle } from "../stores.js";
-import type { WorkGroup } from "../workspace-navigation.js";
-import { attribute, button, reconcile, visibility } from "./dom.js";
+import { UI_STRINGS } from "../ui-strings.js";
+import { type WorkGroup, listProjects } from "../workspace-navigation.js";
 import { FOLDER_ICON, GROUP_ICON } from "./icons.js";
 import { SidebarMenu } from "./sidebar-menu.js";
 import { SidebarRow } from "./sidebar-row.js";
@@ -12,42 +13,52 @@ interface GroupNodes {
   readonly chats: Map<string, SidebarRow>;
 }
 
+interface ProjectNodes {
+  readonly el: HTMLElement;
+  readonly folder: SidebarRow;
+  readonly tree: HTMLElement;
+  readonly groups: Map<string, GroupNodes>;
+}
+
 export interface WorkspaceSidebarOptions {
   readonly controlsHost: HTMLElement;
   readonly treeHost: HTMLElement;
   readonly stores: CockpitStoreBundle;
   readonly openWorkspace?: () => Promise<readonly CockpitFileTreeNode[] | null>;
+  /**
+   * Makes another already-listed project the active one (host root, file tree).
+   * Without it the sidebar only switches the navigation state.
+   */
+  readonly switchWorkspace?: (path: string) => Promise<readonly CockpitFileTreeNode[] | null>;
 }
 
 /** Owns sidebar navigation DOM and subscriptions, independent of the editor and streaming. */
 export class WorkspaceSidebar {
-  private readonly groups = new Map<string, GroupNodes>();
-  private readonly folder: SidebarRow;
-  private readonly tree: HTMLElement;
+  private readonly projects = new Map<string, ProjectNodes>();
+  private readonly projectsEl: HTMLElement;
   private readonly openProjectButton: HTMLButtonElement;
   private readonly error: HTMLElement;
   private readonly menu: SidebarMenu;
   private readonly unsubscribers: Array<() => void> = [];
   private opening = false;
+  private switching = false;
   private destroyed = false;
-  private projectPath: string;
 
   constructor(private readonly options: WorkspaceSidebarOptions) {
     const { controlsHost, treeHost, stores } = options;
     const doc = treeHost.ownerDocument;
     controlsHost.className = "sidebar-project-controls";
     treeHost.className = "sidebar-navigation";
-    treeHost.setAttribute("aria-label", "Folder, groups and sessions");
+    treeHost.setAttribute("aria-label", UI_STRINGS.sidebar.navigation);
     this.menu = new SidebarMenu(treeHost);
-    this.projectPath = stores.navigation.getState().projectPath;
     this.openProjectButton = button(
       doc,
       "sidebar-row sidebar-open-project sidebar-open-project-label",
-      "Open project",
+      UI_STRINGS.sidebar.openProject,
     );
-    this.openProjectButton.innerHTML = `<span class="sidebar-open-project-icon" aria-hidden="true">${FOLDER_ICON}</span><span>Open project</span>`;
+    this.openProjectButton.innerHTML = `<span class="sidebar-open-project-icon" aria-hidden="true">${FOLDER_ICON}</span><span>${UI_STRINGS.sidebar.openProject}</span>`;
     this.openProjectButton.disabled = !options.openWorkspace;
-    this.openProjectButton.title = "Open a project folder";
+    this.openProjectButton.title = UI_STRINGS.sidebar.openProjectHint;
     this.openProjectButton.addEventListener("click", () => {
       void this.openProject();
     });
@@ -57,25 +68,9 @@ export class WorkspaceSidebar {
     this.error.hidden = true;
     controlsHost.append(this.openProjectButton, this.error);
 
-    this.folder = new SidebarRow(doc, {
-      kind: "folder",
-      onSelect: () => stores.setProjectExpanded(!(stores.navigation.getState().expanded ?? true)),
-      onMore: (anchor) =>
-        this.menu.open(anchor, [
-          { label: "Expand all groups", run: () => this.expandAll(true) },
-          { label: "Collapse all groups", run: () => this.expandAll(false) },
-          {
-            label: "Open project…",
-            disabled: !options.openWorkspace || this.opening,
-            run: () => {
-              void this.openProject();
-            },
-          },
-        ]),
-    });
-    this.tree = doc.createElement("div");
-    this.tree.className = "sidebar-group-tree";
-    treeHost.append(this.folder.el, this.tree);
+    this.projectsEl = doc.createElement("div");
+    this.projectsEl.className = "sidebar-projects";
+    treeHost.append(this.projectsEl);
     this.update();
     this.unsubscribers.push(
       stores.navigation.subscribe(() => this.update()),
@@ -89,19 +84,72 @@ export class WorkspaceSidebar {
     this.options.stores.setAllWorkGroupsExpanded(expanded);
   }
 
+  private showError(error: unknown, fallback: string): void {
+    if (this.destroyed) return;
+    this.error.textContent = error instanceof Error ? error.message : fallback;
+    this.error.hidden = false;
+  }
+
+  /** Switches the active project, then runs `run` against it. Runs synchronously when already active. */
+  private withProject(path: string, run: () => void): void {
+    const { stores } = this.options;
+    if (stores.navigation.getState().projectPath === path) {
+      run();
+      return;
+    }
+    void this.switchTo(path).then((switched) => {
+      if (switched && !this.destroyed) run();
+    });
+  }
+
+  private async switchTo(path: string): Promise<boolean> {
+    const { stores, switchWorkspace } = this.options;
+    if (this.switching || this.destroyed) return false;
+    this.switching = true;
+    this.error.hidden = true;
+    try {
+      if (switchWorkspace) {
+        const nodes = await switchWorkspace(path);
+        if (!nodes) return false;
+        if (!this.destroyed) stores.setFileTree(nodes);
+        // The host callback normally activates the project; make sure navigation agrees.
+        stores.setProjectPath(path);
+      } else {
+        stores.setProjectPath(path);
+      }
+      return true;
+    } catch (error: unknown) {
+      this.showError(error, UI_STRINGS.sidebar.switchFailed);
+      return false;
+    } finally {
+      this.switching = false;
+    }
+  }
+
+  private async removeProject(path: string): Promise<void> {
+    const { stores } = this.options;
+    const navigation = stores.navigation.getState();
+    if (navigation.projectPath === path) {
+      const next = listProjects(navigation).find((entry) => entry.path !== path);
+      if (next && !(await this.switchTo(next.path))) return;
+    }
+    if (!this.destroyed) stores.removeProject(path);
+  }
+
   private async openProject(): Promise<void> {
     if (!this.options.openWorkspace || this.opening || this.destroyed) return;
     this.opening = true;
     this.openProjectButton.disabled = true;
     this.openProjectButton.setAttribute("aria-busy", "true");
-    this.openProjectButton.title = "Opening…";
+    this.openProjectButton.title = UI_STRINGS.sidebar.opening;
     this.error.hidden = true;
     try {
       const nodes = await this.options.openWorkspace();
       if (!this.destroyed && nodes) this.options.stores.setFileTree(nodes);
     } catch (error: unknown) {
       if (!this.destroyed) {
-        this.error.textContent = error instanceof Error ? error.message : "Unable to open project";
+        this.error.textContent =
+          error instanceof Error ? error.message : UI_STRINGS.sidebar.openFailed;
         this.error.hidden = false;
       }
     } finally {
@@ -109,12 +157,12 @@ export class WorkspaceSidebar {
       if (!this.destroyed) {
         this.openProjectButton.disabled = false;
         this.openProjectButton.setAttribute("aria-busy", "false");
-        this.openProjectButton.title = "Open a project folder";
+        this.openProjectButton.title = UI_STRINGS.sidebar.openProjectHint;
       }
     }
   }
 
-  private createGroup(group: WorkGroup): GroupNodes {
+  private createGroup(projectPath: string, group: WorkGroup): GroupNodes {
     const { treeHost, stores } = this.options;
     const doc = treeHost.ownerDocument;
     const el = doc.createElement("section");
@@ -125,22 +173,35 @@ export class WorkspaceSidebar {
     const row = new SidebarRow(doc, {
       kind: "group",
       icon: GROUP_ICON,
-      onSelect: () => stores.selectWorkGroup(group.id),
-      onToggle: () => {
-        const latest = stores.navigation.getState().groups.find((item) => item.id === group.id);
-        if (latest) stores.setWorkGroupExpanded(group.id, !(latest.expanded ?? true));
-      },
+      onSelect: () => this.withProject(projectPath, () => stores.selectWorkGroup(group.id)),
+      onToggle: () =>
+        this.withProject(projectPath, () => {
+          const latest = stores.navigation.getState().groups.find((item) => item.id === group.id);
+          if (latest) stores.setWorkGroupExpanded(group.id, !(latest.expanded ?? true));
+        }),
       onMore: (anchor) => {
-        const latest = stores.navigation.getState().groups.find((item) => item.id === group.id);
+        const state = stores.navigation.getState();
+        const latest = listProjects(state)
+          .find((entry) => entry.path === projectPath)
+          ?.groups.find((item) => item.id === group.id);
         if (!latest) return;
         this.menu.open(anchor, [
           {
-            label: "Rename group",
-            run: () => row.rename(latest.title, (name) => stores.renameWorkGroup(group.id, name)),
+            label: UI_STRINGS.sidebar.renameGroup,
+            run: () =>
+              this.withProject(projectPath, () =>
+                row.rename(latest.title, (name) => stores.renameWorkGroup(group.id, name)),
+              ),
           },
           {
-            label: latest.expanded === false ? "Expand group" : "Collapse group",
-            run: () => stores.setWorkGroupExpanded(group.id, latest.expanded === false),
+            label:
+              latest.expanded === false
+                ? UI_STRINGS.sidebar.expandGroup
+                : UI_STRINGS.sidebar.collapseGroup,
+            run: () =>
+              this.withProject(projectPath, () =>
+                stores.setWorkGroupExpanded(group.id, latest.expanded === false),
+              ),
           },
         ]);
       },
@@ -152,13 +213,13 @@ export class WorkspaceSidebar {
     return { el, row, sessions, chats: new Map() };
   }
 
-  private createSession(groupId: string, chat: CockpitChatTab): SidebarRow {
+  private createSession(projectPath: string, groupId: string, chat: CockpitChatTab): SidebarRow {
     const { stores, treeHost } = this.options;
     const row = new SidebarRow(treeHost.ownerDocument, {
       kind: "session",
       onSelect: () => {
         // selectChat records the owning group and the selected session in one step.
-        stores.selectChat(chat.chatId);
+        this.withProject(projectPath, () => stores.selectChat(chat.chatId));
       },
       onMore: (anchor) => {
         const latest = stores.zone3.getState().chats.find((item) => item.chatId === chat.chatId);
@@ -166,11 +227,11 @@ export class WorkspaceSidebar {
         const state = stores.zone3.getState();
         this.menu.open(anchor, [
           {
-            label: "Rename session",
+            label: UI_STRINGS.sidebar.renameSession,
             run: () => row.rename(latest.title, (name) => stores.renameChat(chat.chatId, name)),
           },
           {
-            label: "Close session",
+            label: UI_STRINGS.sidebar.closeSession,
             disabled:
               state.chats.length <= 1 ||
               state.activeRunningAgentChatId === chat.chatId ||
@@ -186,63 +247,120 @@ export class WorkspaceSidebar {
     return row;
   }
 
+  private createProject(path: string): ProjectNodes {
+    const { treeHost, stores, openWorkspace } = this.options;
+    const doc = treeHost.ownerDocument;
+    const el = doc.createElement("section");
+    el.className = "sidebar-project";
+    el.dataset.projectPath = path;
+    const tree = doc.createElement("div");
+    tree.className = "sidebar-group-tree";
+    const folder = new SidebarRow(doc, {
+      kind: "folder",
+      onSelect: () => {
+        const entry = listProjects(stores.navigation.getState()).find((item) => item.path === path);
+        stores.setProjectExpanded(!(entry?.expanded ?? true), path);
+      },
+      onMore: (anchor) =>
+        this.menu.open(anchor, [
+          {
+            label: UI_STRINGS.sidebar.expandAll,
+            run: () => this.withProject(path, () => this.expandAll(true)),
+          },
+          {
+            label: UI_STRINGS.sidebar.collapseAll,
+            run: () => this.withProject(path, () => this.expandAll(false)),
+          },
+          {
+            label: UI_STRINGS.sidebar.openProjectMenu,
+            disabled: !openWorkspace || this.opening,
+            run: () => {
+              void this.openProject();
+            },
+          },
+          {
+            label: UI_STRINGS.sidebar.removeProject,
+            disabled: path === "",
+            run: () => {
+              void this.removeProject(path);
+            },
+          },
+        ]),
+    });
+    el.append(folder.el, tree);
+    return { el, folder, tree, groups: new Map() };
+  }
+
   private update(): void {
     const { stores } = this.options;
     const focused = this.options.treeHost.ownerDocument.activeElement as HTMLElement | null;
     const hadFocus = focused !== null && this.options.treeHost.contains(focused);
     const navigation = stores.navigation.getState();
     const chatState = stores.zone3.getState();
-    if (navigation.projectPath !== this.projectPath) {
-      this.menu.close(false);
-      this.groups.clear();
-      this.projectPath = navigation.projectPath;
-    }
-    const name = navigation.projectPath.split(/[\\/]/).filter(Boolean).pop() ?? "No project open";
-    this.folder.update(name, false, navigation.expanded ?? true);
-    attribute(this.folder.select, "title", navigation.projectPath || name);
-    visibility(this.tree, navigation.expanded ?? true);
     const chats = new Map(chatState.chats.map((chat) => [chat.chatId, chat]));
-    const nextGroups: HTMLElement[] = [];
-    const retained = new Set(navigation.groups.map((group) => group.id));
-    for (const [id] of this.groups) if (!retained.has(id)) this.groups.delete(id);
-    for (const group of navigation.groups) {
-      let nodes = this.groups.get(group.id);
-      if (!nodes) {
-        nodes = this.createGroup(group);
-        this.groups.set(group.id, nodes);
+    const entries = listProjects(navigation);
+    const retainedProjects = new Set(entries.map((entry) => entry.path));
+    for (const [path] of this.projects) {
+      if (!retainedProjects.has(path)) {
+        this.menu.close(false);
+        this.projects.delete(path);
       }
-      nodes.row.update(group.title, navigation.activeGroupId === group.id, group.expanded ?? true);
-      visibility(nodes.sessions, group.expanded ?? true);
-      const nextSessions: HTMLElement[] = [];
-      const retainedSessions = new Set(group.chatIds);
-      for (const [id] of nodes.chats)
-        if (!retainedSessions.has(id) || !chats.has(id)) nodes.chats.delete(id);
-      for (const id of group.chatIds) {
-        const chat = chats.get(id);
-        if (!chat) continue;
-        let row = nodes.chats.get(id);
-        if (!row) {
-          row = this.createSession(group.id, chat);
-          nodes.chats.set(id, row);
-        }
-        row.update(
-          chat.title,
-          navigation.activeGroupId === group.id && chatState.activeChatId === id,
-        );
-        nextSessions.push(row.el);
-      }
-      reconcile(nodes.sessions, nextSessions);
-      nextGroups.push(nodes.el);
     }
-    reconcile(this.tree, nextGroups);
+    const nextProjects: HTMLElement[] = [];
+    for (const entry of entries) {
+      let project = this.projects.get(entry.path);
+      if (!project) {
+        project = this.createProject(entry.path);
+        this.projects.set(entry.path, project);
+      }
+      const name = entry.path.split(/[\\/]/).filter(Boolean).pop() ?? UI_STRINGS.sidebar.noProject;
+      project.folder.update(name, false, entry.expanded ?? true);
+      attribute(project.folder.select, "title", entry.path || name);
+      attribute(project.el, "data-active", String(entry.active));
+      visibility(project.tree, entry.expanded ?? true);
+      const nextGroups: HTMLElement[] = [];
+      const retained = new Set(entry.groups.map((group) => group.id));
+      for (const [id] of project.groups) if (!retained.has(id)) project.groups.delete(id);
+      for (const group of entry.groups) {
+        let nodes = project.groups.get(group.id);
+        if (!nodes) {
+          nodes = this.createGroup(entry.path, group);
+          project.groups.set(group.id, nodes);
+        }
+        const groupActive = entry.active && entry.activeGroupId === group.id;
+        nodes.row.update(group.title, groupActive, group.expanded ?? true);
+        visibility(nodes.sessions, group.expanded ?? true);
+        const nextSessions: HTMLElement[] = [];
+        const retainedSessions = new Set(group.chatIds);
+        for (const [id] of nodes.chats)
+          if (!retainedSessions.has(id) || !chats.has(id)) nodes.chats.delete(id);
+        for (const id of group.chatIds) {
+          const chat = chats.get(id);
+          if (!chat) continue;
+          let row = nodes.chats.get(id);
+          if (!row) {
+            row = this.createSession(entry.path, group.id, chat);
+            nodes.chats.set(id, row);
+          }
+          row.update(chat.title, groupActive && chatState.activeChatId === id);
+          nextSessions.push(row.el);
+        }
+        reconcile(nodes.sessions, nextSessions);
+        nextGroups.push(nodes.el);
+      }
+      reconcile(project.tree, nextGroups);
+      nextProjects.push(project.el);
+    }
+    reconcile(this.projectsEl, nextProjects);
     this.menu.closeIfDetached();
     if (hadFocus && !focused?.isConnected) {
-      const active = this.groups.get(navigation.activeGroupId);
+      const active = this.projects.get(navigation.projectPath);
+      const group = active?.groups.get(navigation.activeGroupId);
       (
-        active?.chats.get(chatState.activeChatId)?.select ??
-        active?.row.select ??
-        this.folder.select
-      ).focus();
+        group?.chats.get(chatState.activeChatId)?.select ??
+        group?.row.select ??
+        active?.folder.select
+      )?.focus();
     }
   }
 
@@ -250,6 +368,6 @@ export class WorkspaceSidebar {
     this.destroyed = true;
     this.menu.close(false);
     for (const unsubscribe of this.unsubscribers) unsubscribe();
-    this.groups.clear();
+    this.projects.clear();
   }
 }

@@ -1,4 +1,5 @@
-import { attribute, button, label, visibility } from "./dom.js";
+import { attribute, button, label, visibility } from "../dom-utils.js";
+import { UI_STRINGS } from "../ui-strings.js";
 import { CHEVRON_ICON, MORE_ICON } from "./icons.js";
 
 export interface SidebarRowOptions {
@@ -62,7 +63,11 @@ export class SidebarRow {
       attribute(this.toggle ?? this.select, "aria-expanded", String(expanded));
       attribute(this.arrow, "data-expanded", String(expanded));
       if (this.toggle)
-        attribute(this.toggle, "aria-label", `${expanded ? "Collapse" : "Expand"} ${title}`);
+        attribute(
+          this.toggle,
+          "aria-label",
+          `${expanded ? UI_STRINGS.sidebar.collapse : UI_STRINGS.sidebar.expand} ${title}`,
+        );
     } else {
       attribute(this.select, "aria-pressed", String(selected));
     }
@@ -78,7 +83,7 @@ export class SidebarRow {
     input.className = "sidebar-rename-input";
     input.value = value;
     input.maxLength = 80;
-    input.setAttribute("aria-label", "Name");
+    input.setAttribute("aria-label", UI_STRINGS.sidebar.name);
     const finish = (save: boolean) => {
       if (this.renameInput !== input) return;
       this.renameInput = undefined;

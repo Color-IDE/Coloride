@@ -1,4 +1,5 @@
-import { button } from "./dom.js";
+import { button } from "../dom-utils.js";
+import { UI_STRINGS } from "../ui-strings.js";
 
 export interface SidebarMenuAction {
   readonly label: string;
@@ -21,7 +22,10 @@ export class SidebarMenu {
     const menu = doc.createElement("div");
     menu.className = "sidebar-menu";
     menu.setAttribute("role", "menu");
-    menu.setAttribute("aria-label", anchor.getAttribute("aria-label") ?? "Options");
+    menu.setAttribute(
+      "aria-label",
+      anchor.getAttribute("aria-label") ?? UI_STRINGS.sidebar.options,
+    );
     this.anchor = anchor;
     this.menu = menu;
     anchor.setAttribute("aria-expanded", "true");

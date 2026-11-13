@@ -1,0 +1,312 @@
+@layer components {
+  /* Zone 4: file tab in the header, editor on the left, project file tree on the right */
+  /* The shared header shadows and thin scrollbar stop where the panel toggle starts. */
+  /* Extra selector: tailwind.css declares the base rule after this file is imported. */
+  .coloride-macos-titlebar .coloride-zone-4-header::after {
+    inset: 0 38px 0 0;
+  }
+  .coloride-zone-4-header .coloride-thin-scrollbar--x {
+    right: 46px;
+  }
+  .coloride-inspector-tab-track {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    margin-right: 38px; /* tabs end here, right before the panel toggle */
+    padding: 0 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .coloride-inspector-tab {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    max-width: 200px;
+    padding: 0 6px 0 8px;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: 12px;
+    cursor: pointer;
+    outline: none;
+  }
+  .coloride-inspector-tab {
+    position: relative;
+  }
+  .coloride-inspector-tab:hover,
+  .coloride-inspector-tab[aria-selected="true"] {
+    background: var(--color-selected);
+    color: var(--color-text-primary);
+  }
+  /* Short vertical divider between tabs; never touching the active (or hovered) one. */
+  .coloride-inspector-tab::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: -2px;
+    width: 1px;
+    height: 14px;
+    transform: translateY(-50%);
+    background: rgba(255, 255, 255, 0.16);
+    pointer-events: none;
+  }
+  .coloride-inspector-tab:last-child::after,
+  .coloride-inspector-tab[aria-selected="true"]::after,
+  .coloride-inspector-tab:hover::after,
+  .coloride-inspector-tab:has(+ .coloride-inspector-tab[aria-selected="true"])::after,
+  .coloride-inspector-tab:has(+ .coloride-inspector-tab:hover)::after {
+    display: none;
+  }
+  .coloride-inspector-tab-icon {
+    display: inline-flex;
+    flex: none;
+    width: 14px;
+    height: 14px;
+  }
+  .coloride-inspector-tab-icon svg {
+    width: 14px;
+    height: 14px;
+  }
+  .coloride-inspector-tab .coloride-tab-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .coloride-inspector-unsaved-dot {
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--color-text-secondary);
+  }
+  .coloride-inspector-tab-close {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .coloride-inspector-tab:hover .coloride-inspector-tab-close,
+  .coloride-inspector-tab[aria-selected="true"] .coloride-inspector-tab-close,
+  .coloride-inspector-tab-close:focus-visible {
+    opacity: 1;
+  }
+  .coloride-inspector-tab-close:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
+  .coloride-zone-4-empty {
+    margin: 0;
+    padding: 32px 12px;
+    text-align: center;
+    color: var(--color-text-muted);
+    font-size: 12px;
+  }
+
+  .coloride-zone-4-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(150px, 30%, 240px);
+    flex: 1;
+    min-height: 0;
+  }
+  .coloride-zone-4-editor-column {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+  }
+  .coloride-zone-4-tree-column {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    padding: 8px 0 8px 4px; /* no right padding: the scrollbar sits against the panel edge */
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .coloride-file-tree-filter {
+    flex: none;
+    margin: 0 8px 8px 4px; /* same right spacing as before the scrollbar moved */
+    height: 24px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--color-card);
+    color: var(--color-text-primary);
+    font-size: 12px;
+    outline: none;
+  }
+  .coloride-file-tree-filter:focus,
+  .coloride-file-tree-filter:focus-visible {
+    outline: none;
+    box-shadow: none;
+  }
+  .coloride-file-tree-viewport {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+  }
+  .coloride-file-tree-scroll {
+    height: 100%;
+    padding-right: 4px; /* keeps the rows clear of the scrollbar */
+    overflow: auto;
+    scrollbar-width: none;
+  }
+  .coloride-file-tree-scroll::-webkit-scrollbar {
+    display: none;
+  }
+  /* The same file tree component inside the sidebar (Zone 2) */
+  .coloride-zone-2-file-tree {
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+
+  /* Folders pinned over the top of the tree while scrolling (sticky scroll) */
+  .coloride-file-tree-sticky {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 4px;
+    z-index: 5;
+    background: var(--color-main);
+  }
+  .coloride-file-tree-sticky[hidden] {
+    display: none;
+  }
+  .coloride-zone-2-file-tree .coloride-file-tree-sticky {
+    background: var(--color-sidebar);
+  }
+  /* Two classes on purpose: `.explorer-row` (absolute, for virtualization) is declared below and
+     would otherwise win, stacking every pinned row on top of each other. */
+  .coloride-file-tree-sticky .explorer-row--sticky {
+    position: relative;
+  }
+  .coloride-zone-4-editor-host {
+    position: relative;
+  }
+  .coloride-file-tree {
+    position: relative;
+  }
+  .coloride-file-tree-empty {
+    margin: 0;
+    padding: 16px 8px;
+    color: var(--color-text-muted);
+    font-size: 12px;
+  }
+  /* Explorer rows, styled after the Rectury file tree */
+  .explorer-runway {
+    position: relative;
+  }
+  .explorer-row {
+    position: absolute;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    padding-right: 8px;
+    border-radius: 2px;
+    background: transparent;
+    color: #f0f4f8;
+    font-size: 13px;
+    font-weight: 400;
+    cursor: pointer;
+    transition: background-color 75ms, color 75ms;
+  }
+  .explorer-row:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+  }
+  .explorer-row[aria-selected="true"] {
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .explorer-guide {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    border-left: 2px solid rgba(135, 136, 136, 0.2);
+    pointer-events: none;
+  }
+  .explorer-row:hover .explorer-guide {
+    border-left-color: rgba(135, 136, 136, 0.3);
+  }
+  .explorer-chevron,
+  .explorer-icon {
+    display: inline-flex;
+    flex: none;
+    width: 14px;
+    height: 14px;
+  }
+  .explorer-chevron {
+    margin-right: 4px;
+    color: rgba(135, 136, 136, 0.5);
+    transition: transform 250ms cubic-bezier(0.16, 1, 0.3, 1), color 250ms;
+  }
+  .explorer-row:hover .explorer-chevron {
+    color: rgba(135, 136, 136, 0.7);
+  }
+  .explorer-chevron--collapsed {
+    transform: rotate(-90deg);
+  }
+  .explorer-chevron svg,
+  .explorer-icon svg {
+    width: 14px;
+    height: 14px;
+  }
+  .explorer-name {
+    flex: 1;
+    min-width: 0;
+    margin-left: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .explorer-state {
+    flex: none;
+    margin-left: 6px;
+    font-size: 11px;
+  }
+
+  /* File icon colors (same palette as Rectury, dark theme) */
+  .filetree-folder-color {
+    color: #c4c7cc;
+  }
+  .filetree-color-cyan {
+    color: #67cce5;
+  }
+  .filetree-color-blue {
+    color: #78aff0;
+  }
+  .filetree-color-yellow {
+    color: #e4cc79;
+  }
+  .filetree-color-green {
+    color: #8bc99a;
+  }
+  .filetree-color-orange {
+    color: #eaa078;
+  }
+  .filetree-color-pink {
+    color: #dc91b7;
+  }
+  .filetree-color-purple {
+    color: #bb9ce5;
+  }
+  .filetree-color-image {
+    color: #6ec9b0;
+  }
+  .filetree-color-muted {
+    color: #8a8a8a;
+  }
+}

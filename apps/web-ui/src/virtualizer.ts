@@ -1,9 +1,5 @@
 import type { ColorideValidationState } from "@coloride/protocol-types";
-import {
-  COLORIDE_DESIGN_TOKENS,
-  type CockpitChatMessage,
-  type CockpitFileTreeNode,
-} from "./stores.js";
+import type { CockpitChatMessage, CockpitFileTreeNode } from "./stores.js";
 
 export interface VirtualWindowSlice<T> {
   readonly totalCount: number;
@@ -93,89 +89,6 @@ export function generateSyntheticFileTree(count: number): CockpitFileTreeNode[] 
 }
 
 /**
- * DOM Virtualizer for Zone 2 file tree (> 50,000 entries) with accessible Coloride state badges.
- */
-export class VirtualFileTreeRenderer {
-  private readonly rowHeightPx: number;
-  private readonly overscan: number;
-
-  constructor(options?: VirtualListOptions) {
-    this.rowHeightPx = options?.rowHeightPx ?? 24;
-    this.overscan = options?.overscan ?? 4;
-  }
-
-  renderInto(
-    container: HTMLElement,
-    nodes: readonly CockpitFileTreeNode[],
-    scrollTopPx: number,
-    viewportHeightPx: number,
-    focusedIndex = 0,
-    onSelectNode?: (node: CockpitFileTreeNode, index: number) => void,
-  ): VirtualWindowSlice<CockpitFileTreeNode> {
-    const slice = computeVirtualWindowSlice(nodes, scrollTopPx, viewportHeightPx, {
-      rowHeightPx: this.rowHeightPx,
-      overscan: this.overscan,
-    });
-
-    container.setAttribute("role", "tree");
-    container.setAttribute("aria-label", `Workspace File Explorer (${slice.totalCount} files)`);
-    container.dataset.totalCount = String(slice.totalCount);
-    container.dataset.totalHeightPx = String(slice.totalHeightPx);
-    container.innerHTML = "";
-
-    const runway = container.ownerDocument.createElement("div");
-    runway.className = "cm-coloride-virtual-runway";
-    runway.style.position = "relative";
-    runway.style.height = `${slice.totalHeightPx}px`;
-
-    for (let i = 0; i < slice.visibleItems.length; i += 1) {
-      const node = slice.visibleItems[i];
-      if (!node) {
-        continue;
-      }
-      const absoluteIndex = slice.startIndex + i;
-      const token = COLORIDE_DESIGN_TOKENS[node.validationState];
-
-      const row = container.ownerDocument.createElement("div");
-      row.className = "cm-coloride-virtual-tree-row";
-      row.setAttribute("role", "treeitem");
-      row.setAttribute("tabindex", absoluteIndex === focusedIndex ? "0" : "-1");
-      row.setAttribute("aria-selected", absoluteIndex === focusedIndex ? "true" : "false");
-      row.setAttribute("aria-label", `${node.path} — ${token.labelFr}`);
-      row.dataset.index = String(absoluteIndex);
-      row.dataset.path = node.path;
-      row.dataset.validationState = node.validationState;
-      row.style.position = "absolute";
-      row.style.top = `${absoluteIndex * this.rowHeightPx}px`;
-      row.style.height = `${this.rowHeightPx}px`;
-      row.style.paddingLeft = `${node.depth * 12}px`;
-
-      const badge = container.ownerDocument.createElement("span");
-      badge.className = "cm-coloride-tree-state-badge";
-      badge.textContent = token.icon;
-      badge.setAttribute("aria-hidden", "true");
-      badge.style.color = token.darkText;
-
-      const label = container.ownerDocument.createElement("span");
-      label.className = "cm-coloride-tree-label";
-      label.textContent = ` ${node.name}`;
-
-      row.appendChild(badge);
-      row.appendChild(label);
-      if (onSelectNode) {
-        row.addEventListener("click", () => {
-          onSelectNode(node, absoluteIndex);
-        });
-      }
-      runway.appendChild(row);
-    }
-
-    container.appendChild(runway);
-    return slice;
-  }
-}
-
-/**
  * DOM Virtualizer for Zone 3 chat message history.
  */
 export class VirtualChatMessageListRenderer {
@@ -223,8 +136,9 @@ export class VirtualChatMessageListRenderer {
       row.style.position = "absolute";
       row.style.top = `${absoluteIndex * this.rowHeightPx}px`;
       row.style.minHeight = `${this.rowHeightPx}px`;
-      row.innerHTML =
-        msg.renderedHtmlBlocks.length > 0 ? msg.renderedHtmlBlocks.join("\n") : msg.content;
+      // Rendered blocks are escaped by the Markdown cache; raw content is never parsed as HTML.
+      if (msg.renderedHtmlBlocks.length > 0) row.innerHTML = msg.renderedHtmlBlocks.join("\n");
+      else row.textContent = msg.content;
 
       runway.appendChild(row);
     }

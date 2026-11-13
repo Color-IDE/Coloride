@@ -9,6 +9,7 @@ import {
   translateVsCodeKeyToCm6,
 } from "@coloride/editor-cm6";
 import { AtomicStore } from "./stores.js";
+import { UI_STRINGS } from "./ui-strings.js";
 
 export const REDACTED_ENV_VALUE = "•••••••• [REDACTED]";
 
@@ -905,7 +906,7 @@ export class OnboardingModalController {
     this.modalEl.style.display = state.modalOpen ? "block" : "none";
 
     const title = doc.createElement("h2");
-    title.textContent = "Import 1-clic (VS Code · Cursor · Claude Desktop)";
+    title.textContent = UI_STRINGS.onboarding.title;
     this.modalEl.appendChild(title);
 
     // Keymap preset selector (VS Code / Vim / JetBrains)
@@ -929,15 +930,16 @@ export class OnboardingModalController {
       const importButton = doc.createElement("button");
       importButton.type = "button";
       importButton.className = "coloride-onboarding-import-btn";
-      importButton.textContent = "Importer les réglages détectés";
+      importButton.textContent = UI_STRINGS.onboarding.importDetected;
       importButton.addEventListener("click", () => {
         importButton.disabled = true;
-        importButton.textContent = "Import en cours…";
+        importButton.textContent = UI_STRINGS.onboarding.importing;
         void this.nativeImportLoader?.()
           .then((report) => this.applyNativeMigrationReport(report))
           .catch((error: unknown) => {
-            importButton.title = error instanceof Error ? error.message : "Import impossible";
-            importButton.textContent = "Import impossible — réessayer";
+            importButton.title =
+              error instanceof Error ? error.message : UI_STRINGS.onboarding.importFailed;
+            importButton.textContent = UI_STRINGS.onboarding.importRetry;
           })
           .finally(() => {
             importButton.disabled = false;
@@ -949,7 +951,7 @@ export class OnboardingModalController {
     // Quarantined MCP servers list
     const mcpSection = doc.createElement("section");
     mcpSection.className = "coloride-onboarding-mcp-quarantine";
-    mcpSection.setAttribute("aria-label", "Serveurs MCP en quarantaine");
+    mcpSection.setAttribute("aria-label", UI_STRINGS.onboarding.quarantine);
     for (const server of state.quarantinedMcpServers) {
       const item = doc.createElement("div");
       item.className = "coloride-quarantined-mcp-item";
@@ -958,10 +960,10 @@ export class OnboardingModalController {
       item.dataset.enabled = String(server.enabled);
       const badgeText =
         server.status === "PendingApproval"
-          ? "Bloqué — En attente d'approbation"
+          ? UI_STRINGS.onboarding.pendingApproval
           : server.status === "ApprovedByUser"
-            ? "Approuvé"
-            : "Rejeté";
+            ? UI_STRINGS.onboarding.approved
+            : UI_STRINGS.onboarding.rejected;
       const labelSpan = doc.createElement("span");
       labelSpan.textContent = `${server.serverName}: ${server.command} ${server.args.join(" ")} [${badgeText}]`;
       item.appendChild(labelSpan);
@@ -971,7 +973,7 @@ export class OnboardingModalController {
       approveBtn.className = "coloride-mcp-approve-btn";
       approveBtn.dataset.action = "approve";
       approveBtn.dataset.serverName = server.serverName;
-      approveBtn.textContent = "Approuver";
+      approveBtn.textContent = UI_STRINGS.onboarding.approve;
       approveBtn.addEventListener("click", () => {
         this.approveQuarantinedMcpServer(server.serverName);
       });
@@ -981,7 +983,7 @@ export class OnboardingModalController {
       rejectBtn.className = "coloride-mcp-reject-btn";
       rejectBtn.dataset.action = "reject";
       rejectBtn.dataset.serverName = server.serverName;
-      rejectBtn.textContent = "Rejeté";
+      rejectBtn.textContent = UI_STRINGS.onboarding.reject;
       rejectBtn.addEventListener("click", () => {
         this.rejectQuarantinedMcpServer(server.serverName);
       });
@@ -996,7 +998,7 @@ export class OnboardingModalController {
     const resetBtn = doc.createElement("button");
     resetBtn.type = "button";
     resetBtn.className = "coloride-reset-defaults-btn";
-    resetBtn.textContent = "Revenir aux paramètres par défaut Coloride";
+    resetBtn.textContent = UI_STRINGS.onboarding.resetDefaults;
     resetBtn.addEventListener("click", () => {
       this.resetToColorideDefaults();
     });

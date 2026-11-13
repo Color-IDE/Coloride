@@ -34,6 +34,8 @@ export interface Zone1ActivityState {
   readonly activeSection: ActivityBarSection;
   readonly activePersona: CockpitPersonaMode;
   readonly sidebarOpen: boolean;
+  /** Right inspector (Zone 4) and its header. Hidden by collapsing, never unmounted. */
+  readonly inspectorOpen: boolean;
   readonly fileTreeAccessible: true;
   readonly uiZoomPercent: number;
   readonly permissionsLevel: "standard-enforced";
@@ -141,6 +143,7 @@ export interface CockpitStoreBundle extends WorkspaceNavigationActions {
   handleActivityBarShortcut(key: string, metaOrCtrlKey: boolean): boolean;
   setPersona(persona: CockpitPersonaMode, duringActiveTask?: boolean): void;
   toggleSidebar(open?: boolean): void;
+  toggleInspector(open?: boolean): void;
   setUiZoomPercent(zoomPercent: number): void;
   setGridMode(gridMode: CockpitGridMode): void;
   setInspectorTab(tab: InspectorTab): void;
@@ -278,6 +281,7 @@ export function createCockpitStoreBundle(options?: {
     activeSection: options?.initialActiveSection ?? "sessions",
     activePersona: initialPersona,
     sidebarOpen: true,
+    inspectorOpen: true,
     fileTreeAccessible: true,
     uiZoomPercent: options?.initialUiZoomPercent ?? 100,
     permissionsLevel: "standard-enforced",
@@ -428,6 +432,13 @@ export function createCockpitStoreBundle(options?: {
       zone1.setState((prev) => ({
         ...prev,
         sidebarOpen: open ?? !prev.sidebarOpen,
+      }));
+    },
+
+    toggleInspector(open?: boolean): void {
+      zone1.setState((prev) => ({
+        ...prev,
+        inspectorOpen: open ?? !prev.inspectorOpen,
       }));
     },
 

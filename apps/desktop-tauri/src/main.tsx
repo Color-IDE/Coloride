@@ -120,6 +120,12 @@ function ColorideDesktopApp() {
             void invoke("initialize_background_services_command");
             return mapWorkspaceNodes(nodes);
           },
+          switchWorkspace: async (root) => {
+            const nodes = await invoke<NativeWorkspaceNode[]>("load_workspace_command", { root });
+            desktop?.setWorkspaceRoot(root);
+            void invoke("initialize_background_services_command");
+            return mapWorkspaceNodes(nodes);
+          },
           readWorkspaceFile: (path) =>
             invoke<string>("read_workspace_file_command", { relativePath: path }),
           searchWorkspace: (query) =>

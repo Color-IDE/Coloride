@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./sidebar.css";
+@import "./inspector.css";
 @source "../**/*.ts";
 
 @theme {
@@ -37,6 +38,73 @@
     grid-template-columns: 48px clamp(200px, 19vw, 280px) minmax(0, 1fr) clamp(300px, 45%, 640px);
     align-items: center;
     -webkit-app-region: drag;
+  }
+
+  .coloride-macos-titlebar {
+    position: relative;
+  }
+
+  .coloride-inspector-toggle {
+    @apply absolute top-1/2 right-2 z-30 inline-flex h-[26px] w-[26px] -translate-y-1/2 items-center justify-center rounded-[6px] border-0 bg-transparent text-[#858585] cursor-pointer hover:bg-selected hover:text-text-primary;
+    -webkit-app-region: no-drag;
+  }
+
+  /* Left toggle: right of the macOS traffic lights; same icons mirrored horizontally. */
+  .coloride-sidebar-toggle {
+    @apply absolute top-1/2 left-[134px] z-30 inline-flex h-[26px] w-[26px] -translate-y-1/2 items-center justify-center rounded-[6px] border-0 bg-transparent text-[#858585] cursor-pointer hover:bg-selected hover:text-text-primary;
+    -webkit-app-region: no-drag;
+  }
+
+  /* A 0px grid column still keeps the padding+border of Zone 2 (~21px): drop both when collapsed. */
+  .coloride-zone-2-sidebar[data-sidebar-open="false"] {
+    visibility: hidden;
+    padding: 0 !important;
+    border-width: 0 !important;
+  }
+
+  /* With the sidebar collapsed, the chat grid takes over its rounded left edge. */
+  .coloride-cockpit-shell[data-sidebar-open="false"] .coloride-zone-3-multichat {
+    @apply rounded-tl-[16px] rounded-bl-[16px];
+  }
+
+  /* Collapsed side panels leave the corner toggles over the header: keep the chat tabs clear. */
+  .coloride-macos-titlebar[data-sidebar-open="false"] .coloride-zone-3-header {
+    padding-left: 120px; /* toggle ends at 160px; Zone 3 starts at 48px */
+  }
+
+  /* The header divider follows the tabs: it stops at the sidebar toggle instead of the far left. */
+  .coloride-macos-titlebar[data-sidebar-open="false"] .coloride-zone-3-header::before {
+    left: 120px;
+  }
+
+  .coloride-macos-titlebar[data-inspector-open="false"] .coloride-zone-3-header {
+    padding-right: 42px;
+  }
+
+  .coloride-history-btn {
+    @apply absolute top-1/2 z-30 inline-flex h-[26px] w-[26px] -translate-y-1/2 items-center justify-center rounded-[6px] border-0 bg-transparent text-[#858585] cursor-pointer hover:bg-selected hover:text-text-primary disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-[#858585];
+    -webkit-app-region: no-drag;
+  }
+
+  .coloride-history-back {
+    @apply left-[78px];
+  }
+
+  .coloride-history-forward {
+    @apply left-[106px];
+  }
+
+  .coloride-history-forward svg {
+    transform: scaleX(-1);
+  }
+
+  .coloride-sidebar-toggle svg {
+    transform: scaleX(-1);
+  }
+
+  /* With the inspector collapsed, the chat grid takes over its rounded right edge. */
+  .coloride-cockpit-shell[data-inspector-open="false"] .coloride-zone-3-multichat {
+    @apply border-r rounded-tr-[16px] rounded-br-[16px];
   }
 
   .coloride-top-header-spacer {
@@ -111,34 +179,55 @@
     );
   }
 
-  .coloride-header-thin-scrollbar {
+  /* One thin overlay scrollbar for every scroller: header tabs, file tree, code editor. */
+  .coloride-thin-scrollbar {
     position: absolute;
-    left: 8px;
-    right: 8px;
-    bottom: 0px;
-    height: 9px;
+    z-index: 30;
     background: transparent;
     opacity: 0;
-    pointer-events: auto;
+    pointer-events: none;
     cursor: default;
-    z-index: 30;
     transition: opacity 150ms ease;
     -webkit-app-region: no-drag;
   }
 
-  .coloride-zone-3-header[data-scrollable="true"]:hover .coloride-header-thin-scrollbar,
-  .coloride-zone-4-header[data-scrollable="true"]:hover .coloride-header-thin-scrollbar,
-  .coloride-zone-3-header[data-dragging-scroll="true"] .coloride-header-thin-scrollbar,
-  .coloride-zone-4-header[data-dragging-scroll="true"] .coloride-header-thin-scrollbar {
+  .coloride-thin-scrollbar[data-scrollable="true"] {
+    pointer-events: auto;
+  }
+
+  .coloride-thin-scrollbar--x {
+    left: 8px;
+    right: 8px;
+    bottom: 0;
+    height: 9px;
+  }
+
+  .coloride-thin-scrollbar--y {
+    top: 8px;
+    bottom: 8px;
+    right: 0;
+    width: 9px;
+  }
+
+  *:hover > .coloride-thin-scrollbar[data-scrollable="true"],
+  .coloride-thin-scrollbar[data-dragging="true"] {
     opacity: 1;
   }
 
-  .coloride-header-thin-scrollbar-thumb {
+  .coloride-thin-scrollbar-thumb {
     position: absolute;
-    bottom: 1px;
-    height: 2px;
     border-radius: 9999px;
     background-color: rgba(255, 255, 255, 0.32);
+  }
+
+  .coloride-thin-scrollbar--x .coloride-thin-scrollbar-thumb {
+    bottom: 1px;
+    height: 2px;
+  }
+
+  .coloride-thin-scrollbar--y .coloride-thin-scrollbar-thumb {
+    right: 1px;
+    width: 2px;
   }
 
   .coloride-zone-3-header [role="tab"],
