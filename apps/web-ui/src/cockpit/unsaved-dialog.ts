@@ -2,11 +2,27 @@ import { UI_STRINGS, uiText } from "../ui-strings.js";
 
 export type UnsavedChoice = "save" | "discard" | "cancel";
 
-/**
- * Small in-app dialog asking what to do with a file that has unsaved changes. It covers its host
- * (the Zone 4 panel) and resolves once the user picks; Escape or a click outside cancels.
- */
+export interface UnsavedPromptOptions {
+  readonly message: string;
+  /** Text of the primary button; null leaves it out (nothing the dialog could save). */
+  readonly saveLabel?: string | null;
+  readonly discardLabel?: string;
+}
+
+/** Asks what to do with a file that has unsaved changes (see `askUnsavedPrompt`). */
 export function askUnsavedChoice(host: HTMLElement, fileName: string): Promise<UnsavedChoice> {
+  return askUnsavedPrompt(host, { message: uiText.unsavedPrompt(fileName) });
+}
+
+/**
+ * Small in-app dialog asking what to do with unsaved changes. It covers its host (the Zone 4
+ * panel for one file, the whole window when closing) and resolves once the user picks; Escape or
+ * a click outside cancels.
+ */
+export function askUnsavedPrompt(
+  host: HTMLElement,
+  options: UnsavedPromptOptions,
+): Promise<UnsavedChoice> {
   const doc = host.ownerDocument;
   return new Promise((resolve) => {
     const overlay = doc.createElement("div");
@@ -21,7 +37,7 @@ export function askUnsavedChoice(host: HTMLElement, fileName: string): Promise<U
     title.id = "coloride-unsaved-title";
     title.textContent = UI_STRINGS.editor.unsavedTitle;
     const message = doc.createElement("p");
-    message.textContent = uiText.unsavedPrompt(fileName);
+    message.textContent = options.message;
 
     const actions = doc.createElement("div");
     actions.className = "coloride-unsaved-actions";
@@ -37,13 +53,14 @@ export function askUnsavedChoice(host: HTMLElement, fileName: string): Promise<U
       btn.addEventListener("click", () => finish(choice));
       return btn;
     };
-    const save = button(UI_STRINGS.editor.save, "save");
-    save.classList.add("coloride-unsaved-primary");
-    actions.append(
-      button(UI_STRINGS.editor.discard, "discard"),
-      button(UI_STRINGS.editor.cancel, "cancel"),
-      save,
-    );
+    const discard = button(options.discardLabel ?? UI_STRINGS.editor.discard, "discard");
+    const cancel = button(UI_STRINGS.editor.cancel, "cancel");
+    const save =
+      options.saveLabel === null
+        ? null
+        : button(options.saveLabel ?? UI_STRINGS.editor.save, "save");
+    save?.classList.add("coloride-unsaved-primary");
+    actions.append(...(save ? [discard, cancel, save] : [discard, cancel]));
 
     dialog.append(title, message, actions);
     overlay.append(dialog);
@@ -57,6 +74,6 @@ export function askUnsavedChoice(host: HTMLElement, fileName: string): Promise<U
       if (event.target === overlay) finish("cancel");
     });
     host.append(overlay);
-    save.focus();
+    (save ?? cancel).focus();
   });
 }

@@ -19,6 +19,8 @@ export interface InspectorOptions {
   /** Re-runs native analysis once a file is shown. */
   readonly onFileShown: (path: string) => void;
   readonly onTreeScroll: (scrollTopPx: number, viewportHeightPx: number) => void;
+  /** Called when files stop or start having unsaved changes without an edit (discard, project switch). */
+  readonly onUnsavedChange?: () => void;
 }
 
 /**
@@ -230,6 +232,9 @@ export class Inspector {
         stores.updateInMemoryDocumentContent(path, content, true);
         this.loadedPaths.add(path);
       }
+      // They are in the buffers again: keeping the stash would count them twice, and go stale
+      // once they are saved.
+      this.unsavedByProject.delete(projectPath);
       this.tree.reset();
     }
     // The editor still holds the previous file: show the empty state until a file of this group is
@@ -237,6 +242,27 @@ export class Inspector {
     this.closedDocId = activeId;
     this.update();
     if (saved?.active) void this.openFile(saved.active);
+    this.options.onUnsavedChange?.();
+  }
+
+  /** Files with unsaved changes in projects that are not the open one (kept aside meanwhile). */
+  stashedUnsavedCount(): number {
+    let count = 0;
+    for (const unsaved of this.unsavedByProject.values()) count += unsaved.size;
+    return count;
+  }
+
+  /**
+   * Saves every file of the open project that has unsaved changes, one after another (each is
+   * shown in the editor, the only place that can save it). A file whose buffer is not known to
+   * be current is skipped rather than read from disk over its edits.
+   */
+  async saveAllUnsaved(): Promise<void> {
+    for (const path of this.options.stores.getUnsavedDocumentIds()) {
+      if (!this.loadedPaths.has(path)) continue;
+      if (!(await this.openFile(path))) continue;
+      await this.options.saveActiveDocument();
+    }
   }
 
   /**
@@ -329,6 +355,7 @@ export class Inspector {
       } else {
         stores.discardDocumentBuffer(path);
         this.loadedPaths.delete(path);
+        this.options.onUnsavedChange?.();
       }
       this.closeTab(path);
     });

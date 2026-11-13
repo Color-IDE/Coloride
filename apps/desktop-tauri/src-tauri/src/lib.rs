@@ -16,8 +16,20 @@ use state::DesktopAppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        // Closing the window with unsaved changes: hold it back and ask the UI first.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let held_back = window
+                    .try_state::<DesktopAppState>()
+                    .is_some_and(|state| state.close_needs_confirmation());
+                if held_back {
+                    api.prevent_close();
+                    commands::window::request_close_confirmation(window.app_handle());
+                }
+            }
+        })
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
@@ -36,10 +48,27 @@ pub fn run() {
             commands::context_index::initialize_background_services_command,
             commands::search::search_workspace_command,
             commands::search::analyze_document_command,
-            commands::migration::run_native_migration_command
+            commands::migration::run_native_migration_command,
+            commands::window::report_unsaved_buffers_command,
+            commands::window::confirm_exit_command
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Coloride");
+        .build(tauri::generate_context!())
+        .expect("error while building Coloride");
+
+    app.run(|handle, event| {
+        // Quitting (Cmd/Ctrl+Q, or the last window closing) with unsaved changes. An exit asked for
+        // with a code (`app.exit`) is the one the user already confirmed.
+        if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
+            let held_back = code.is_none()
+                && handle
+                    .try_state::<DesktopAppState>()
+                    .is_some_and(|state| state.close_needs_confirmation());
+            if held_back {
+                api.prevent_exit();
+                commands::window::request_close_confirmation(handle);
+            }
+        }
+    });
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

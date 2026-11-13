@@ -179,6 +179,8 @@ export interface CockpitStoreBundle extends WorkspaceNavigationActions {
   markDocumentSaved(filePath: string): void;
   /** True while the in-memory buffer of `filePath` differs from what was last saved. */
   isDocumentUnsaved(filePath: string): boolean;
+  /** Every document of the open project whose buffer holds edits that are not on disk. */
+  getUnsavedDocumentIds(): string[];
   /** Forgets the in-memory buffer so the next open reads the file from disk again. */
   discardDocumentBuffer(filePath: string): void;
   runGlobalSearch(query: string): readonly CockpitSearchResultItem[];

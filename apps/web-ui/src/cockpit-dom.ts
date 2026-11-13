@@ -4,6 +4,7 @@ import { ChatGrid } from "./cockpit/chat-grid.js";
 import { Inspector } from "./cockpit/inspector.js";
 import { SidebarPanels } from "./cockpit/sidebar-panels.js";
 import { TitleBar } from "./cockpit/title-bar.js";
+import { askUnsavedPrompt } from "./cockpit/unsaved-dialog.js";
 import { OnboardingModalController, createInitialOnboardingState } from "./onboarding/index.js";
 import type {
   CockpitAstSymbolItem,
@@ -14,7 +15,7 @@ import type {
   Zone1ActivityState,
   Zone4InspectorState,
 } from "./stores/index.js";
-import { UI_STRINGS } from "./ui-strings.js";
+import { UI_STRINGS, uiText } from "./ui-strings.js";
 
 export interface CockpitDomControllerOptions {
   readonly rootContainer: HTMLElement;
@@ -24,6 +25,11 @@ export interface CockpitDomControllerOptions {
   readonly openWorkspace?: () => Promise<readonly CockpitFileTreeNode[] | null>;
   readonly switchWorkspace?: (path: string) => Promise<readonly CockpitFileTreeNode[] | null>;
   readonly readWorkspaceFile?: (path: string) => Promise<string>;
+  /**
+   * Called with how many files have unsaved changes whenever that number changes, so the host
+   * can hold back closing the window while it is above zero.
+   */
+  readonly onUnsavedCountChange?: (count: number) => void;
   readonly searchWorkspace?: (query: string) => Promise<readonly CockpitSearchResultItem[]>;
   readonly analyzeDocument?: (
     documentId: string,
@@ -63,6 +69,9 @@ export class CockpitDomController {
   private readonly inspector: Inspector;
   private zone4RenderCount = 0;
   private analysisRequestSequence = 0;
+  private readonly onUnsavedCountChange: ((count: number) => void) | undefined;
+  private lastUnsavedCount = 0;
+  private closePrompt: Promise<boolean> | null = null;
   /** Project whose file the editor holds (document ids alone do not say which). */
   private editorProjectPath: string;
 
@@ -72,6 +81,7 @@ export class CockpitDomController {
     this.editorView = editorView;
     this.editorProjectPath = stores.navigation.getState().projectPath;
     this.analyzeDocument = options.analyzeDocument;
+    this.onUnsavedCountChange = options.onUnsavedCountChange;
     this.ownsOnboardingController = !options.onboardingController;
     this.onboardingController =
       options.onboardingController ??
@@ -97,6 +107,7 @@ export class CockpitDomController {
       header: this.titleBar.zone4Header,
       saveActiveDocument: () => this.saveActiveDocument(),
       onFileShown: (path) => this.requestNativeAnalysis(path),
+      onUnsavedChange: () => this.reportUnsaved(),
       onTreeScroll: (scrollTopPx, viewportHeightPx) =>
         this.storeFileTreeScroll(scrollTopPx, viewportHeightPx),
       ...(options.readWorkspaceFile ? { readWorkspaceFile: options.readWorkspaceFile } : {}),
@@ -209,6 +220,7 @@ export class CockpitDomController {
           hasUnsaved,
         );
         this.inspector.setUnsaved(hasUnsaved);
+        this.reportUnsaved();
         if (snap.lastIpcError) this.inspector.reportError(snap.lastIpcError);
         if (snap.lastAckSnapshot) this.requestNativeAnalysis(snap.documentId);
       }),
@@ -228,6 +240,59 @@ export class CockpitDomController {
     const snap = await this.editorView.requestSave();
     this.stores.markDocumentSaved(snap.document_id);
     this.inspector.setUnsaved(false);
+    this.reportUnsaved();
+  }
+
+  /** Files with unsaved changes: the open project's buffers and the ones kept aside for others. */
+  unsavedCount(): number {
+    return this.stores.getUnsavedDocumentIds().length + this.inspector.stashedUnsavedCount();
+  }
+
+  private reportUnsaved(): void {
+    const count = this.unsavedCount();
+    if (count === this.lastUnsavedCount) return;
+    this.lastUnsavedCount = count;
+    this.onUnsavedCountChange?.(count);
+  }
+
+  /**
+   * Decides whether the window may close: true when nothing is unsaved, or once the user chose
+   * to save (everything that can be saved from here) or not to. Asked while another prompt is
+   * still open, it shares that prompt's answer.
+   */
+  confirmClose(): Promise<boolean> {
+    this.closePrompt ??= this.askBeforeClosing().finally(() => {
+      this.closePrompt = null;
+    });
+    return this.closePrompt;
+  }
+
+  private async askBeforeClosing(): Promise<boolean> {
+    const total = this.unsavedCount();
+    if (total === 0) return true;
+    const choice = await askUnsavedPrompt(this.shell, {
+      message: uiText.unsavedCloseAll(total),
+      saveLabel: UI_STRINGS.editor.saveAll,
+    });
+    if (choice === "cancel") return false;
+    if (choice === "discard") return true;
+    try {
+      await this.inspector.saveAllUnsaved();
+    } catch (error: unknown) {
+      this.inspector.reportError(
+        error instanceof Error ? error.message : UI_STRINGS.editor.saveFailed,
+      );
+      return false;
+    }
+    // What is left (other projects' edits) cannot be saved from here: let the user decide.
+    const remaining = this.unsavedCount();
+    if (remaining === 0) return true;
+    const rest = await askUnsavedPrompt(this.shell, {
+      message: uiText.unsavedElsewhere(remaining),
+      saveLabel: null,
+      discardLabel: UI_STRINGS.editor.closeWithoutSaving,
+    });
+    return rest === "discard";
   }
 
   getZoneElements(): {
