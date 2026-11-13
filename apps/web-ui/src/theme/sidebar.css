@@ -272,7 +272,10 @@
     min-height: 0;
   }
   .coloride-zone-2-scroll {
-    height: 100%;
+    /* Filling the viewport with inset rather than height: 100%, which a flex item may not
+       resolve, leaving the list as tall as its content and clipped instead of scrollable. */
+    position: absolute;
+    inset: 0;
     padding-right: 4px; /* keeps the rows clear of the scrollbar */
     overflow: auto;
     scrollbar-width: none;
