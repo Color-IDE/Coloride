@@ -66,7 +66,7 @@ import {
   type LanguageFeatureProvider,
   type NavigateToLocation,
 } from "./language-features.js";
-import { createLezerHighlightingExtensions } from "./languages.js";
+import { createLezerHighlightingExtensions, detectLanguageFromPath } from "./languages.js";
 import {
   type Cm6TranslatedKeybinding,
   DEFAULT_COLORIDE_CM6_THEME,
@@ -157,6 +157,8 @@ export class ColorideEditorView {
   private readonly keymapCompartment = new Compartment();
   private readonly themeCompartment = new Compartment();
   private readonly historyCompartment = new Compartment();
+  /** Grammar + highlighting of the file shown; swapped in place when another file is opened. */
+  private readonly languageCompartment = new Compartment();
   private unsubscribeIpc: (() => void) | null = null;
   private readonly storeListeners = new Set<() => void>();
   private readonly ipcChannel: BinaryIpcChannel;
@@ -302,6 +304,8 @@ export class ColorideEditorView {
     decorations: readonly EditorRangeDecoration[] = [],
   ): void {
     const view = this.getEditorView();
+    const languageChanged =
+      detectLanguageFromPath(nextDocumentId) !== detectLanguageFromPath(this.documentId);
     this.sessionGeneration += 1;
     this.documentId = nextDocumentId;
     this.localRevision = 0;
@@ -322,6 +326,13 @@ export class ColorideEditorView {
       selection: CmSelection.cursor(0),
       effects: [
         this.historyCompartment.reconfigure([]),
+        ...(languageChanged
+          ? [
+              this.languageCompartment.reconfigure(
+                createLezerHighlightingExtensions(nextDocumentId),
+              ),
+            ]
+          : []),
         clearDiagnosticsEffect.of(null),
         // Breakpoints belong to the previous file (the cockpit restores this one's).
         setBreakpointsEffect.of([]),
@@ -618,7 +629,7 @@ export class ColorideEditorView {
           ...historyKeymap,
           indentWithTab,
         ]),
-        ...createLezerHighlightingExtensions(documentId),
+        this.languageCompartment.of(createLezerHighlightingExtensions(documentId)),
         createKeymapCompartmentExtension(
           this.keymapCompartment,
           this.activeKeymapPreset,

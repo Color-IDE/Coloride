@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { redo, undo } from "@codemirror/commands";
+import { language } from "@codemirror/language";
 import { EditorSelection, EditorState } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
 import {
@@ -384,6 +385,21 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
     expect(undo(view)).toBe(true);
     expect(editor.getDocumentText()).toBe("const b = 1;\n");
     expect(ipcChannel.getHostText("src/b.ts", 2)).toBe("const b = 1;\n");
+    editor.destroy();
+  });
+
+  it("highlights each file with its own grammar when another file is opened in place", () => {
+    const editor = new ColorideEditorView({
+      initialDocumentId: "notes.md",
+      initialContent: "# notes\n",
+      ipcChannel: new InMemoryBinaryHostBridge(),
+    });
+    const view = editor.getEditorView();
+    expect(view.state.facet(language)?.name).toBe("markdown");
+    editor.switchDocument("src/a.ts", "const a: number = 1;\n");
+    expect(view.state.facet(language)?.name).toBe("typescript");
+    editor.switchDocument("src/b.css", "a { color: red; }\n");
+    expect(view.state.facet(language)?.name).toBe("css");
     editor.destroy();
   });
 });
