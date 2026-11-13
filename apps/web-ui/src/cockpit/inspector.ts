@@ -1,5 +1,5 @@
 import type { ColorideEditorView } from "@coloride/editor-cm6";
-import type { CockpitStoreBundle } from "../stores/index.js";
+import type { CockpitFileTreeNode, CockpitStoreBundle } from "../stores/index.js";
 import { fileTreeIconColor, fileTreeIconSvg } from "../theme/file-tree-icons.js";
 import { type ThinScrollbar, attachThinScrollbar } from "../thin-scrollbar.js";
 import { UI_STRINGS, uiText } from "../ui-strings.js";
@@ -12,6 +12,8 @@ export interface InspectorOptions {
   readonly editorView: ColorideEditorView;
   readonly header: HTMLElement;
   readonly readWorkspaceFile?: (path: string) => Promise<string>;
+  /** Asks the user for a project folder; shown in the file tree while no project is open. */
+  readonly openWorkspace?: () => Promise<readonly CockpitFileTreeNode[] | null>;
   /** Saves the document currently shown in the editor. */
   readonly saveActiveDocument: () => Promise<void>;
   /** Re-runs native analysis once a file is shown. */
@@ -87,6 +89,17 @@ export class Inspector {
     this.tree = new FileTreePanel(doc, {
       className: "coloride-zone-4-tree-column",
       withFilter: true,
+      ...(options.openWorkspace
+        ? {
+            emptyAction: {
+              label: UI_STRINGS.files.openFolder,
+              run: async () => {
+                const tree = await options.openWorkspace?.();
+                if (tree) stores.setFileTree(tree);
+              },
+            },
+          }
+        : {}),
       onOpenFile: (node) =>
         void this.openFile(node.path, (message) => this.tree.reportError(message)),
       onScroll: options.onTreeScroll,

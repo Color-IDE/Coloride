@@ -91,7 +91,7 @@ describe("@coloride/desktop-tauri — LOT-005 Lazy Boot & Inspector Sync", () =>
       schemaVersion: CONTRACT_SCHEMA_VERSION,
       workspaceRoot: "/workspace/coloride",
       activePersona: "Develop",
-      activeActivityPanel: "files",
+      activeActivityPanel: "search",
       gridMode: 4,
       activeInspectorTab: "code-diff",
       activeChatId: "chat-1",

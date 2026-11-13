@@ -38,7 +38,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     expect(controls?.querySelectorAll("button")).toHaveLength(1);
     expect(controls?.querySelector("button")?.disabled).toBe(true);
     expect(controls?.querySelector("button")?.textContent).toBe("Open project");
-    for (const section of ["files", "search", "git", "debug", "mcp"] as const) {
+    for (const section of ["search", "git", "debug", "mcp"] as const) {
       stores.setActivitySection(section);
       expect((controls as HTMLElement).hidden).toBe(true);
     }

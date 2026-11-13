@@ -88,7 +88,7 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
     stores.completeAgentTaskOnChat("chat-2");
     expect(stores.zone3.getState().activeRunningAgentChatId).toBeNull();
   });
-  it("supports full keyboard navigation (Cmd/Ctrl+1..6, Alt+Arrow) and UI zoom (50%..200%) without truncating the 4 zones", () => {
+  it("supports full keyboard navigation (Cmd/Ctrl+1..5, Alt+Arrow) and UI zoom (50%..200%) without truncating the 4 zones", () => {
     const rootContainer = document.createElement("div");
     document.body.appendChild(rootContainer);
 
@@ -128,8 +128,8 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
 
     const { shell, zone1, zone2, zone3, zone4 } = controller.getZoneElements();
 
-    // Keyboard shortcuts Cmd/Ctrl+1..6 switch Zone 1 Activity Bar sections
-    const expectedSections = ["sessions", "files", "search", "git", "debug", "mcp"] as const;
+    // Keyboard shortcuts Cmd/Ctrl+1..5 switch Zone 1 Activity Bar sections
+    const expectedSections = ["sessions", "search", "debug", "git", "mcp"] as const;
     for (let i = 0; i < expectedSections.length; i += 1) {
       shell.dispatchEvent(
         new KeyboardEvent("keydown", {
@@ -140,14 +140,7 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
       );
       expect(stores.zone1.getState().activeSection).toBe(expectedSections[i]);
       const sessionsPanel = zone2.querySelector<HTMLElement>(".sidebar-navigation");
-      const filesPanel = zone2.querySelector<HTMLElement>(".coloride-zone-2-file-tree");
-      if (expectedSections[i] === "sessions") {
-        expect(sessionsPanel?.hidden).toBe(false);
-        expect(filesPanel?.hidden).toBe(true);
-      } else if (expectedSections[i] === "files") {
-        expect(sessionsPanel?.hidden).toBe(true);
-        expect(filesPanel?.hidden).toBe(false);
-      }
+      expect(sessionsPanel?.hidden).toBe(expectedSections[i] !== "sessions");
     }
 
     // Alt+ArrowRight navigates to the next chat cell and syncs Zone 4 Inspector in < 10 ms
@@ -185,7 +178,7 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
     editorView.destroy();
     rootContainer.remove();
   });
-  it("handles Cmd/Ctrl+1..6 and Cmd/Ctrl+S even when focus is outside the shell (e.g. after clicking the title bar)", () => {
+  it("handles Cmd/Ctrl+1..5 and Cmd/Ctrl+S even when focus is outside the shell (e.g. after clicking the title bar)", () => {
     const rootContainer = document.createElement("div");
     document.body.appendChild(rootContainer);
     const stores = createCockpitStoreBundle();
@@ -202,9 +195,9 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
     const press = (key: string, init: KeyboardEventInit = { metaKey: true }) =>
       document.body.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, ...init }));
     press("3");
-    expect(stores.zone1.getState().activeSection).toBe("search");
+    expect(stores.zone1.getState().activeSection).toBe("debug");
     press("2");
-    expect(stores.zone1.getState().activeSection).toBe("files");
+    expect(stores.zone1.getState().activeSection).toBe("search");
     press("1", { ctrlKey: true });
     expect(stores.zone1.getState().activeSection).toBe("sessions");
     // Plain digits are not shortcuts.
@@ -275,5 +268,14 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
     expect(stores.zone3.getState().activeChatId).toBe("chat-2");
     controller.destroy();
     rootContainer.remove();
+  });
+  it("falls back to Sessions when a saved session names a section that no longer exists", () => {
+    // The "files" tab was removed (the tree lives next to the editor); older caches may still say it.
+    const legacy = createCockpitStoreBundle({
+      initialActiveSection: "files" as unknown as "sessions",
+    });
+    expect(legacy.zone1.getState().activeSection).toBe("sessions");
+    const kept = createCockpitStoreBundle({ initialActiveSection: "search" });
+    expect(kept.zone1.getState().activeSection).toBe("search");
   });
 });

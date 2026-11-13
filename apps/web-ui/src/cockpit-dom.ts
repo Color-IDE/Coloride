@@ -100,6 +100,7 @@ export class CockpitDomController {
       onTreeScroll: (scrollTopPx, viewportHeightPx) =>
         this.storeFileTreeScroll(scrollTopPx, viewportHeightPx),
       ...(options.readWorkspaceFile ? { readWorkspaceFile: options.readWorkspaceFile } : {}),
+      ...(options.openWorkspace ? { openWorkspace: options.openWorkspace } : {}),
     });
     this.sidebar = new SidebarPanels(doc, {
       stores,
@@ -249,7 +250,7 @@ export class CockpitDomController {
   /** Scrolls the sidebar file tree (programmatic; also records the position for the session). */
   scrollFileTree(scrollTopPx: number, viewportHeightPx = 600): void {
     this.storeFileTreeScroll(scrollTopPx, viewportHeightPx);
-    this.sidebar.files.scrollTo(scrollTopPx, viewportHeightPx);
+    this.inspector.tree.scrollTo(scrollTopPx, viewportHeightPx);
   }
 
   destroy(): void {

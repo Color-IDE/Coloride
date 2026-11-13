@@ -290,7 +290,7 @@ mod tests {
             schema_version: CONTRACT_SCHEMA_VERSION,
             workspace_root: "/workspace/coloride".to_string(),
             active_persona: "Develop".to_string(),
-            active_activity_panel: "files".to_string(),
+            active_activity_panel: "search".to_string(),
             grid_mode: 4,
             active_inspector_tab: "code-diff".to_string(),
             active_chat_id: "chat-2".to_string(),

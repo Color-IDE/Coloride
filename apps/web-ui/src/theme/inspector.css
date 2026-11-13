@@ -67,13 +67,6 @@
   .coloride-file-tree-scroll::-webkit-scrollbar {
     display: none;
   }
-  /* The same file tree component inside the sidebar (Zone 2) */
-  .coloride-zone-2-file-tree {
-    flex-direction: column;
-    height: 100%;
-    min-height: 0;
-  }
-
   /* Folders pinned over the top of the tree while scrolling (sticky scroll) */
   .coloride-file-tree-sticky {
     position: absolute;
@@ -85,9 +78,6 @@
   }
   .coloride-file-tree-sticky[hidden] {
     display: none;
-  }
-  .coloride-zone-2-file-tree .coloride-file-tree-sticky {
-    background: var(--color-sidebar);
   }
   /* Two classes on purpose: `.explorer-row` (absolute, for virtualization) is declared below and
      would otherwise win, stacking every pinned row on top of each other. */

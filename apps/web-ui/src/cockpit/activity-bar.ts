@@ -14,16 +14,15 @@ const ACTIVITY_ITEMS: readonly {
   readonly dividerBefore?: boolean;
 }[] = [
   { section: "sessions", icon: ACTIVITY_BAR_SVG_ICONS.sessions, shortcut: "Cmd/Ctrl+1" },
-  { section: "files", icon: ACTIVITY_BAR_SVG_ICONS.files, shortcut: "Cmd/Ctrl+2" },
-  { section: "search", icon: ACTIVITY_BAR_SVG_ICONS.search, shortcut: "Cmd/Ctrl+3" },
-  { section: "debug", icon: ACTIVITY_BAR_SVG_ICONS.debug, shortcut: "Cmd/Ctrl+5" },
+  { section: "search", icon: ACTIVITY_BAR_SVG_ICONS.search, shortcut: "Cmd/Ctrl+2" },
+  { section: "debug", icon: ACTIVITY_BAR_SVG_ICONS.debug, shortcut: "Cmd/Ctrl+3" },
   {
     section: "git",
     icon: ACTIVITY_BAR_SVG_ICONS.git,
     shortcut: "Cmd/Ctrl+4",
     dividerBefore: true,
   },
-  { section: "mcp", icon: ACTIVITY_BAR_SVG_ICONS.mcp, shortcut: "Cmd/Ctrl+6" },
+  { section: "mcp", icon: ACTIVITY_BAR_SVG_ICONS.mcp, shortcut: "Cmd/Ctrl+5" },
 ];
 
 const PERSONAS: readonly CockpitPersonaMode[] = [

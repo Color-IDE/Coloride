@@ -14,7 +14,6 @@ export const UI_STRINGS = {
   },
   activity: {
     sessions: "Chat sessions",
-    files: "File explorer",
     search: "Global search",
     debug: "Debug & tests",
     git: "Git & checkpoints",

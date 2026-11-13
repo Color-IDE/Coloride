@@ -12,7 +12,16 @@ import type {
 
 export type CockpitPersonaMode = "Create" | "Learn" | "Develop" | "Infrastructure" | "Data";
 
-export type ActivityBarSection = "sessions" | "files" | "search" | "git" | "debug" | "mcp";
+export type ActivityBarSection = "sessions" | "search" | "git" | "debug" | "mcp";
+
+/** Sections a saved session may name; anything else (e.g. the removed "files") falls back. */
+export const ACTIVITY_BAR_SECTIONS: readonly ActivityBarSection[] = [
+  "sessions",
+  "search",
+  "git",
+  "debug",
+  "mcp",
+];
 
 export type InspectorTab = "preview" | "code-diff";
 
