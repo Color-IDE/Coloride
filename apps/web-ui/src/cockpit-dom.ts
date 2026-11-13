@@ -3,8 +3,8 @@ import { ActivityBar } from "./cockpit/activity-bar.js";
 import { ChatGrid } from "./cockpit/chat-grid.js";
 import { type DebugHost, DebugPanel } from "./cockpit/debug-panel.js";
 import { Inspector } from "./cockpit/inspector.js";
+import { PanelResizeHandle, loadPanelWidth } from "./cockpit/panel-resize.js";
 import { SidebarPanels } from "./cockpit/sidebar-panels.js";
-import { SidebarResizeHandle, loadSidebarWidth } from "./cockpit/sidebar-resize.js";
 import type { TerminalHost, TerminalViewFactory } from "./cockpit/terminal-pane.js";
 import { TitleBar } from "./cockpit/title-bar.js";
 import {
@@ -79,14 +79,19 @@ export interface CockpitDomControllerOptions {
 }
 
 /** Grid columns shared by the title bar and the shell, so headers stay above their zone. */
-function cockpitGridColumns(z1: Zone1ActivityState, sidebarWidthPx: number | null): string {
-  const defaultSidebar = "clamp(200px, 19vw, 280px)";
-  const sidebar = z1.sidebarOpen
-    ? sidebarWidthPx === null
-      ? defaultSidebar
-      : `${sidebarWidthPx}px`
-    : "0px";
-  const inspector = z1.inspectorOpen ? "clamp(300px, 45%, 640px)" : "0px";
+const DEFAULT_SIDEBAR_WIDTH = "clamp(200px, 19vw, 280px)";
+const DEFAULT_INSPECTOR_WIDTH = "clamp(300px, 45%, 640px)";
+
+function cockpitGridColumns(
+  z1: Zone1ActivityState,
+  sidebarWidthPx: number | null,
+  inspectorWidthPx: number | null,
+): string {
+  const sidebarWidth = sidebarWidthPx === null ? DEFAULT_SIDEBAR_WIDTH : `${sidebarWidthPx}px`;
+  const inspectorWidth =
+    inspectorWidthPx === null ? DEFAULT_INSPECTOR_WIDTH : `${inspectorWidthPx}px`;
+  const sidebar = z1.sidebarOpen ? sidebarWidth : "0px";
+  const inspector = z1.inspectorOpen ? inspectorWidth : "0px";
   return `48px ${sidebar} minmax(0, 1fr) ${inspector}`;
 }
 
@@ -112,9 +117,11 @@ export class CockpitDomController {
   private readonly inspector: Inspector;
   private readonly trustBanner: TrustBanner | null;
   private readonly terminalAvailable: boolean;
-  /** Width the user gave the side panel; null means the default one. */
+  /** Widths the user gave the side panels; null means the default one. */
   private sidebarWidthPx: number | null = null;
-  private readonly sidebarHandle: SidebarResizeHandle;
+  private inspectorWidthPx: number | null = null;
+  private readonly sidebarHandle: PanelResizeHandle;
+  private readonly inspectorHandle: PanelResizeHandle;
   private readonly debugPanel: DebugPanel | null;
   /** Breakpoints of every file, keyed by project and document id. */
   private readonly breakpoints = new Map<string, readonly number[]>();
@@ -204,16 +211,26 @@ export class CockpitDomController {
       this.chatGrid.element,
       this.inspector.element,
     );
-    this.sidebarWidthPx = loadSidebarWidth(doc.defaultView?.localStorage);
-    this.sidebarHandle = new SidebarResizeHandle(doc, {
+    const storage = doc.defaultView?.localStorage;
+    this.sidebarWidthPx = loadPanelWidth("sidebar", storage);
+    this.inspectorWidthPx = loadPanelWidth("inspector", storage);
+    this.sidebarHandle = new PanelResizeHandle(doc, "sidebar", {
       currentWidth: () => this.sidebar.element.getBoundingClientRect().width,
       setWidth: (widthPx) => {
         this.sidebarWidthPx = widthPx;
         this.renderLayout();
       },
-      storage: doc.defaultView?.localStorage,
+      storage,
     });
-    this.shell.append(this.sidebarHandle.element);
+    this.inspectorHandle = new PanelResizeHandle(doc, "inspector", {
+      currentWidth: () => this.inspector.element.getBoundingClientRect().width,
+      setWidth: (widthPx) => {
+        this.inspectorWidthPx = widthPx;
+        this.renderLayout();
+      },
+      storage,
+    });
+    this.shell.append(this.sidebarHandle.element, this.inspectorHandle.element);
     rootContainer.append(this.shell);
     this.terminalAvailable = options.terminalHost !== undefined;
     this.debugPanel = options.debugHost
@@ -450,7 +467,7 @@ export class CockpitDomController {
 
   private renderLayout(): void {
     const z1 = this.stores.zone1.getState();
-    const columns = cockpitGridColumns(z1, this.sidebarWidthPx);
+    const columns = cockpitGridColumns(z1, this.sidebarWidthPx, this.inspectorWidthPx);
     this.shell.dataset.uiZoomPercent = String(z1.uiZoomPercent);
     this.shell.dataset.activePersona = z1.activePersona;
     this.shell.dataset.sidebarOpen = String(z1.sidebarOpen);
@@ -460,9 +477,14 @@ export class CockpitDomController {
     // The resize bar follows the right edge of the side panel (hidden when it is closed).
     this.shell.style.setProperty(
       "--coloride-sidebar-width",
-      this.sidebarWidthPx === null ? "clamp(200px, 19vw, 280px)" : `${this.sidebarWidthPx}px`,
+      this.sidebarWidthPx === null ? DEFAULT_SIDEBAR_WIDTH : `${this.sidebarWidthPx}px`,
+    );
+    this.shell.style.setProperty(
+      "--coloride-inspector-width",
+      this.inspectorWidthPx === null ? DEFAULT_INSPECTOR_WIDTH : `${this.inspectorWidthPx}px`,
     );
     this.sidebarHandle.element.hidden = !z1.sidebarOpen;
+    this.inspectorHandle.element.hidden = !z1.inspectorOpen;
     this.titleBar.update(z1, columns);
     this.activityBar.update(z1);
     this.inspector.setOpen(z1.inspectorOpen);
