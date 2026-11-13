@@ -308,9 +308,7 @@ impl SqliteWalContextEngine {
                 .scanner
                 .sanitize_text(&hit.excerpt.source_path, &hit.excerpt.content);
             let estimated_tokens = estimate_token_count(&sanitized.sanitized_text);
-            if token_budget_used.saturating_add(estimated_tokens) > token_budget_max
-                && !excerpts.is_empty()
-            {
+            if token_budget_used.saturating_add(estimated_tokens) > token_budget_max {
                 break;
             }
             token_budget_used = token_budget_used.saturating_add(estimated_tokens);
@@ -359,7 +357,15 @@ impl SqliteWalContextEngine {
             .scanner
             .sanitize_text(&chunk.file_path, &chunk.sanitized_content);
 
-        let confidence = if chunk.symbol_name.is_some() {
+        let rope = Rope::from_str(&sanitized.sanitized_text);
+        let parsed = self.ast_parser.parse_with(
+            SupportedAstLanguage::from_path(&chunk.file_path),
+            &RopeTextProvider::new(&rope),
+            None,
+        );
+        let confidence = if parsed.has_error() {
+            ConfidenceLevel::HeuristicText
+        } else if chunk.symbol_name.is_some() {
             ConfidenceLevel::ExactAstLsp
         } else {
             ConfidenceLevel::LexicalBm25
@@ -521,5 +527,117 @@ pub(super) fn estimate_token_count(text: &str) -> u32 {
         0
     } else {
         (text.len() as u32).div_ceil(4).max(1)
+    }
+}
+
+impl SqliteWalContextEngine {
+    pub(crate) fn context_chunks_for_path(&mut self, path: &str) -> Vec<SqliteAstChunkRow> {
+        if self.scanner.check_path_acl(path).is_err() {
+            return Vec::new();
+        }
+        if let Some(entry) = self.overlay.entries().get(path).cloned() {
+            let text = self
+                .scanner
+                .sanitize_text(path, &entry.rope.to_string())
+                .sanitized_text;
+            let rope = Rope::from_str(&text);
+            let language = SupportedAstLanguage::from_path(path);
+            let tree = self
+                .ast_parser
+                .parse_with(language, &RopeTextProvider::new(&rope), None);
+            return build_chunks_for_parsed_file(
+                path,
+                entry.interactive_revision,
+                &entry.content_blake3_hash,
+                &self.active_git_branch,
+                language,
+                &rope,
+                &tree,
+            )
+            .1;
+        }
+        self.chunks_of_file(path).cloned().collect()
+    }
+
+    pub fn get_symbol_definition(&mut self, symbol: &str) -> Vec<ContextSearchHit> {
+        // Exact symbol table lookup, without lexical ranking or a candidate cap.
+        let mut chunks = self
+            .ast_chunks
+            .values()
+            .filter(|c| {
+                c.symbol_name.as_deref() == Some(symbol)
+                    && !self.overlay.entries().contains_key(&c.file_path)
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        let paths = self.overlay.entries().keys().cloned().collect::<Vec<_>>();
+        for path in paths {
+            chunks.extend(
+                self.context_chunks_for_path(&path)
+                    .into_iter()
+                    .filter(|c| c.symbol_name.as_deref() == Some(symbol)),
+            );
+        }
+        chunks
+            .iter()
+            .filter_map(|c| {
+                let live = self.overlay.entries().contains_key(&c.file_path);
+                self.build_search_hit(
+                    c,
+                    0.0,
+                    0.0,
+                    if live {
+                        ExcerptFreshness::LiveUnsavedBuffer
+                    } else {
+                        ExcerptFreshness::IndexedCommit
+                    },
+                    live,
+                )
+            })
+            .collect()
+    }
+
+    #[cfg(feature = "vector")]
+    pub(crate) fn vector_hit(
+        &mut self,
+        path: &str,
+        key: &str,
+        hash: &str,
+        score: f64,
+    ) -> Option<ContextSearchHit> {
+        let chunk = if self.overlay.entries().contains_key(path) {
+            self.context_chunks_for_path(path)
+                .into_iter()
+                .find(|c| c.chunk_id == key)
+        } else {
+            self.ast_chunks
+                .get(key)
+                .filter(|c| c.file_path == path)
+                .cloned()
+        }?;
+        if blake3::hash(chunk.sanitized_content.as_bytes())
+            .to_hex()
+            .as_str()
+            != hash
+        {
+            return None;
+        }
+        let live = self.overlay.entries().contains_key(path);
+        let mut hit = self.build_search_hit(
+            &chunk,
+            0.0,
+            0.0,
+            if live {
+                ExcerptFreshness::LiveUnsavedBuffer
+            } else {
+                ExcerptFreshness::IndexedCommit
+            },
+            live,
+        )?;
+        hit.combined_score = score;
+        if hit.excerpt.confidence != ConfidenceLevel::HeuristicText {
+            hit.excerpt.confidence = ConfidenceLevel::VectorSemantic;
+        }
+        Some(hit)
     }
 }

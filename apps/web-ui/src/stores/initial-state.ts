@@ -4,6 +4,7 @@ import {
   inferImpactedTestsHeuristically,
 } from "../cockpit-analysis.js";
 import type { DocumentBuffers } from "./documents.js";
+import { ACTIVITY_BAR_SECTIONS } from "./types.js";
 import type {
   CockpitChatMessage,
   CockpitChatTab,
@@ -69,10 +70,15 @@ export function createInitialStores(options?: CockpitStoreOptions) {
   );
 
   const zone1 = new AtomicStore<Zone1ActivityState>({
-    activeSection: options?.initialActiveSection ?? "sessions",
+    // A cache written by an older version may name a section that no longer exists.
+    activeSection:
+      options?.initialActiveSection && ACTIVITY_BAR_SECTIONS.includes(options.initialActiveSection)
+        ? options.initialActiveSection
+        : "sessions",
     activePersona: initialPersona,
     sidebarOpen: true,
-    inspectorOpen: true,
+    // Closed at launch: the code editor panel opens when the user opens a file or toggles it.
+    inspectorOpen: false,
     fileTreeAccessible: true,
     uiZoomPercent: options?.initialUiZoomPercent ?? 100,
     permissionsLevel: "standard-enforced",

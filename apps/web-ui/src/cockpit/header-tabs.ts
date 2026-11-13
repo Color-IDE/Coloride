@@ -67,6 +67,10 @@ export class HeaderTabs {
     this.track = doc.createElement("div");
     this.track.className = "coloride-header-tab-track";
     this.track.setAttribute("role", "tablist");
+    // The strip can fill the whole header; Tauri drags the window only from an element that carries
+    // the attribute itself, so the empty part of the strip must. Tabs and buttons are children and
+    // stay clickable.
+    this.track.setAttribute("data-tauri-drag-region", "");
     this.track.setAttribute("aria-label", options.ariaLabel);
     header.replaceChildren(this.track, ...(options.trailing ?? []));
     this.releaseHeaderScroll = attachHeaderScroll(header, this.track);

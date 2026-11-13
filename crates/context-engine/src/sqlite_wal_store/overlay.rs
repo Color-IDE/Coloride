@@ -24,6 +24,7 @@ impl UnsavedBufferEntry {
 #[derive(Debug, Default, Clone)]
 pub struct UnsavedBufferOverlay {
     entries: BTreeMap<String, UnsavedBufferEntry>,
+    pub(crate) changes: crate::changes::ChangeJournal,
 }
 
 impl UnsavedBufferOverlay {
@@ -31,6 +32,7 @@ impl UnsavedBufferOverlay {
     pub fn new() -> Self {
         Self {
             entries: BTreeMap::new(),
+            changes: Default::default(),
         }
     }
 
@@ -48,6 +50,14 @@ impl UnsavedBufferOverlay {
         // `!=`, not `>`: a buffer opened with unsaved edits has `NEVER_SAVED_REVISION` on disk.
         if interactive_revision != disk_saved_revision {
             let hash = content_blake3_hash.unwrap_or_else(|| compute_rope_blake3_hex(&rope));
+            if self.entries.get(&norm_path).is_some_and(|entry| {
+                entry.content_blake3_hash == hash
+                    && entry.interactive_revision == interactive_revision
+                    && entry.disk_saved_revision == disk_saved_revision
+            }) {
+                return;
+            }
+            self.changes.mark(Some(norm_path.clone()));
             self.entries.insert(
                 norm_path.clone(),
                 UnsavedBufferEntry {
@@ -59,14 +69,18 @@ impl UnsavedBufferOverlay {
                 },
             );
         } else {
-            self.entries.remove(&norm_path);
+            if self.entries.remove(&norm_path).is_some() {
+                self.changes.mark(Some(norm_path));
+            }
         }
     }
 
     /// Remove a path from the unsaved buffer overlay (e.g. when saved to disk or closed).
     pub fn remove_buffer(&mut self, file_path: &str) {
         let norm = normalize_rel_path(file_path);
-        self.entries.remove(&norm);
+        if self.entries.remove(&norm).is_some() {
+            self.changes.mark(Some(norm));
+        }
     }
 
     /// Synchronize the overlay directly from `host_core::DocumentService`:
@@ -77,6 +91,7 @@ impl UnsavedBufferOverlay {
         workspace_root: Option<&Path>,
         document_service: &DocumentService,
     ) {
+        let previous = self.entries.clone();
         self.entries.clear();
         for session in document_service.sessions() {
             if session.has_unsaved_changes() {
@@ -101,6 +116,18 @@ impl UnsavedBufferOverlay {
                         content_blake3_hash: session.content_blake3_hash().to_string(),
                     },
                 );
+            }
+        }
+        for path in previous.keys().chain(self.entries.keys()) {
+            let before = previous
+                .get(path)
+                .map(|e| (&e.content_blake3_hash, e.interactive_revision));
+            let after = self
+                .entries
+                .get(path)
+                .map(|e| (&e.content_blake3_hash, e.interactive_revision));
+            if before != after {
+                self.changes.mark(Some(path.clone()));
             }
         }
     }

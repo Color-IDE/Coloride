@@ -24,6 +24,8 @@ Thumbs.db
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+# Optional MCP embedding download cache (vectors.sqlite is covered above)
+/model-cache/
 coverage/
 
 # Local notes

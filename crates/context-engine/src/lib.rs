@@ -1,8 +1,15 @@
 pub mod ast_graph;
+pub mod bundle;
+mod changes;
+pub mod mcp;
 pub mod secret_scanner;
 pub mod sqlite_wal_store;
+#[cfg(feature = "vector")]
+pub mod vectors;
 
 pub use ast_graph::*;
+pub use bundle::*;
+pub use mcp::*;
 pub use secret_scanner::*;
 pub use sqlite_wal_store::*;
 

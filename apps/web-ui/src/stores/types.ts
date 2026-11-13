@@ -12,7 +12,16 @@ import type {
 
 export type CockpitPersonaMode = "Create" | "Learn" | "Develop" | "Infrastructure" | "Data";
 
-export type ActivityBarSection = "sessions" | "files" | "search" | "git" | "debug" | "mcp";
+export type ActivityBarSection = "sessions" | "search" | "git" | "debug" | "mcp";
+
+/** Sections a saved session may name; anything else (e.g. the removed "files") falls back. */
+export const ACTIVITY_BAR_SECTIONS: readonly ActivityBarSection[] = [
+  "sessions",
+  "search",
+  "git",
+  "debug",
+  "mcp",
+];
 
 export type InspectorTab = "preview" | "code-diff";
 
@@ -136,6 +145,11 @@ export interface CockpitStoreBundle extends WorkspaceNavigationActions {
    * tab does not exist or the panel would drop below the minimum size in the measured area.
    */
   createChat(options?: CreateChatOptions): string | null;
+  /**
+   * Shows a session alone in its tab, or, when it already is, goes back to the tiled panels.
+   * While one is maximized the header tabs switch which one is shown.
+   */
+  toggleMaximizeChat(chatId: string): void;
   /** Same check as `createChat`, without creating anything. */
   canCreateChat(options?: CreateChatOptions): boolean;
   /** Size in pixels of the area holding the panels; unknown (null) means no size limit. */
@@ -165,6 +179,8 @@ export interface CockpitStoreBundle extends WorkspaceNavigationActions {
   markDocumentSaved(filePath: string): void;
   /** True while the in-memory buffer of `filePath` differs from what was last saved. */
   isDocumentUnsaved(filePath: string): boolean;
+  /** Every document of the open project whose buffer holds edits that are not on disk. */
+  getUnsavedDocumentIds(): string[];
   /** Forgets the in-memory buffer so the next open reads the file from disk again. */
   discardDocumentBuffer(filePath: string): void;
   runGlobalSearch(query: string): readonly CockpitSearchResultItem[];

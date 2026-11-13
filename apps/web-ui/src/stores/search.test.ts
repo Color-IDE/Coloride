@@ -57,7 +57,7 @@ describe("store bundle composition", () => {
   it("keeps actions usable detached from the bundle (no reliance on this)", () => {
     const { setActivitySection, handleActivityBarShortcut, runGlobalSearch, zone1, zone2 } =
       createCockpitStoreBundle();
-    handleActivityBarShortcut("3", true);
+    handleActivityBarShortcut("2", true);
     expect(zone1.getState().activeSection).toBe("search");
     setActivitySection("debug");
     expect(zone1.getState().activeSection).toBe("debug");

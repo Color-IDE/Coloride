@@ -155,7 +155,7 @@ describe("@coloride/web-ui — LOT-005 virtualization and typing under load", ()
     // Verify 30,000-node virtualized file tree only mounted the visible window slice in DOM
     const renderedTreeRows = controller
       .getZoneElements()
-      .zone2.querySelectorAll(".cm-coloride-virtual-tree-row");
+      .zone4.querySelectorAll(".cm-coloride-virtual-tree-row");
     expect(renderedTreeRows.length).toBeGreaterThan(0);
     expect(renderedTreeRows.length).toBeLessThanOrEqual(40);
 

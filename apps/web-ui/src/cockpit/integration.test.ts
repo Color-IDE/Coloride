@@ -9,7 +9,6 @@ describe("@coloride/web-ui — LOT-003..LOT-008 integration", () => {
     document.body.appendChild(rootContainer);
 
     const stores = createCockpitStoreBundle({
-      initialActiveSection: "files",
       initialActiveDocumentId: "src/auth.ts",
       initialChats: [
         {
@@ -61,13 +60,13 @@ describe("@coloride/web-ui — LOT-003..LOT-008 integration", () => {
 
     const { shell, zone2, zone4 } = controller.getZoneElements();
 
-    // 1. LOT-005: Clicking a file row in Zone 2 File Tree opens it in Zone 4 CM6 (< 10 ms, 0 remounts)
+    // 1. LOT-005: Clicking a file row in the Zone 4 File Tree opens it in Zone 4 CM6 (< 10 ms, 0 remounts)
     stores.updateInMemoryDocumentContent(
       "src/billing.ts",
       "export function chargeInvoice() {\n  return 100;\n}\n",
       false,
     );
-    const billingRow = zone2.querySelector<HTMLElement>(
+    const billingRow = zone4.querySelector<HTMLElement>(
       '.cm-coloride-virtual-tree-row[data-path="src/billing.ts"]',
     );
     expect(billingRow).not.toBeNull();
@@ -98,7 +97,7 @@ describe("@coloride/web-ui — LOT-003..LOT-008 integration", () => {
     await controller.saveActiveDocument();
     expect(zone4.dataset.unsavedChanges).toBe("false");
 
-    // 4. LOT-007: Switching to Debug (Cmd/Ctrl+5) renders AST symbols and impacted test files
+    // 4. LOT-007: Switching to Debug (Cmd/Ctrl+3) renders AST symbols and impacted test files
     stores.setActivitySection("debug");
     const symbolItems = zone2.querySelectorAll(".coloride-ast-symbol-item");
     const impactedItems = zone2.querySelectorAll(".coloride-impacted-test-item");
@@ -107,7 +106,7 @@ describe("@coloride/web-ui — LOT-003..LOT-008 integration", () => {
     expect(impactedItems.length).toBeGreaterThanOrEqual(1);
     expect(impactedItems[0]?.textContent).toContain("src/billing.test.ts");
 
-    // 5. LOT-006: Switching to MCP (Cmd/Ctrl+6) renders the onboarding toggle and opens modal
+    // 5. LOT-006: Switching to MCP (Cmd/Ctrl+5) renders the onboarding toggle and opens modal
     stores.setActivitySection("mcp");
     const openBtn = zone2.querySelector<HTMLButtonElement>(".coloride-open-onboarding-btn");
     expect(openBtn).not.toBeNull();

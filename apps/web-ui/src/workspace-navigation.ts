@@ -13,6 +13,17 @@ export interface WorkGroup {
    * it is rebuilt automatically, see `resolveGroupLayout`.
    */
   readonly layout?: LayoutNode | null | undefined;
+  /** A session shown alone, filling the tab; the others keep their place in `layout`. */
+  readonly maximizedChatId?: string | null | undefined;
+}
+
+/**
+ * The session shown alone in a tab, or null when its panels are tiled. A saved id that is no
+ * longer one of the tab's sessions does not count.
+ */
+export function resolveGroupMaximized(group: WorkGroup): string | null {
+  const id = group.maximizedChatId;
+  return id && group.chatIds.includes(id) ? id : null;
 }
 
 const resolvedLayouts = new WeakMap<WorkGroup, LayoutNode | null>();

@@ -23,17 +23,21 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
     const toggle = document.querySelector<HTMLButtonElement>(".coloride-inspector-toggle");
     const shell = rootContainer.querySelector<HTMLElement>(".coloride-cockpit-shell");
     const header = document.querySelector<HTMLElement>(".coloride-zone-4-header");
-    expect(toggle?.getAttribute("aria-label")).toBe("Hide right panel");
-    toggle?.click();
+    // The right panel starts closed (the editor stays mounted, only hidden).
     expect(stores.zone1.getState().inspectorOpen).toBe(false);
     expect(shell?.style.gridTemplateColumns.endsWith(" 0px")).toBe(true);
     expect(header?.style.visibility).toBe("hidden");
     expect(toggle?.getAttribute("aria-label")).toBe("Show right panel");
-    expect(editorView.getEditorView().dom).toBe(editorDom);
     expect(editorDom.isConnected).toBe(true);
     toggle?.click();
+    expect(stores.zone1.getState().inspectorOpen).toBe(true);
     expect(header?.style.visibility).toBe("visible");
+    expect(toggle?.getAttribute("aria-label")).toBe("Hide right panel");
     expect(editorView.getEditorView().dom).toBe(editorDom);
+    toggle?.click();
+    expect(stores.zone1.getState().inspectorOpen).toBe(false);
+    expect(editorView.getEditorView().dom).toBe(editorDom);
+    toggle?.click();
     const sidebarToggle = document.querySelector<HTMLButtonElement>(".coloride-sidebar-toggle");
     expect(sidebarToggle?.getAttribute("aria-label")).toBe("Hide sidebar");
     sidebarToggle?.click();
@@ -88,7 +92,7 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
     stores.completeAgentTaskOnChat("chat-2");
     expect(stores.zone3.getState().activeRunningAgentChatId).toBeNull();
   });
-  it("supports full keyboard navigation (Cmd/Ctrl+1..6, Alt+Arrow) and UI zoom (50%..200%) without truncating the 4 zones", () => {
+  it("supports full keyboard navigation (Cmd/Ctrl+1..5, Alt+Arrow) and UI zoom (50%..200%) without truncating the 4 zones", () => {
     const rootContainer = document.createElement("div");
     document.body.appendChild(rootContainer);
 
@@ -128,8 +132,8 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
 
     const { shell, zone1, zone2, zone3, zone4 } = controller.getZoneElements();
 
-    // Keyboard shortcuts Cmd/Ctrl+1..6 switch Zone 1 Activity Bar sections
-    const expectedSections = ["sessions", "files", "search", "git", "debug", "mcp"] as const;
+    // Keyboard shortcuts Cmd/Ctrl+1..5 switch Zone 1 Activity Bar sections
+    const expectedSections = ["sessions", "search", "debug", "git", "mcp"] as const;
     for (let i = 0; i < expectedSections.length; i += 1) {
       shell.dispatchEvent(
         new KeyboardEvent("keydown", {
@@ -140,14 +144,7 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
       );
       expect(stores.zone1.getState().activeSection).toBe(expectedSections[i]);
       const sessionsPanel = zone2.querySelector<HTMLElement>(".sidebar-navigation");
-      const filesPanel = zone2.querySelector<HTMLElement>(".coloride-zone-2-file-tree");
-      if (expectedSections[i] === "sessions") {
-        expect(sessionsPanel?.hidden).toBe(false);
-        expect(filesPanel?.hidden).toBe(true);
-      } else if (expectedSections[i] === "files") {
-        expect(sessionsPanel?.hidden).toBe(true);
-        expect(filesPanel?.hidden).toBe(false);
-      }
+      expect(sessionsPanel?.hidden).toBe(expectedSections[i] !== "sessions");
     }
 
     // Alt+ArrowRight navigates to the next chat cell and syncs Zone 4 Inspector in < 10 ms
@@ -183,6 +180,126 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
 
     controller.destroy();
     editorView.destroy();
+    rootContainer.remove();
+  });
+  it("handles Cmd/Ctrl+1..5 and Cmd/Ctrl+S even when focus is outside the shell (e.g. after clicking the title bar)", () => {
+    const rootContainer = document.createElement("div");
+    document.body.appendChild(rootContainer);
+    const stores = createCockpitStoreBundle();
+    const editorView = new ColorideEditorView({
+      initialDocumentId: "src/main.ts",
+      initialContent: "const ready = true;",
+      ipcChannel: new InMemoryBinaryHostBridge(),
+    });
+    const controller = new CockpitDomController({ rootContainer, stores, editorView });
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(document.activeElement).toBe(document.body);
+
+    // Keys go to `body` when nothing inside the app has focus.
+    const press = (key: string, init: KeyboardEventInit = { metaKey: true }) =>
+      document.body.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, ...init }));
+    press("3");
+    expect(stores.zone1.getState().activeSection).toBe("debug");
+    press("2");
+    expect(stores.zone1.getState().activeSection).toBe("search");
+    press("1", { ctrlKey: true });
+    expect(stores.zone1.getState().activeSection).toBe("sessions");
+    // Plain digits are not shortcuts.
+    press("4", {});
+    expect(stores.zone1.getState().activeSection).toBe("sessions");
+
+    controller.destroy();
+    // After destroy the shortcuts are gone: no listener may outlive the controller.
+    press("3");
+    expect(stores.zone1.getState().activeSection).toBe("sessions");
+    rootContainer.remove();
+  });
+  it("lets the window be dragged from the empty part of the Zone 3 and Zone 4 headers", () => {
+    const rootContainer = document.createElement("div");
+    document.body.appendChild(rootContainer);
+    const stores = createCockpitStoreBundle();
+    const editorView = new ColorideEditorView({
+      initialDocumentId: "src/main.ts",
+      initialContent: "const ready = true;",
+      ipcChannel: new InMemoryBinaryHostBridge(),
+    });
+    const controller = new CockpitDomController({ rootContainer, stores, editorView });
+    // Tauri only drags when the pressed element itself has the attribute: the tab strip fills the
+    // whole Zone 4 header, so it must carry it too (tabs and buttons inside it stay clickable).
+    for (const zone of [".coloride-zone-3-header", ".coloride-zone-4-header"]) {
+      const header = document.querySelector<HTMLElement>(zone);
+      const track = header?.querySelector<HTMLElement>(".coloride-header-tab-track");
+      expect(header?.hasAttribute("data-tauri-drag-region")).toBe(true);
+      expect(track?.hasAttribute("data-tauri-drag-region")).toBe(true);
+    }
+    expect(
+      document
+        .querySelector(".coloride-header-tab")
+        ?.closest("[data-tauri-drag-region]")
+        ?.matches(".coloride-header-tab"),
+    ).not.toBe(true);
+    controller.destroy();
+    rootContainer.remove();
+  });
+  it("leaves Alt+Arrow to the text while editing, and switches sessions otherwise", () => {
+    const rootContainer = document.createElement("div");
+    document.body.appendChild(rootContainer);
+    const stores = createCockpitStoreBundle({
+      initialChats: [
+        { chatId: "chat-1", title: "#1", modelName: "Codex", validationState: "ValidatedGreen" },
+        { chatId: "chat-2", title: "#2", modelName: "Claude", validationState: "ReviewYellow" },
+      ],
+    });
+    const editorView = new ColorideEditorView({
+      initialDocumentId: "src/main.ts",
+      initialContent: "const ready = true;",
+      ipcChannel: new InMemoryBinaryHostBridge(),
+    });
+    const controller = new CockpitDomController({ rootContainer, stores, editorView });
+    const altRight = (target: EventTarget) =>
+      target.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowRight", altKey: true, bubbles: true }),
+      );
+    // In the editor (word movement) and in a text field: no session change.
+    altRight(editorView.getEditorView().contentDOM);
+    expect(stores.zone3.getState().activeChatId).toBe("chat-1");
+    const field = document.createElement("input");
+    rootContainer.append(field);
+    altRight(field);
+    expect(stores.zone3.getState().activeChatId).toBe("chat-1");
+    // Outside any text: it still switches.
+    altRight(document.body);
+    expect(stores.zone3.getState().activeChatId).toBe("chat-2");
+    controller.destroy();
+    rootContainer.remove();
+  });
+  it("falls back to Sessions when a saved session names a section that no longer exists", () => {
+    // The "files" tab was removed (the tree lives next to the editor); older caches may still say it.
+    const legacy = createCockpitStoreBundle({
+      initialActiveSection: "files" as unknown as "sessions",
+    });
+    expect(legacy.zone1.getState().activeSection).toBe("sessions");
+    const kept = createCockpitStoreBundle({ initialActiveSection: "search" });
+    expect(kept.zone1.getState().activeSection).toBe("search");
+  });
+  it("opens the right panel when a file is opened from a search result, since it starts closed", () => {
+    const rootContainer = document.createElement("div");
+    document.body.appendChild(rootContainer);
+    const stores = createCockpitStoreBundle();
+    const editorView = new ColorideEditorView({
+      initialDocumentId: "src/main.ts",
+      initialContent: "const ready = true;",
+      ipcChannel: new InMemoryBinaryHostBridge(),
+    });
+    const controller = new CockpitDomController({ rootContainer, stores, editorView });
+    stores.updateInMemoryDocumentContent("src/found.ts", "export const needleValue = 1;", false);
+    stores.setActivitySection("search");
+    stores.runGlobalSearch("needleValue");
+    expect(stores.zone1.getState().inspectorOpen).toBe(false);
+    rootContainer.querySelector<HTMLElement>(".coloride-search-result-item")?.click();
+    expect(stores.zone1.getState().inspectorOpen).toBe(true);
+    expect(stores.zone4.getState().activeDocumentId).toBe("src/found.ts");
+    controller.destroy();
     rootContainer.remove();
   });
 });

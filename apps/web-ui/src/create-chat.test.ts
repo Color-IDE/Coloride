@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { panelIds } from "./layout-tree.js";
-import { createCockpitStoreBundle, resolveGroupLayout } from "./stores/index.js";
+import {
+  createCockpitStoreBundle,
+  resolveGroupLayout,
+  resolveGroupMaximized,
+} from "./stores/index.js";
 
 const chat = (chatId: string, modelName = "Codex") => ({
   chatId,
@@ -79,5 +83,62 @@ describe("store.createChat", () => {
     expect(new Set(stores.zone3.getState().chats.map((c) => c.chatId)).size).toBe(
       stores.zone3.getState().chats.length,
     );
+  });
+});
+
+describe("store.toggleMaximizeChat", () => {
+  const maximized = (stores: ReturnType<typeof setup>["stores"], index = 0) =>
+    resolveGroupMaximized(stores.navigation.getState().groups[index] as never);
+
+  it("shows one session alone, selects it, and restores the tab on the second call", () => {
+    const { stores } = setup();
+    stores.toggleMaximizeChat("b");
+    expect(maximized(stores)).toBe("b");
+    expect(stores.zone3.getState().activeChatId).toBe("b");
+    stores.toggleMaximizeChat("b");
+    expect(maximized(stores)).toBeNull();
+  });
+
+  it("follows the selected session while maximized, so the header tabs switch between them", () => {
+    const { stores } = setup();
+    stores.toggleMaximizeChat("a");
+    stores.selectChat("b");
+    expect(maximized(stores)).toBe("b");
+    // Not maximized: selecting never maximizes.
+    stores.toggleMaximizeChat("b");
+    stores.selectChat("a");
+    expect(maximized(stores)).toBeNull();
+  });
+
+  it("goes back to the tiled layout when a session is created, so the new panel is seen", () => {
+    const { stores } = setup();
+    stores.toggleMaximizeChat("a");
+    const id = stores.createChat({ from: "a", direction: "row" });
+    expect(maximized(stores)).toBeNull();
+    expect(stores.zone3.getState().activeChatId).toBe(id);
+  });
+
+  it("restores the tab when the maximized session is closed, and keeps it when another one is", () => {
+    const { stores } = setup();
+    stores.createChat();
+    stores.toggleMaximizeChat("b");
+    stores.closeChat("chat-3");
+    expect(maximized(stores)).toBe("b");
+    stores.closeChat("b");
+    expect(maximized(stores)).toBeNull();
+  });
+
+  it("keeps the state per tab and ignores a stale or unknown session", () => {
+    const { stores } = setup();
+    stores.toggleMaximizeChat("a");
+    stores.createWorkGroup("Other");
+    expect(maximized(stores, 1)).toBeNull();
+    // An unknown chat is ignored, and a stored id that is not in the tab does not count.
+    stores.toggleMaximizeChat("nope");
+    expect(maximized(stores, 0)).toBe("a");
+    const group = stores.navigation.getState().groups[0] as never as { chatIds: string[] };
+    expect(
+      resolveGroupMaximized({ ...group, id: "x", title: "x", maximizedChatId: "gone" } as never),
+    ).toBeNull();
   });
 });

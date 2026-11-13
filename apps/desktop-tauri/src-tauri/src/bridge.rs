@@ -249,7 +249,6 @@ mod tests {
             workspace_root: "/workspace/app".to_string(),
             active_persona: "Develop".to_string(),
             active_activity_panel: "sessions".to_string(),
-            grid_mode: 4,
             active_inspector_tab: "code-diff".to_string(),
             active_chat_id: "chat-1".to_string(),
             active_document_id: "src/app.ts".to_string(),

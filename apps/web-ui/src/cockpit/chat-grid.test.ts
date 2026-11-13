@@ -7,7 +7,7 @@ import {
   createCockpitStoreBundle,
   resolveGroupLayout,
 } from "../index.js";
-import { panelIds } from "../layout-tree.js";
+import { type LayoutNode, panelIds } from "../layout-tree.js";
 
 describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
   it("keeps work groups separate when changing project folders", () => {
@@ -38,7 +38,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     expect(controls?.querySelectorAll("button")).toHaveLength(1);
     expect(controls?.querySelector("button")?.disabled).toBe(true);
     expect(controls?.querySelector("button")?.textContent).toBe("Open project");
-    for (const section of ["files", "search", "git", "debug", "mcp"] as const) {
+    for (const section of ["search", "git", "debug", "mcp"] as const) {
       stores.setActivitySection(section);
       expect((controls as HTMLElement).hidden).toBe(true);
     }
@@ -142,10 +142,10 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
 
     // Every split distributes the whole space.
     for (const split of root.querySelectorAll<HTMLElement>(".coloride-layout-split")) {
-      const total = Array.from(split.children).reduce(
-        (sum, child) => sum + Number.parseFloat((child as HTMLElement).style.flex),
-        0,
-      );
+      // The separators over the boundaries take no room and have no size of their own.
+      const total = Array.from(split.children)
+        .filter((child) => !child.classList.contains("coloride-layout-handle"))
+        .reduce((sum, child) => sum + Number.parseFloat((child as HTMLElement).style.flex), 0);
       expect(total).toBeCloseTo(1);
     }
     expect(editorView.getStoreSnapshot().mountCount).toBe(1);
@@ -353,5 +353,329 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     expect(cells().map((c) => c.dataset.chatId)).toEqual(["a", "b"]);
     expect(headerTabs()).toHaveLength(2);
     cleanup();
+  });
+
+  describe("separators between panels", () => {
+    function setup(ids: readonly string[] = ["a", "b"]) {
+      const root = document.createElement("div");
+      document.body.appendChild(root);
+      const stores = createCockpitStoreBundle({
+        initialChats: ids.map((chatId) => ({
+          chatId,
+          title: chatId,
+          modelName: "Codex",
+          validationState: "UnchangedBlue" as const,
+        })),
+      });
+      const editorView = new ColorideEditorView({
+        initialDocumentId: "src/main.ts",
+        initialContent: "const ready = true;",
+        ipcChannel: new InMemoryBinaryHostBridge(),
+      });
+      const controller = new CockpitDomController({ rootContainer: root, stores, editorView });
+      const handles = () =>
+        Array.from(root.querySelectorAll<HTMLElement>(".coloride-layout-handle"));
+      // The layout has no size in a test DOM: give every split one (1000 x 600).
+      for (const split of root.querySelectorAll<HTMLElement>(".coloride-layout-split")) {
+        split.getBoundingClientRect = () => ({ width: 1000, height: 600 }) as DOMRect;
+      }
+      const sizes = () => {
+        const group = stores.navigation.getState().groups[0] as WorkGroup;
+        const layout = resolveGroupLayout(group);
+        return layout?.kind === "split" ? layout.sizes : [];
+      };
+      const pointer = (target: HTMLElement, type: string, x: number, y = 0) => {
+        const event = new MouseEvent(type, { clientX: x, clientY: y, bubbles: true });
+        Object.defineProperty(event, "pointerId", { value: 1 });
+        target.dispatchEvent(event);
+      };
+      return { root, stores, controller, handles, sizes, pointer };
+    }
+
+    it("has one separator per boundary, labelled for assistive technology", () => {
+      const { root, handles, controller } = setup();
+      // Two panels side by side: one boundary, a vertical bar.
+      expect(handles()).toHaveLength(1);
+      expect(handles()[0]?.getAttribute("role")).toBe("separator");
+      expect(handles()[0]?.getAttribute("aria-orientation")).toBe("vertical");
+      expect(handles()[0]?.tabIndex).toBe(0);
+      controller.destroy();
+      root.remove();
+      // Three panels need two boundaries, whatever way they are split.
+      const three = setup(["a", "b", "c"]);
+      expect(three.handles()).toHaveLength(2);
+      three.controller.destroy();
+      three.root.remove();
+    });
+
+    it("moves the boundary while dragging and saves the new sizes when released", () => {
+      const { root, stores, controller, handles, sizes, pointer } = setup();
+      const before = sizes();
+      const handle = handles()[0] as HTMLElement;
+      pointer(handle, "pointerdown", 333);
+      pointer(handle, "pointermove", 433); // 100 px of 1000 = 10%
+      const grown = root.querySelectorAll<HTMLElement>(".coloride-chat-cell");
+      expect(Number.parseFloat((grown[0] as HTMLElement).style.flex)).toBeCloseTo(
+        (before[0] as number) + 0.1,
+      );
+      // Nothing is stored (and nothing re-rendered) until the pointer is released.
+      expect(sizes()).toEqual(before);
+      pointer(handle, "pointerup", 433);
+      expect(sizes()[0]).toBeCloseTo((before[0] as number) + 0.1);
+      expect(sizes()[1]).toBeCloseTo((before[1] as number) - 0.1);
+      expect(sizes().reduce((sum, size) => sum + size, 0)).toBeCloseTo(1);
+      // A tab keeps its own sizes: the layout lives in the group, so it is also what is saved.
+      expect(stores.navigation.getState().groups[0]?.layout).not.toBeNull();
+      controller.destroy();
+      root.remove();
+    });
+
+    it("never lets a panel shrink under the minimum size", () => {
+      const { root, controller, handles, sizes, pointer } = setup();
+      const handle = handles()[0] as HTMLElement;
+      pointer(handle, "pointerdown", 333);
+      pointer(handle, "pointermove", 5000); // far past the right edge
+      pointer(handle, "pointerup", 5000);
+      // b needs 220 px of 1000; c is untouched.
+      expect(sizes()[1]).toBeGreaterThanOrEqual(0.22 - 1e-9);
+      pointer(handle, "pointerdown", 600);
+      pointer(handle, "pointermove", -4000);
+      pointer(handle, "pointerup", -4000);
+      expect(sizes()[0]).toBeGreaterThanOrEqual(0.22 - 1e-9);
+      controller.destroy();
+      root.remove();
+    });
+
+    it("moves with the arrow keys and resets the two neighbours with a double click", () => {
+      const { root, controller, handles, sizes } = setup();
+      const handle = handles()[0] as HTMLElement;
+      const before = sizes();
+      handle.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+      expect(sizes()[0]).toBeCloseTo((before[0] as number) + 0.02);
+      handle.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowLeft", shiftKey: true, bubbles: true }),
+      );
+      expect(sizes()[0]).toBeCloseTo((before[0] as number) + 0.02 - 0.1);
+      handle.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+      const even = ((before[0] as number) + (before[1] as number)) / 2;
+      expect(sizes()[0]).toBeCloseTo(even);
+      expect(sizes()[1]).toBeCloseTo(even);
+      controller.destroy();
+      root.remove();
+    });
+  });
+
+  describe("maximizing a panel", () => {
+    function setup(ids: readonly string[] = ["a", "b", "c"]) {
+      const root = document.createElement("div");
+      document.body.appendChild(root);
+      const stores = createCockpitStoreBundle({
+        initialChats: ids.map((chatId) => ({
+          chatId,
+          title: chatId.toUpperCase(),
+          modelName: "Codex",
+          validationState: "UnchangedBlue" as const,
+        })),
+      });
+      const editorView = new ColorideEditorView({
+        initialDocumentId: "src/main.ts",
+        initialContent: "const ready = true;",
+        ipcChannel: new InMemoryBinaryHostBridge(),
+      });
+      const controller = new CockpitDomController({ rootContainer: root, stores, editorView });
+      const shown = () =>
+        Array.from(root.querySelectorAll<HTMLElement>(".coloride-zone-3-grid .coloride-chat-cell"))
+          .map((cell) => cell.dataset.chatId)
+          .sort();
+      const button = (chatId: string) =>
+        root.querySelector<HTMLButtonElement>(
+          `.coloride-chat-cell[data-chat-id="${chatId}"] .coloride-maximize-panel`,
+        );
+      const tab = (chatId: string) =>
+        root.querySelector<HTMLElement>(
+          `.coloride-zone-3-header .coloride-header-tab[data-chat-id="${chatId}"]`,
+        );
+      return { root, stores, controller, shown, button, tab };
+    }
+
+    it("shows only that panel when maximized, and every panel again when restored", () => {
+      const { root, controller, shown, button } = setup();
+      expect(shown()).toEqual(["a", "b", "c"]);
+      expect(button("b")?.getAttribute("aria-label")).toBe("Maximize panel");
+      button("b")?.click();
+      expect(shown()).toEqual(["b"]);
+      // The separators have nothing to separate while one panel fills the tab.
+      expect(root.querySelector(".coloride-layout-handle")).toBeNull();
+      expect(button("b")?.getAttribute("aria-label")).toBe("Restore panels");
+      button("b")?.click();
+      expect(shown()).toEqual(["a", "b", "c"]);
+      expect(root.querySelectorAll(".coloride-layout-handle").length).toBeGreaterThan(0);
+      controller.destroy();
+      root.remove();
+    });
+
+    it("also toggles with a double click on the panel header, but not on its buttons", () => {
+      const { root, controller, shown } = setup();
+      const header = root.querySelector<HTMLElement>(
+        '.coloride-chat-cell[data-chat-id="c"] .coloride-chat-cell-header',
+      ) as HTMLElement;
+      header.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+      expect(shown()).toEqual(["c"]);
+      header.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+      expect(shown()).toHaveLength(3);
+      // A double click on a button (it would double-trigger the action) is not a header gesture.
+      const close = root.querySelector<HTMLElement>(
+        '.coloride-chat-cell[data-chat-id="c"] .coloride-split-right',
+      ) as HTMLElement;
+      close.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+      expect(shown()).toHaveLength(3);
+      controller.destroy();
+      root.remove();
+    });
+
+    it("uses the header tabs to switch the session shown alone", () => {
+      const { root, controller, shown, button, tab } = setup();
+      button("a")?.click();
+      expect(shown()).toEqual(["a"]);
+      tab("c")?.click();
+      expect(shown()).toEqual(["c"]);
+      expect(tab("c")?.getAttribute("aria-selected")).toBe("true");
+      // All the sessions are still tabs; maximizing never hides them.
+      expect(root.querySelectorAll(".coloride-zone-3-header .coloride-header-tab")).toHaveLength(3);
+      controller.destroy();
+      root.remove();
+    });
+
+    it("keeps each panel's content and scroll while it is hidden by another one", () => {
+      const { root, stores, controller, button, shown } = setup();
+      stores.zone3.setState((prev) => ({
+        ...prev,
+        messagesByChatId: {
+          ...prev.messagesByChatId,
+          b: [
+            {
+              messageId: "m1",
+              chatId: "b",
+              role: "assistant",
+              content: "keep me",
+              renderedHtmlBlocks: ["keep me"],
+              streaming: false,
+            },
+          ],
+        },
+      }));
+      const cell = root.querySelector<HTMLElement>('.coloride-chat-cell[data-chat-id="b"]');
+      button("a")?.click();
+      expect(shown()).toEqual(["a"]);
+      button("a")?.click();
+      // The same element comes back (not a rebuilt one), with its content.
+      expect(root.querySelector('.coloride-chat-cell[data-chat-id="b"]')).toBe(cell);
+      expect(cell?.textContent).toContain("keep me");
+      controller.destroy();
+      root.remove();
+    });
+
+    it("hides the button when the tab has a single panel, and goes back when a panel is split", () => {
+      const single = setup(["a"]);
+      expect(single.button("a")?.hidden).toBe(true);
+      single.controller.destroy();
+      single.root.remove();
+
+      const { root, stores, controller, shown, button } = setup(["a", "b"]);
+      button("a")?.click();
+      stores.createChat({ from: "a", direction: "row" });
+      expect(shown()).toHaveLength(3);
+      controller.destroy();
+      root.remove();
+    });
+  });
+
+  describe("aligning separators while dragging", () => {
+    /** Two columns side by side, each split in two, with the horizontal bars 6px apart. */
+    function setup() {
+      const root = document.createElement("div");
+      document.body.appendChild(root);
+      const stores = createCockpitStoreBundle({
+        initialChats: ["a", "b", "c", "d"].map((chatId) => ({
+          chatId,
+          title: chatId,
+          modelName: "Codex",
+          validationState: "UnchangedBlue" as const,
+        })),
+      });
+      const editorView = new ColorideEditorView({
+        initialDocumentId: "src/main.ts",
+        initialContent: "const ready = true;",
+        ipcChannel: new InMemoryBinaryHostBridge(),
+      });
+      const controller = new CockpitDomController({ rootContainer: root, stores, editorView });
+      const column = (ids: [string, string], top: number): LayoutNode => ({
+        kind: "split",
+        direction: "column",
+        sizes: [top, 1 - top],
+        children: ids.map((id) => ({ kind: "panel", id })),
+      });
+      const group = stores.navigation.getState().groups[0] as WorkGroup;
+      stores.setWorkGroupLayout(group.id, {
+        kind: "split",
+        direction: "row",
+        sizes: [0.5, 0.5],
+        children: [column(["a", "b"], 0.5), column(["c", "d"], 0.51)],
+      });
+      for (const split of root.querySelectorAll<HTMLElement>(".coloride-layout-split")) {
+        split.getBoundingClientRect = () => ({ width: 1000, height: 600 }) as DOMRect;
+      }
+      // The horizontal bars sit at y = 300 and y = 306 (their centres).
+      const bars = Array.from(
+        root.querySelectorAll<HTMLElement>(
+          '.coloride-layout-handle[aria-orientation="horizontal"]',
+        ),
+      );
+      [300, 306].forEach((center, index) => {
+        (bars[index] as HTMLElement).getBoundingClientRect = () =>
+          ({ top: center - 4.5, height: 9, left: 0, width: 500 }) as DOMRect;
+      });
+      const secondColumn = () => {
+        const layout = resolveGroupLayout(stores.navigation.getState().groups[0] as WorkGroup);
+        const child = layout?.kind === "split" ? layout.children[1] : null;
+        return child?.kind === "split" ? child.sizes : [];
+      };
+      const drag = (to: number, init: MouseEventInit = {}) => {
+        const bar = bars[1] as HTMLElement;
+        const fire = (type: string, y: number) => {
+          const event = new MouseEvent(type, { clientY: y, bubbles: true, ...init });
+          Object.defineProperty(event, "pointerId", { value: 1 });
+          bar.dispatchEvent(event);
+        };
+        fire("pointerdown", 306);
+        fire("pointermove", to);
+        const snapped = bar.dataset.snapped;
+        fire("pointerup", to);
+        return snapped;
+      };
+      return { root, controller, secondColumn, drag };
+    }
+
+    it("snaps a bar to another one that is a few pixels away, so the panels line up", () => {
+      const { root, controller, secondColumn, drag } = setup();
+      expect(drag(301)).toBe("true"); // 1px from the other bar (y = 300)
+      expect(secondColumn()[0]).toBeCloseTo(0.5); // exactly the other column's split
+      controller.destroy();
+      root.remove();
+    });
+
+    it("does not snap when far from every other bar, or when Alt is held", () => {
+      const far = setup();
+      expect(far.drag(280)).toBe("false"); // 20px from y = 300
+      expect(far.secondColumn()[0]).toBeCloseTo(0.51 - 26 / 600);
+      far.controller.destroy();
+      far.root.remove();
+
+      const alt = setup();
+      alt.drag(301, { altKey: true });
+      expect(alt.secondColumn()[0]).toBeCloseTo(0.51 - 5 / 600);
+      alt.controller.destroy();
+      alt.root.remove();
+    });
   });
 });

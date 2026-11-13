@@ -19,8 +19,6 @@ static CACHE_TMP_COUNTER: AtomicU64 = AtomicU64::new(1);
 pub enum LazyBootError {
     #[error("Unsupported session cache schema version {actual} (expected {expected})")]
     UnsupportedSchemaVersion { expected: u16, actual: u16 },
-    #[error("Invalid grid mode {0}; expected 1, 2, 4, or 8")]
-    InvalidGridMode(u8),
     #[error("Binary codec error on workspace_session_cache.bin: {0}")]
     Codec(#[from] bincode::Error),
     #[error("I/O error at {path}: {source}")]
@@ -40,7 +38,6 @@ pub struct WorkspaceSessionCache {
     pub workspace_root: String,
     pub active_persona: String,
     pub active_activity_panel: String,
-    pub grid_mode: u8,
     pub active_inspector_tab: String,
     pub active_chat_id: String,
     pub active_document_id: String,
@@ -58,7 +55,6 @@ impl Default for WorkspaceSessionCache {
             workspace_root: ".".to_string(),
             active_persona: "Develop".to_string(),
             active_activity_panel: "sessions".to_string(),
-            grid_mode: 1,
             active_inspector_tab: "code-diff".to_string(),
             active_chat_id: "chat-1".to_string(),
             active_document_id: "src/index.ts".to_string(),
@@ -78,9 +74,6 @@ impl WorkspaceSessionCache {
                 expected: CONTRACT_SCHEMA_VERSION,
                 actual: self.schema_version,
             });
-        }
-        if !matches!(self.grid_mode, 1 | 2 | 4 | 8) {
-            return Err(LazyBootError::InvalidGridMode(self.grid_mode));
         }
         Ok(())
     }
@@ -290,8 +283,7 @@ mod tests {
             schema_version: CONTRACT_SCHEMA_VERSION,
             workspace_root: "/workspace/coloride".to_string(),
             active_persona: "Develop".to_string(),
-            active_activity_panel: "files".to_string(),
-            grid_mode: 4,
+            active_activity_panel: "search".to_string(),
             active_inspector_tab: "code-diff".to_string(),
             active_chat_id: "chat-2".to_string(),
             active_document_id: "src/cockpit.tsx".to_string(),

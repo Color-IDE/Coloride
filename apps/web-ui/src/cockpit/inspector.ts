@@ -1,5 +1,5 @@
 import type { ColorideEditorView } from "@coloride/editor-cm6";
-import type { CockpitStoreBundle } from "../stores/index.js";
+import type { CockpitFileTreeNode, CockpitStoreBundle } from "../stores/index.js";
 import { fileTreeIconColor, fileTreeIconSvg } from "../theme/file-tree-icons.js";
 import { type ThinScrollbar, attachThinScrollbar } from "../thin-scrollbar.js";
 import { UI_STRINGS, uiText } from "../ui-strings.js";
@@ -12,11 +12,15 @@ export interface InspectorOptions {
   readonly editorView: ColorideEditorView;
   readonly header: HTMLElement;
   readonly readWorkspaceFile?: (path: string) => Promise<string>;
+  /** Asks the user for a project folder; shown in the file tree while no project is open. */
+  readonly openWorkspace?: () => Promise<readonly CockpitFileTreeNode[] | null>;
   /** Saves the document currently shown in the editor. */
   readonly saveActiveDocument: () => Promise<void>;
   /** Re-runs native analysis once a file is shown. */
   readonly onFileShown: (path: string) => void;
   readonly onTreeScroll: (scrollTopPx: number, viewportHeightPx: number) => void;
+  /** Called when files stop or start having unsaved changes without an edit (discard, project switch). */
+  readonly onUnsavedChange?: () => void;
 }
 
 /**
@@ -87,6 +91,17 @@ export class Inspector {
     this.tree = new FileTreePanel(doc, {
       className: "coloride-zone-4-tree-column",
       withFilter: true,
+      ...(options.openWorkspace
+        ? {
+            emptyAction: {
+              label: UI_STRINGS.files.openFolder,
+              run: async () => {
+                const tree = await options.openWorkspace?.();
+                if (tree) stores.setFileTree(tree);
+              },
+            },
+          }
+        : {}),
       onOpenFile: (node) =>
         void this.openFile(node.path, (message) => this.tree.reportError(message)),
       onScroll: options.onTreeScroll,
@@ -217,6 +232,9 @@ export class Inspector {
         stores.updateInMemoryDocumentContent(path, content, true);
         this.loadedPaths.add(path);
       }
+      // They are in the buffers again: keeping the stash would count them twice, and go stale
+      // once they are saved.
+      this.unsavedByProject.delete(projectPath);
       this.tree.reset();
     }
     // The editor still holds the previous file: show the empty state until a file of this group is
@@ -224,6 +242,27 @@ export class Inspector {
     this.closedDocId = activeId;
     this.update();
     if (saved?.active) void this.openFile(saved.active);
+    this.options.onUnsavedChange?.();
+  }
+
+  /** Files with unsaved changes in projects that are not the open one (kept aside meanwhile). */
+  stashedUnsavedCount(): number {
+    let count = 0;
+    for (const unsaved of this.unsavedByProject.values()) count += unsaved.size;
+    return count;
+  }
+
+  /**
+   * Saves every file of the open project that has unsaved changes, one after another (each is
+   * shown in the editor, the only place that can save it). A file whose buffer is not known to
+   * be current is skipped rather than read from disk over its edits.
+   */
+  async saveAllUnsaved(): Promise<void> {
+    for (const path of this.options.stores.getUnsavedDocumentIds()) {
+      if (!this.loadedPaths.has(path)) continue;
+      if (!(await this.openFile(path))) continue;
+      await this.options.saveActiveDocument();
+    }
   }
 
   /**
@@ -316,6 +355,7 @@ export class Inspector {
       } else {
         stores.discardDocumentBuffer(path);
         this.loadedPaths.delete(path);
+        this.options.onUnsavedChange?.();
       }
       this.closeTab(path);
     });

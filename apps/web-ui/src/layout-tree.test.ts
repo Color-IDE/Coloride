@@ -7,10 +7,13 @@ import {
   fitsArea,
   hasPanel,
   layoutFromPanels,
+  minExtentPx,
   movePanel,
+  nodeAt,
   panel,
   panelIds,
   parseLayout,
+  placePanel,
   reconcileLayout,
   removePanel,
   resizeBoundary,
@@ -210,5 +213,186 @@ describe("layout-tree", () => {
     expect(canAddPanel(layout, { widthPx: 500, heightPx: 300 })).toBe(false);
     const fewer = removePanel(layout, "p0");
     expect(canAddPanel(fewer, area)).toBe(true);
+  });
+
+  // Two columns: the largest panel (A, 400x270) cannot be split either way, and two panels are
+  // already below the minimum height (S, K) after a window resize. B (500x200) can still be split.
+  const crowded = (): { layout: LayoutNode; area: { widthPx: number; heightPx: number } } => ({
+    area: { widthPx: 900, heightPx: 300 },
+    layout: {
+      kind: "split",
+      direction: "row",
+      sizes: [400 / 900, 500 / 900],
+      children: [
+        {
+          kind: "split",
+          direction: "column",
+          sizes: [0.9, 0.1],
+          children: [panel("A"), panel("S")],
+        },
+        {
+          kind: "split",
+          direction: "column",
+          sizes: [2 / 3, 1 / 3],
+          children: [panel("B"), panel("K")],
+        },
+      ],
+    },
+  });
+
+  it("finds room in another panel when the largest one cannot be split", () => {
+    const { layout, area } = crowded();
+    expect(canAddPanel(layout, area)).toBe(true);
+    const placed = placePanel(layout, "new", area);
+    expect(placed).not.toBeNull();
+    // It went into B (the only splittable one), side by side, and nothing else moved.
+    const rects = computeRects(placed, area.widthPx / area.heightPx);
+    const px = (id: string) => {
+      const r = rects.get(id);
+      return { w: (r?.width ?? 0) * area.heightPx, h: (r?.height ?? 0) * area.heightPx };
+    };
+    expect(px("B").w).toBeCloseTo(250);
+    expect(px("new").w).toBeCloseTo(250);
+    expect(px("A")).toEqual({ w: expect.closeTo(400), h: expect.closeTo(270) });
+  });
+
+  it("only checks the panels a split changes, not ones that were already too small", () => {
+    const { layout, area } = crowded();
+    // Per-panel buttons: B can be split right, A cannot, whatever the tiny panels around do.
+    expect(canAddPanel(layout, area, { target: "B", direction: "row" })).toBe(true);
+    expect(canAddPanel(layout, area, { target: "A", direction: "row" })).toBe(false);
+    expect(canAddPanel(layout, area, { target: "A", direction: "column" })).toBe(false);
+    // An explicit direction is respected: B cannot be split down (200 / 2 < 140).
+    expect(canAddPanel(layout, area, { target: "B", direction: "column" })).toBe(false);
+  });
+
+  it("agrees with an exhaustive search over every panel, direction and side, for any layout", () => {
+    // Deterministic pseudo-random walk of adds, splits and closes in several window sizes.
+    let seed = 12345;
+    const random = (n: number) => {
+      seed = (Math.imul(seed, 1103515245) + 12345) & 0x7fffffff;
+      return seed % n;
+    };
+    const exists = (layout: LayoutNode | null, area: { widthPx: number; heightPx: number }) => {
+      if (!layout) return true;
+      for (const target of panelIds(layout)) {
+        for (const direction of ["row", "column"] as const) {
+          for (const position of ["before", "after"] as const) {
+            const next = splitPanel(layout, target, "probe", direction, position);
+            const rects = computeRects(next, area.widthPx / area.heightPx);
+            const ok = [target, "probe"].every((id) => {
+              const r = rects.get(id);
+              return (
+                r !== undefined &&
+                r.width * area.heightPx >= 220 - 1e-6 &&
+                r.height * area.heightPx >= 140 - 1e-6
+              );
+            });
+            if (ok) return true;
+          }
+        }
+      }
+      return false;
+    };
+    let counter = 0;
+    for (const area of [
+      { widthPx: 1000, heightPx: 700 },
+      { widthPx: 1400, heightPx: 500 },
+      { widthPx: 520, heightPx: 900 },
+      { widthPx: 700, heightPx: 700 },
+    ]) {
+      let layout: LayoutNode | null = null;
+      for (let step = 0; step < 120; step += 1) {
+        const ids = panelIds(layout);
+        const op = random(4);
+        if (op === 0 && ids.length > 0) {
+          layout = removePanel(layout, ids[random(ids.length)] as string);
+        } else if (op === 1 && ids.length > 0) {
+          const target = ids[random(ids.length)] as string;
+          const direction = random(2) === 0 ? "row" : "column";
+          const next = placePanel(layout, `p${counter}`, area, { target, direction });
+          if (next) {
+            layout = next;
+            counter += 1;
+          }
+        } else {
+          const next = placePanel(layout, `p${counter}`, area);
+          if (next) {
+            layout = next;
+            counter += 1;
+          }
+        }
+        // "Is there room?" must match reality: never "no room" while some split fits, and never
+        // "room" when none does.
+        expect(canAddPanel(layout, area)).toBe(exists(layout, area));
+        // And after the window shrinks, when some panels are already below the minimum.
+        for (const factor of [0.85, 0.7, 0.55]) {
+          const shrunk = { widthPx: area.widthPx * factor, heightPx: area.heightPx * factor };
+          expect(canAddPanel(layout, shrunk)).toBe(exists(layout, shrunk));
+        }
+      }
+    }
+  });
+
+  it("needs, along an axis, the room of every panel in a row and of the widest side in a column", () => {
+    const row: LayoutNode = {
+      kind: "split",
+      direction: "row",
+      sizes: [0.5, 0.5],
+      children: [
+        panel("a"),
+        {
+          kind: "split",
+          direction: "column",
+          sizes: [0.5, 0.5],
+          children: [panel("b"), panel("c")],
+        },
+      ],
+    };
+    // Widths: a + (b over c) -> 220 + 220. Heights: the taller of a, and b + c stacked.
+    expect(minExtentPx(row, "row")).toBe(440);
+    expect(minExtentPx(row, "column")).toBe(280);
+    expect(minExtentPx(panel("a"), "row")).toBe(220);
+    expect(minExtentPx(panel("a"), "column")).toBe(140);
+  });
+
+  it("looks a split up by its path of child indices", () => {
+    const layout = layoutFromPanels(["a", "b", "c", "d"]);
+    expect(nodeAt(layout as LayoutNode, [])?.kind).toBe("split");
+    expect(nodeAt(layout as LayoutNode, [0])?.kind).toBe("split");
+    expect(nodeAt(layout as LayoutNode, [0, 0])).toBeNull(); // a panel is not a split
+    expect(nodeAt(layout as LayoutNode, [9])).toBeNull();
+  });
+
+  it("applies a different minimum to each side of a dragged boundary", () => {
+    const layout: LayoutNode = {
+      kind: "split",
+      direction: "row",
+      sizes: [0.9, 0.1],
+      children: [panel("a"), panel("b")],
+    };
+    // The left side needs 70% of the split, the right one 10%.
+    const left = resizeBoundary(layout, [], 0, -0.5, { before: 0.7, after: 0.1 });
+    expect(left?.kind === "split" && left.sizes[0]).toBeCloseTo(0.7);
+    const even = layoutFromPanels(["a", "b"]);
+    const right = resizeBoundary(even, [], 0, 0.9, { before: 0.2, after: 0.1 });
+    expect(right?.kind === "split" && right.sizes[1]).toBeCloseTo(0.1);
+  });
+
+  it("never forces a side that is already under its minimum to grow", () => {
+    // After the window shrank, the right panel is below its minimum. Dragging the boundary the
+    // other way must not snap anything; dragging it back is free.
+    const layout: LayoutNode = {
+      kind: "split",
+      direction: "row",
+      sizes: [0.95, 0.05],
+      children: [panel("a"), panel("b")],
+    };
+    const min = { before: 0.1, after: 0.2 };
+    expect(resizeBoundary(layout, [], 0, 0.02, min)).toBe(layout); // would squeeze b further
+    const back = resizeBoundary(layout, [], 0, -0.3, min);
+    expect(back?.kind === "split" && back.sizes[1]).toBeCloseTo(0.35);
+    // Impossible minimums (both sides together need more than the split has): refuse.
+    expect(resizeBoundary(layout, [], 0, 0.1, { before: 0.7, after: 0.7 })).toBe(layout);
   });
 });

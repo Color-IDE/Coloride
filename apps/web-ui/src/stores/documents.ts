@@ -21,6 +21,7 @@ type DocumentActions = Pick<
   | "getDocumentContent"
   | "updateInMemoryDocumentContent"
   | "isDocumentUnsaved"
+  | "getUnsavedDocumentIds"
   | "discardDocumentBuffer"
   | "markDocumentSaved"
 >;
@@ -96,6 +97,10 @@ export function createDocumentActions(ctx: StoreContext): DocumentActions {
 
     isDocumentUnsaved(filePath: string): boolean {
       return documents.get(filePath)?.unsaved ?? false;
+    },
+
+    getUnsavedDocumentIds(): string[] {
+      return [...documents].filter(([, buffer]) => buffer.unsaved).map(([id]) => id);
     },
 
     discardDocumentBuffer(filePath: string): void {

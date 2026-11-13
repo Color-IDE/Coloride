@@ -9,6 +9,8 @@ export interface SidebarRowOptions {
   readonly onMore: (anchor: HTMLButtonElement) => void;
   /** Adds a "+" next to the options button (shown on hover). */
   readonly onAdd?: () => void;
+  /** Accessible name prefix and tooltip of the "+" (a new session unless told otherwise). */
+  readonly addLabel?: { readonly aria: string; readonly title: string };
   readonly icon?: string;
 }
 
@@ -22,8 +24,13 @@ export class SidebarRow {
   private readonly title: HTMLSpanElement;
   private readonly arrow: HTMLSpanElement;
   private renameInput: HTMLInputElement | undefined;
+  private readonly addLabel: { readonly aria: string; readonly title: string };
 
   constructor(doc: Document, options: SidebarRowOptions) {
+    this.addLabel = options.addLabel ?? {
+      aria: UI_STRINGS.chat.newSessionIn,
+      title: UI_STRINGS.chat.newSession,
+    };
     this.el = doc.createElement("div");
     this.el.className = `sidebar-row sidebar-row--${options.kind}`;
     this.select = button(doc, "sidebar-row-select");
@@ -69,8 +76,8 @@ export class SidebarRow {
     attribute(this.select, "title", title);
     attribute(this.more, "aria-label", `Options for ${title}`);
     if (this.add) {
-      attribute(this.add, "aria-label", `${UI_STRINGS.chat.newSessionIn} ${title}`);
-      attribute(this.add, "title", UI_STRINGS.chat.newSession);
+      attribute(this.add, "aria-label", `${this.addLabel.aria} ${title}`);
+      attribute(this.add, "title", this.addLabel.title);
     }
     attribute(this.el, "data-selected", String(selected));
     if (expanded !== undefined) {

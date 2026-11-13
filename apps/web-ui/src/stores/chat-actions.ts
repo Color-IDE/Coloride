@@ -1,5 +1,5 @@
-import { type AreaSize, DEFAULT_LAYOUT_ASPECT, addPanel, fitsArea } from "../layout-tree.js";
-import { resolveGroupLayout } from "../workspace-navigation.js";
+import { type AreaSize, DEFAULT_LAYOUT_ASPECT, addPanel, placePanel } from "../layout-tree.js";
+import { resolveGroupLayout, resolveGroupMaximized } from "../workspace-navigation.js";
 import type { StoreContext } from "./context.js";
 import type { CockpitChatTab, CockpitStoreBundle, CreateChatOptions } from "./types.js";
 
@@ -7,6 +7,7 @@ type ChatActions = Pick<
   CockpitStoreBundle,
   | "createChat"
   | "canCreateChat"
+  | "toggleMaximizeChat"
   | "setPanelArea"
   | "getPanelArea"
   | "renameChat"
@@ -27,15 +28,16 @@ export function createChatActions(ctx: StoreContext): ChatActions {
     );
     if (!group) return null;
     const current = resolveGroupLayout(group);
-    const layout = addPanel(current, chatId, {
+    const placement = {
       ...(options?.from ? { target: options.from } : {}),
       ...(options?.direction ? { direction: options.direction } : {}),
       ...(options?.position ? { position: options.position } : {}),
-      aspect: panelArea
-        ? panelArea.widthPx / Math.max(1, panelArea.heightPx)
-        : DEFAULT_LAYOUT_ASPECT,
-    });
-    if (panelArea && !fitsArea(layout, panelArea)) return null;
+    };
+    // Without a measured area (not laid out yet) any placement is accepted.
+    const layout = panelArea
+      ? placePanel(current, chatId, panelArea, placement)
+      : addPanel(current, chatId, { ...placement, aspect: DEFAULT_LAYOUT_ASPECT });
+    if (!layout) return null;
     return { group, layout };
   };
 
@@ -59,15 +61,25 @@ export function createChatActions(ctx: StoreContext): ChatActions {
 
     const currentNavigation = navigation.getState();
     const group = currentNavigation.groups.find((group) => group.chatIds.includes(chatId));
+    // While a session is shown alone, selecting another one (a header tab) shows that one.
+    const maximizedFollows = !!group && resolveGroupMaximized(group) !== null;
     if (
       group &&
-      (currentNavigation.activeGroupId !== group.id || group.lastActiveChatId !== chatId)
+      (currentNavigation.activeGroupId !== group.id ||
+        group.lastActiveChatId !== chatId ||
+        (maximizedFollows && group.maximizedChatId !== chatId))
     ) {
       navigation.setState((prev) => ({
         ...prev,
         activeGroupId: group.id,
         groups: prev.groups.map((item) =>
-          item.id === group.id ? { ...item, lastActiveChatId: chatId } : item,
+          item.id === group.id
+            ? {
+                ...item,
+                lastActiveChatId: chatId,
+                ...(maximizedFollows ? { maximizedChatId: chatId } : {}),
+              }
+            : item,
         ),
       }));
     }
@@ -97,6 +109,20 @@ export function createChatActions(ctx: StoreContext): ChatActions {
 
     getPanelArea(): AreaSize | null {
       return panelArea;
+    },
+
+    toggleMaximizeChat(chatId: string): void {
+      const group = navigation.getState().groups.find((item) => item.chatIds.includes(chatId));
+      if (!group) return;
+      const alone = resolveGroupMaximized(group) === chatId;
+      navigation.setState((prev) => ({
+        ...prev,
+        groups: prev.groups.map((item) =>
+          item.id === group.id ? { ...item, maximizedChatId: alone ? null : chatId } : item,
+        ),
+      }));
+      // The session shown alone is the selected one (Zone 4 follows it).
+      if (!alone) selectChat(chatId);
     },
 
     canCreateChat(options?: CreateChatOptions): boolean {
@@ -139,7 +165,13 @@ export function createChatActions(ctx: StoreContext): ChatActions {
         ...prev,
         groups: prev.groups.map((group) =>
           group.id === plan.group.id
-            ? { ...group, chatIds: [...group.chatIds, chatId], layout: plan.layout }
+            ? {
+                ...group,
+                chatIds: [...group.chatIds, chatId],
+                layout: plan.layout,
+                // A new panel is only seen in the tiled layout.
+                maximizedChatId: null,
+              }
             : group,
         ),
       }));
@@ -198,6 +230,7 @@ export function createChatActions(ctx: StoreContext): ChatActions {
             ? {
                 ...group,
                 chatIds: group.chatIds.filter((id) => id !== chatId),
+                maximizedChatId: group.maximizedChatId === chatId ? null : group.maximizedChatId,
                 lastActiveChatId:
                   group.lastActiveChatId === chatId
                     ? group.chatIds.find((id) => id !== chatId)

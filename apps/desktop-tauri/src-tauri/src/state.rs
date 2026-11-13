@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Mutex;
 
 use context_engine::SqliteWalContextEngine;
@@ -17,6 +17,11 @@ pub(crate) struct DesktopAppState {
     pub(crate) workspace_generation: AtomicU64,
     /// Serializes index rebuilds: they all write the same SQLite file.
     pub(crate) index_build: Mutex<()>,
+    /// Files with unsaved changes, as last reported by the UI (which also holds the edits of the
+    /// projects that are not open in the editor). Closing the window asks first while it is > 0.
+    pub(crate) unsaved_buffers: AtomicUsize,
+    /// Set once the user has answered the close prompt, so the exit that follows goes through.
+    pub(crate) exit_confirmed: AtomicBool,
 }
 
 impl DesktopAppState {
@@ -28,7 +33,15 @@ impl DesktopAppState {
             context_engine: Mutex::new(None),
             workspace_generation: AtomicU64::new(0),
             index_build: Mutex::new(()),
+            unsaved_buffers: AtomicUsize::new(0),
+            exit_confirmed: AtomicBool::new(false),
         }
+    }
+
+    /// Whether closing the window or quitting must first ask the UI what to do with unsaved edits.
+    pub(crate) fn close_needs_confirmation(&self) -> bool {
+        !self.exit_confirmed.load(Ordering::SeqCst)
+            && self.unsaved_buffers.load(Ordering::SeqCst) > 0
     }
 }
 

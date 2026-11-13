@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { StrictMode, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
@@ -44,6 +45,9 @@ interface NativeAstAnalysis {
   }>;
 }
 
+/** Sent by the Rust side when closing or quitting was held back because of unsaved changes. */
+const CLOSE_REQUESTED_EVENT = "coloride-close-requested";
+
 function mapWorkspaceNodes(nodes: readonly NativeWorkspaceNode[]) {
   return nodes.map((node) => ({
     ...node,
@@ -60,6 +64,7 @@ function ColorideDesktopApp() {
     let cancelled = false;
     let desktop: ReturnType<typeof lazyBootDesktopCockpit> | undefined;
     let sessionPersistenceTimer: number | undefined;
+    let stopListeningForClose: (() => void) | undefined;
     const persistSession = () => {
       if (!desktop) return;
       const payload = Array.from(desktop.exportSessionCacheBinary());
@@ -128,6 +133,10 @@ function ColorideDesktopApp() {
           },
           readWorkspaceFile: (path) =>
             invoke<string>("read_workspace_file_command", { relativePath: path }),
+          // Rust holds the window open while this is above zero (see commands/window.rs).
+          onUnsavedCountChange: (count) => {
+            void invoke("report_unsaved_buffers_command", { count });
+          },
           searchWorkspace: (query) =>
             invoke<NativeSearchResult[]>("search_workspace_command", { query, limit: 100 }),
           analyzeDocument: async (documentId, sessionGeneration) => {
@@ -143,11 +152,22 @@ function ColorideDesktopApp() {
             invoke<NativeMigrationReport>("run_native_migration_command"),
         });
         sessionPersistenceTimer = window.setInterval(persistSession, 2_000);
+        // Closing or quitting with unsaved changes: ask here, then tell Rust to go ahead.
+        void listen(CLOSE_REQUESTED_EVENT, async () => {
+          const allowed = (await desktop?.domController?.confirmClose()) ?? true;
+          if (!allowed) return;
+          persistSession();
+          await invoke("confirm_exit_command");
+        }).then((stopListening) => {
+          if (cancelled) stopListening();
+          else stopListeningForClose = stopListening;
+        });
       });
 
     return () => {
       cancelled = true;
       if (sessionPersistenceTimer !== undefined) window.clearInterval(sessionPersistenceTimer);
+      stopListeningForClose?.();
       if (desktop) {
         persistSession();
         desktop.destroy();

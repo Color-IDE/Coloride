@@ -4,6 +4,7 @@ import { ChatGrid } from "./cockpit/chat-grid.js";
 import { Inspector } from "./cockpit/inspector.js";
 import { SidebarPanels } from "./cockpit/sidebar-panels.js";
 import { TitleBar } from "./cockpit/title-bar.js";
+import { askUnsavedPrompt } from "./cockpit/unsaved-dialog.js";
 import { OnboardingModalController, createInitialOnboardingState } from "./onboarding/index.js";
 import type {
   CockpitAstSymbolItem,
@@ -14,7 +15,7 @@ import type {
   Zone1ActivityState,
   Zone4InspectorState,
 } from "./stores/index.js";
-import { UI_STRINGS } from "./ui-strings.js";
+import { UI_STRINGS, uiText } from "./ui-strings.js";
 
 export interface CockpitDomControllerOptions {
   readonly rootContainer: HTMLElement;
@@ -24,6 +25,11 @@ export interface CockpitDomControllerOptions {
   readonly openWorkspace?: () => Promise<readonly CockpitFileTreeNode[] | null>;
   readonly switchWorkspace?: (path: string) => Promise<readonly CockpitFileTreeNode[] | null>;
   readonly readWorkspaceFile?: (path: string) => Promise<string>;
+  /**
+   * Called with how many files have unsaved changes whenever that number changes, so the host
+   * can hold back closing the window while it is above zero.
+   */
+  readonly onUnsavedCountChange?: (count: number) => void;
   readonly searchWorkspace?: (query: string) => Promise<readonly CockpitSearchResultItem[]>;
   readonly analyzeDocument?: (
     documentId: string,
@@ -63,6 +69,9 @@ export class CockpitDomController {
   private readonly inspector: Inspector;
   private zone4RenderCount = 0;
   private analysisRequestSequence = 0;
+  private readonly onUnsavedCountChange: ((count: number) => void) | undefined;
+  private lastUnsavedCount = 0;
+  private closePrompt: Promise<boolean> | null = null;
   /** Project whose file the editor holds (document ids alone do not say which). */
   private editorProjectPath: string;
 
@@ -72,6 +81,7 @@ export class CockpitDomController {
     this.editorView = editorView;
     this.editorProjectPath = stores.navigation.getState().projectPath;
     this.analyzeDocument = options.analyzeDocument;
+    this.onUnsavedCountChange = options.onUnsavedCountChange;
     this.ownsOnboardingController = !options.onboardingController;
     this.onboardingController =
       options.onboardingController ??
@@ -97,14 +107,20 @@ export class CockpitDomController {
       header: this.titleBar.zone4Header,
       saveActiveDocument: () => this.saveActiveDocument(),
       onFileShown: (path) => this.requestNativeAnalysis(path),
+      onUnsavedChange: () => this.reportUnsaved(),
       onTreeScroll: (scrollTopPx, viewportHeightPx) =>
         this.storeFileTreeScroll(scrollTopPx, viewportHeightPx),
       ...(options.readWorkspaceFile ? { readWorkspaceFile: options.readWorkspaceFile } : {}),
+      ...(options.openWorkspace ? { openWorkspace: options.openWorkspace } : {}),
     });
     this.sidebar = new SidebarPanels(doc, {
       stores,
       onboarding: this.onboardingController,
-      openFile: (path, onError) => void this.inspector.openFile(path, onError),
+      openFile: (path, onError) => {
+        // A file opened from the sidebar (search results) is shown in Zone 4, which starts closed.
+        stores.toggleInspector(true);
+        void this.inspector.openFile(path, onError);
+      },
       ...(options.openWorkspace ? { openWorkspace: options.openWorkspace } : {}),
       ...(options.switchWorkspace ? { switchWorkspace: options.switchWorkspace } : {}),
       ...(options.searchWorkspace ? { searchWorkspace: options.searchWorkspace } : {}),
@@ -119,7 +135,6 @@ export class CockpitDomController {
     this.shell.style.width = "100%";
     this.shell.style.height = "100vh";
     this.shell.style.overflow = "hidden";
-    this.shell.addEventListener("keydown", (event) => this.handleShortcut(event));
     this.shell.append(
       this.activityBar.element,
       this.sidebar.element,
@@ -136,7 +151,12 @@ export class CockpitDomController {
     this.titleBar.recordChatVisit(stores.zone3.getState().activeChatId);
     this.inspector.mountEditor();
 
+    // On the document, not the shell: with nothing focused (after clicking the title bar or an
+    // empty area) key events target `body`, which is outside the shell.
+    const onKeydown = (event: KeyboardEvent) => this.handleShortcut(event);
+    doc.addEventListener("keydown", onKeydown);
     this.unsubscribers.push(
+      () => doc.removeEventListener("keydown", onKeydown),
       stores.navigation.subscribeSelector(
         (state) => [state.projectPath, state.activeGroupId] as const,
         ([projectPath, groupId]) => this.inspector.changeScope(projectPath, groupId),
@@ -153,9 +173,10 @@ export class CockpitDomController {
               .map((group) => `${group.id}:${group.title}:${group.chatIds.join(",")}`)
               .join("|"),
             state.groups.find((group) => group.id === state.activeGroupId)?.layout,
+            state.groups.find((group) => group.id === state.activeGroupId)?.maximizedChatId,
           ] as const,
         () => this.chatGrid.update(),
-        (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3],
+        (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3] && a[4] === b[4],
       ),
       stores.zone1.subscribe(() => {
         this.renderLayout();
@@ -199,6 +220,7 @@ export class CockpitDomController {
           hasUnsaved,
         );
         this.inspector.setUnsaved(hasUnsaved);
+        this.reportUnsaved();
         if (snap.lastIpcError) this.inspector.reportError(snap.lastIpcError);
         if (snap.lastAckSnapshot) this.requestNativeAnalysis(snap.documentId);
       }),
@@ -218,6 +240,59 @@ export class CockpitDomController {
     const snap = await this.editorView.requestSave();
     this.stores.markDocumentSaved(snap.document_id);
     this.inspector.setUnsaved(false);
+    this.reportUnsaved();
+  }
+
+  /** Files with unsaved changes: the open project's buffers and the ones kept aside for others. */
+  unsavedCount(): number {
+    return this.stores.getUnsavedDocumentIds().length + this.inspector.stashedUnsavedCount();
+  }
+
+  private reportUnsaved(): void {
+    const count = this.unsavedCount();
+    if (count === this.lastUnsavedCount) return;
+    this.lastUnsavedCount = count;
+    this.onUnsavedCountChange?.(count);
+  }
+
+  /**
+   * Decides whether the window may close: true when nothing is unsaved, or once the user chose
+   * to save (everything that can be saved from here) or not to. Asked while another prompt is
+   * still open, it shares that prompt's answer.
+   */
+  confirmClose(): Promise<boolean> {
+    this.closePrompt ??= this.askBeforeClosing().finally(() => {
+      this.closePrompt = null;
+    });
+    return this.closePrompt;
+  }
+
+  private async askBeforeClosing(): Promise<boolean> {
+    const total = this.unsavedCount();
+    if (total === 0) return true;
+    const choice = await askUnsavedPrompt(this.shell, {
+      message: uiText.unsavedCloseAll(total),
+      saveLabel: UI_STRINGS.editor.saveAll,
+    });
+    if (choice === "cancel") return false;
+    if (choice === "discard") return true;
+    try {
+      await this.inspector.saveAllUnsaved();
+    } catch (error: unknown) {
+      this.inspector.reportError(
+        error instanceof Error ? error.message : UI_STRINGS.editor.saveFailed,
+      );
+      return false;
+    }
+    // What is left (other projects' edits) cannot be saved from here: let the user decide.
+    const remaining = this.unsavedCount();
+    if (remaining === 0) return true;
+    const rest = await askUnsavedPrompt(this.shell, {
+      message: uiText.unsavedElsewhere(remaining),
+      saveLabel: null,
+      discardLabel: UI_STRINGS.editor.closeWithoutSaving,
+    });
+    return rest === "discard";
   }
 
   getZoneElements(): {
@@ -245,7 +320,7 @@ export class CockpitDomController {
   /** Scrolls the sidebar file tree (programmatic; also records the position for the session). */
   scrollFileTree(scrollTopPx: number, viewportHeightPx = 600): void {
     this.storeFileTreeScroll(scrollTopPx, viewportHeightPx);
-    this.sidebar.files.scrollTo(scrollTopPx, viewportHeightPx);
+    this.inspector.tree.scrollTo(scrollTopPx, viewportHeightPx);
   }
 
   destroy(): void {
@@ -311,6 +386,9 @@ export class CockpitDomController {
       return;
     }
     if (event.altKey && (event.key === "ArrowRight" || event.key === "ArrowLeft")) {
+      // Alt+Arrow also moves the caret by word in the editor and in text fields (macOS): there it
+      // belongs to the text, never to the session switcher.
+      if (event.defaultPrevented || isTextEditingTarget(event.target)) return;
       const { chats, activeChatId } = this.stores.zone3.getState();
       const index = chats.findIndex((chat) => chat.chatId === activeChatId);
       if (index < 0 || chats.length < 2) return;
@@ -338,4 +416,12 @@ export class CockpitDomController {
         // A newer document switch or edit may invalidate this request; the next host snapshot retries.
       });
   }
+}
+
+/** Whether keys typed at `target` edit text: a field, or the code editor's content. */
+function isTextEditingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return (
+    target.isContentEditable || target.closest("input, textarea, [contenteditable='true']") !== null
+  );
 }

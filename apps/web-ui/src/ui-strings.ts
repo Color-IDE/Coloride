@@ -14,7 +14,6 @@ export const UI_STRINGS = {
   },
   activity: {
     sessions: "Chat sessions",
-    files: "File explorer",
     search: "Global search",
     debug: "Debug & tests",
     git: "Git & checkpoints",
@@ -40,6 +39,9 @@ export const UI_STRINGS = {
     emptyGroup: "This group is empty. Agent and terminal panels will appear here.",
     newSession: "New session",
     newSessionIn: "New session in",
+    resizePanels: "Resize panels",
+    maximizePanel: "Maximize panel",
+    restorePanels: "Restore panels",
     splitRight: "Split right",
     splitDown: "Split down",
     closePanel: "Close session",
@@ -78,6 +80,8 @@ export const UI_STRINGS = {
     saveFailed: "Save failed",
     unsavedTitle: "Unsaved changes",
     save: "Save",
+    saveAll: "Save all",
+    closeWithoutSaving: "Close without saving",
     discard: "Don't save",
     cancel: "Cancel",
   },
@@ -94,6 +98,8 @@ export const UI_STRINGS = {
     collapseAll: "Collapse all groups",
     removeProject: "Remove from list",
     noRoom: "No room for another panel",
+    newGroup: "New group",
+    newGroupIn: "New group in",
     renameGroup: "Rename group",
     expandGroup: "Expand group",
     collapseGroup: "Collapse group",
@@ -127,6 +133,10 @@ export const uiText = {
     `${icon} ${title} [${model}] — ${state}`,
   closeTab: (name: string) => `Close ${name}`,
   unsavedPrompt: (name: string) => `Do you want to save the changes you made to ${name}?`,
+  unsavedCloseAll: (count: number) =>
+    `${count} ${count === 1 ? "file has" : "files have"} unsaved changes. Do you want to save ${count === 1 ? "it" : "them"} before closing?`,
+  unsavedElsewhere: (count: number) =>
+    `${count} ${count === 1 ? "file" : "files"} in another project still ${count === 1 ? "has" : "have"} unsaved changes, which can only be saved from that project. Close without saving ${count === 1 ? "it" : "them"}?`,
   mcpSummary: (keymap: string, theme: string, servers: number) =>
     `Keymap: ${keymap} · Theme: ${theme} · MCP: ${servers}`,
   searchHit: (path: string, line: number, freshness: string, snippet: string) =>

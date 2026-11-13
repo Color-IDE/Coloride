@@ -19,11 +19,10 @@ type ActivityActions = Pick<
 
 const SECTION_BY_DIGIT: Record<string, ActivityBarSection> = {
   "1": "sessions",
-  "2": "files",
-  "3": "search",
+  "2": "search",
+  "3": "debug",
   "4": "git",
-  "5": "debug",
-  "6": "mcp",
+  "5": "mcp",
 };
 
 /** Zone 1 (activity bar, persona, panel visibility, zoom) and the Zone 4 tab selector. */

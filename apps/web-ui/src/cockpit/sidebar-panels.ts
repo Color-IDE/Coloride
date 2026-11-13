@@ -8,7 +8,6 @@ import type {
   CockpitStoreBundle,
 } from "../stores/index.js";
 import { UI_STRINGS, uiText } from "../ui-strings.js";
-import { FileTreePanel } from "./file-tree-panel.js";
 
 export interface SidebarPanelsOptions {
   readonly stores: CockpitStoreBundle;
@@ -25,7 +24,6 @@ export interface SidebarPanelsOptions {
  */
 export class SidebarPanels {
   readonly element: HTMLElement;
-  readonly files: FileTreePanel;
   private readonly projectControls: HTMLElement;
   private readonly sessions: HTMLElement;
   private readonly workspaceSidebar: WorkspaceSidebar;
@@ -58,25 +56,6 @@ export class SidebarPanels {
     this.projectControls.className = "sidebar-project-controls";
     this.sessions = doc.createElement("div");
     this.sessions.className = "sidebar-navigation";
-
-    const openWorkspace = options.openWorkspace;
-    this.files = new FileTreePanel(doc, {
-      className: "coloride-zone-2-file-tree",
-      withFilter: false,
-      onOpenFile: (node) =>
-        options.openFile(node.path, (message) => this.files.reportError(message)),
-      ...(openWorkspace
-        ? {
-            emptyAction: {
-              label: UI_STRINGS.files.openFolder,
-              run: async () => {
-                const tree = await openWorkspace();
-                if (tree) stores.setFileTree(tree);
-              },
-            },
-          }
-        : {}),
-    });
 
     this.search = doc.createElement("div");
     this.search.className = "coloride-zone-2-search flex flex-col gap-2";
@@ -116,14 +95,7 @@ export class SidebarPanels {
     this.mcpSummary.className = "coloride-mcp-onboarding-summary";
     this.mcp.append(this.wizardButton, this.mcpSummary);
 
-    this.element.append(
-      this.projectControls,
-      this.sessions,
-      this.files.element,
-      this.search,
-      this.debug,
-      this.mcp,
-    );
+    this.element.append(this.projectControls, this.sessions, this.search, this.debug, this.mcp);
 
     this.workspaceSidebar = new WorkspaceSidebar({
       controlsHost: this.projectControls,
@@ -146,13 +118,10 @@ export class SidebarPanels {
     const section = z1.activeSection;
     this.show(this.projectControls, section === "sessions", "flex");
     this.show(this.sessions, section === "sessions", "block");
-    this.show(this.files.element, section === "files", "flex");
     this.show(this.search, section === "search", "flex");
     this.show(this.debug, section === "debug", "flex");
     this.show(this.mcp, section === "mcp", "flex");
 
-    // The file tree is kept current even while hidden, so switching to it is instant.
-    this.files.update(z2.fileTree, stores.zone4.getState().activeDocumentId);
     if (section === "search") this.updateSearch(z2.searchQuery, z2.searchResults);
     if (section === "debug") this.updateDebug(z2.astSymbols, z2.impactedTests);
     if (section === "mcp") this.updateMcp();
@@ -160,7 +129,6 @@ export class SidebarPanels {
 
   destroy(): void {
     this.workspaceSidebar.destroy();
-    this.files.destroy();
   }
 
   private show(el: HTMLElement, visible: boolean, display: string): void {

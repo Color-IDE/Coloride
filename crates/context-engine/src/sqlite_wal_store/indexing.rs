@@ -11,6 +11,7 @@ impl SqliteWalContextEngine {
         write_wal: bool,
     ) -> Result<Option<SqliteFileRow>, ContextStorageError> {
         let norm_path = normalize_rel_path(relative_path);
+        self.vector_changes.mark(Some(norm_path.clone()));
         if self.scanner.check_path_acl(&norm_path).is_err() {
             // Ensure any previously indexed entries for this path are purged
             if self.files.remove(&norm_path).is_some() {
@@ -147,6 +148,7 @@ impl SqliteWalContextEngine {
     }
 
     pub(super) fn clear_all_tables(&mut self) {
+        self.vector_changes.mark(None);
         self.files.clear();
         self.ast_chunks.clear();
         self.symbol_edges.clear();
