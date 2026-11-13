@@ -14,6 +14,14 @@ export interface SidebarRowOptions {
   readonly icon?: string;
 }
 
+/** A session's number ("#16") and its name, when the title starts with one. */
+export function splitSessionNumber(title: string): { number: string | null; name: string } {
+  const match = /^(#\d+)\s+(.+)$/.exec(title);
+  return match
+    ? { number: match[1] ?? null, name: match[2] ?? title }
+    : { number: null, name: title };
+}
+
 /** All row controls are siblings: options never activate selection or expansion. */
 export class SidebarRow {
   readonly el: HTMLDivElement;
@@ -22,6 +30,8 @@ export class SidebarRow {
   readonly add: HTMLButtonElement | undefined;
   readonly toggle: HTMLButtonElement | undefined;
   private readonly title: HTMLSpanElement;
+  /** The session number, on the right of the row (session rows only). */
+  private readonly badge: HTMLSpanElement | undefined;
   private readonly arrow: HTMLSpanElement;
   private renameInput: HTMLInputElement | undefined;
   private readonly addLabel: { readonly aria: string; readonly title: string };
@@ -37,6 +47,12 @@ export class SidebarRow {
     this.title = doc.createElement("span");
     this.title.className = "sidebar-row-title";
     this.select.appendChild(this.title);
+    if (options.kind === "session") {
+      this.badge = doc.createElement("span");
+      this.badge.className = "sidebar-row-badge";
+      this.badge.setAttribute("aria-hidden", "true");
+      this.select.appendChild(this.badge);
+    }
     this.select.addEventListener("click", options.onSelect);
     this.arrow = doc.createElement("span");
     this.arrow.className = "sidebar-chevron";
@@ -91,7 +107,13 @@ export class SidebarRow {
   }
 
   update(title: string, selected: boolean, expanded?: boolean): void {
-    label(this.title, title);
+    // A session titled "#16 New session" shows its name, with the number on the right.
+    const shown = this.badge ? splitSessionNumber(title) : { number: null, name: title };
+    label(this.title, shown.name);
+    if (this.badge) {
+      label(this.badge, shown.number ?? "");
+      this.badge.hidden = shown.number === null;
+    }
     attribute(this.select, "title", title);
     attribute(this.more, "aria-label", `Options for ${title}`);
     if (this.add) {
