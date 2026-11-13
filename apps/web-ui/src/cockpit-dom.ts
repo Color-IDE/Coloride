@@ -271,6 +271,12 @@ export class CockpitDomController {
     await this.trustBanner?.refresh();
   }
 
+  /** Shows a project file in Zone 4 (opened from "go to definition", for example). */
+  async openWorkspaceFile(path: string): Promise<void> {
+    this.stores.toggleInspector(true);
+    await this.inspector.openFile(path);
+  }
+
   async saveActiveDocument(): Promise<void> {
     // With no file shown the editor may still hold another group's or project's document.
     if (!this.inspector.isShowingFile()) return;

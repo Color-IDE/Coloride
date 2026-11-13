@@ -3,15 +3,19 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use ropey::Rope;
 use serde_json::Value;
 
+use super::client::LspError;
 use super::session::{
     DiagnosticsMode, DiagnosticsSink, DocumentRef, LanguageServerProfile, LanguageServerSession,
 };
-use crate::contracts::{DiagnosticSource, TextChange};
+use crate::contracts::{
+    DiagnosticSource, LanguageFeature, LanguageFeatureRequest, LanguageFeatureResponse, TextChange,
+};
 use crate::document::DocumentSession;
 use crate::trust::WorkspaceTrustGate;
 
@@ -134,7 +138,9 @@ struct OpenDocument {
 
 #[derive(Debug)]
 struct RunningServer {
-    session: LanguageServerSession,
+    /// Shared so that a feature request can wait for its answer without holding the state
+    /// lock (which every keystroke takes).
+    session: Arc<LanguageServerSession>,
     language_ids: Vec<&'static str>,
 }
 
@@ -214,7 +220,7 @@ impl LanguageServices {
             }
         }
         state.servers.push(RunningServer {
-            session,
+            session: Arc::new(session),
             language_ids: spec.language_ids.clone(),
         });
         true
@@ -313,6 +319,41 @@ impl LanguageServices {
                 );
             }
         }
+    }
+
+    /// Answers a feature request for the open document at `path` (see
+    /// [`LanguageServerSession::request_feature`]). Formatting goes to Biome when it handles
+    /// the language, everything else to the TypeScript server.
+    pub fn request_feature(
+        &self,
+        path: &Path,
+        request: &LanguageFeatureRequest,
+        timeout: Duration,
+    ) -> Result<LanguageFeatureResponse, LspError> {
+        let preference: &[DiagnosticSource] = match request.feature {
+            LanguageFeature::Formatting => &[DiagnosticSource::Biome, DiagnosticSource::Vtsls],
+            _ => &[DiagnosticSource::Vtsls],
+        };
+        let session = {
+            let state = self.state();
+            let language_id = state
+                .open
+                .get(path)
+                .map(|document| document.language_id)
+                .ok_or(LspError::NoServer)?;
+            preference
+                .iter()
+                .find_map(|source| {
+                    state.servers.iter().find(|server| {
+                        server.session.source() == *source
+                            && server.session.is_alive()
+                            && server.language_ids.contains(&language_id)
+                    })
+                })
+                .map(|server| Arc::clone(&server.session))
+                .ok_or(LspError::NoServer)?
+        };
+        session.request_feature(path, self.gate.workspace_root(), request, timeout)
     }
 
     pub fn document_closed(&self, path: &Path) {

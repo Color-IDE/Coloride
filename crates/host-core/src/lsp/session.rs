@@ -15,10 +15,12 @@ use ropey::Rope;
 use serde_json::{json, Value};
 
 use super::client::{LspClient, LspError};
+use super::features;
 use super::uri::{file_uri_to_path, path_to_file_uri};
 use crate::contracts::{
-    DiagnosticEntry, DiagnosticSeverity, DiagnosticSource, DocumentDiagnostics, LineCol,
-    TextChange, Utf16Span, CONTRACT_SCHEMA_VERSION,
+    DiagnosticEntry, DiagnosticSeverity, DiagnosticSource, DocumentDiagnostics,
+    LanguageFeatureRequest, LanguageFeatureResponse, LineCol, TextChange, Utf16Span,
+    CONTRACT_SCHEMA_VERSION,
 };
 use crate::offsets::{line_col_to_utf16_clamped, utf16_to_char_idx, utf16_to_line_col};
 use crate::trust::{GatedCapability, WorkspaceTrustGate};
@@ -141,6 +143,9 @@ impl LanguageServerSession {
                     "textDocument": {
                         "synchronization": {"dynamicRegistration": false},
                         "publishDiagnostics": {"versionSupport": true},
+                        "completion": {"completionItem": {"snippetSupport": false}},
+                        "definition": {"linkSupport": true},
+                        "rename": {"prepareSupport": false},
                     },
                     "workspace": {"configuration": true, "workspaceFolders": true},
                 },
@@ -307,6 +312,56 @@ impl LanguageServerSession {
         drop(documents);
         self.request_pull(document.path);
         Ok(true)
+    }
+
+    /// Answers a feature request about revision `request.revision` of the document at `path`.
+    ///
+    /// The request is refused unless that revision is the last one sent to the server, and it
+    /// is queued behind that revision's `didChange`, so the server answers about exactly that
+    /// text. The answer is converted against that text and tagged with that revision; the
+    /// caller discards it if its own text has moved on meanwhile.
+    pub fn request_feature(
+        &self,
+        path: &Path,
+        workspace_root: &Path,
+        request: &LanguageFeatureRequest,
+        timeout: Duration,
+    ) -> Result<LanguageFeatureResponse, LspError> {
+        let (rope, hash, pending) = {
+            let documents = lock(&self.documents);
+            let tracked = documents.get(path).ok_or(LspError::NoServer)?;
+            if tracked.document_id != request.document_id
+                || tracked.session_generation != request.session_generation
+                || tracked.latest != request.revision
+            {
+                return Err(LspError::StaleRevision {
+                    requested: request.revision,
+                    current: tracked.latest,
+                });
+            }
+            let (rope, hash) = tracked.revisions.get(&request.revision).cloned().ok_or(
+                LspError::StaleRevision {
+                    requested: request.revision,
+                    current: tracked.latest,
+                },
+            )?;
+            let position = utf16_to_line_col(&rope, request.position_utf16)
+                .map_err(|error| LspError::Protocol(error.to_string()))?;
+            let (method, params) =
+                features::request_params(&tracked.uri, position, &request.feature);
+            (rope, hash, self.client.begin_request(method, params)?)
+        };
+        let answer = pending.wait(timeout)?;
+        let result =
+            features::convert_result(&request.feature, &answer, &rope, path, workspace_root)?;
+        Ok(LanguageFeatureResponse {
+            schema_version: CONTRACT_SCHEMA_VERSION,
+            document_id: request.document_id.clone(),
+            session_generation: request.session_generation,
+            base_revision: request.revision,
+            content_blake3_hash: hash,
+            result,
+        })
     }
 
     pub fn close_document(&self, path: &Path) -> Result<(), LspError> {

@@ -1,4 +1,9 @@
-import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
+import {
+  autocompletion,
+  closeBrackets,
+  closeBracketsKeymap,
+  completionKeymap,
+} from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { indentUnit } from "@codemirror/language";
 import {
@@ -49,6 +54,11 @@ import {
   diagnosticsFromBatch,
   setSourceDiagnosticsEffect,
 } from "./diagnostics.js";
+import {
+  LanguageFeatureClient,
+  type LanguageFeatureProvider,
+  type NavigateToLocation,
+} from "./language-features.js";
 import { createLezerHighlightingExtensions } from "./languages.js";
 import {
   type Cm6TranslatedKeybinding,
@@ -79,6 +89,8 @@ export interface ColorideEditorStoreSnapshot {
   readonly droppedStaleIpcPackets: number;
   /** Diagnostics refused or dropped because the text had changed since they were computed. */
   readonly discardedStaleDiagnostics: number;
+  /** Language server answers (completions, edits, locations) dropped for the same reason. */
+  readonly discardedStaleLanguageAnswers: number;
   readonly mountCount: number;
   readonly activeKeymapPreset: KeymapPresetId;
   readonly activeThemeLabel: string;
@@ -114,6 +126,19 @@ export class ColorideEditorView {
   private droppedStaleIpcPackets = 0;
   private discardedStaleDiagnostics = 0;
   private readonly revisionHistory = new RevisionHistory();
+  private readonly languageFeatures = new LanguageFeatureClient({
+    current: () => ({
+      documentId: this.documentId,
+      sessionGeneration: this.sessionGeneration,
+      revision: this.localRevision,
+    }),
+    view: () => this.getEditorView(),
+    discardStale: () => {
+      this.discardedStaleLanguageAnswers += 1;
+      this.notifyStoreListeners();
+    },
+  });
+  private discardedStaleLanguageAnswers = 0;
   private mountCount = 0;
   private activeKeymapPreset: KeymapPresetId;
   private customKeybindings: Cm6TranslatedKeybinding[] = [];
@@ -220,6 +245,22 @@ export class ColorideEditorView {
     });
     this.notifyStoreListeners();
     return { applied: rebased.kept.length, discarded: rebased.discarded };
+  }
+
+  /**
+   * Connects the host's language servers: completions, F12 go to definition, Shift+Alt+F
+   * formatting. `navigate` is called when a definition is in another file.
+   */
+  setLanguageFeatureProvider(
+    provider: LanguageFeatureProvider | null,
+    navigate?: NavigateToLocation,
+  ): void {
+    this.languageFeatures.setProvider(provider, navigate);
+  }
+
+  /** Language features of the current revision; answers that arrive late are dropped. */
+  getLanguageFeatures(): LanguageFeatureClient {
+    return this.languageFeatures;
   }
 
   /** Diagnostics currently shown, at offsets of the current text. */
@@ -379,6 +420,7 @@ export class ColorideEditorView {
       lastAckSnapshot: this.lastAckSnapshot,
       droppedStaleIpcPackets: this.droppedStaleIpcPackets,
       discardedStaleDiagnostics: this.discardedStaleDiagnostics,
+      discardedStaleLanguageAnswers: this.discardedStaleLanguageAnswers,
       mountCount: this.mountCount,
       activeKeymapPreset: this.activeKeymapPreset,
       activeThemeLabel: this.activeTheme.label,
@@ -539,7 +581,15 @@ export class ColorideEditorView {
         rectangularSelection(),
         closeBrackets(),
         highlightActiveLine(),
-        keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
+        autocompletion({ override: [this.languageFeatures.completionSource] }),
+        keymap.of([
+          ...this.languageFeatures.keyBindings(),
+          ...closeBracketsKeymap,
+          ...completionKeymap,
+          ...defaultKeymap,
+          ...historyKeymap,
+          indentWithTab,
+        ]),
         ...createLezerHighlightingExtensions(documentId),
         createKeymapCompartmentExtension(
           this.keymapCompartment,

@@ -211,6 +211,23 @@ mod tests {
             end + "export const b = a ".len() as u32
         );
 
+        // Formatting is answered by Biome about revision 1; asking about revision 0, which
+        // the buffer has left, is refused instead of being answered against newer text.
+        let request = |revision| host_core::LanguageFeatureRequest {
+            document_id: "main.ts".into(),
+            session_generation: 1,
+            revision,
+            position_utf16: Utf16CodeUnitOffset::new(0),
+            feature: host_core::LanguageFeature::Formatting,
+        };
+        let formatted = crate::commands::language::language_feature(&state, &request(1)).unwrap();
+        assert_eq!(formatted.base_revision, 1);
+        assert!(matches!(
+            formatted.result,
+            host_core::LanguageFeatureResult::Edits { .. }
+        ));
+        assert!(crate::commands::language::language_feature(&state, &request(0)).is_err());
+
         // Opening another folder stops the first workspace's server.
         load_workspace(&state, other.path().to_str().unwrap()).unwrap();
         assert!(!services.is_running(DiagnosticSource::Biome));

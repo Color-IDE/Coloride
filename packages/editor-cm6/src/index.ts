@@ -3,6 +3,7 @@ export * from "./decorations.js";
 export * from "./diagnostics.js";
 export * from "./editor-view.js";
 export * from "./in-memory-host-bridge.js";
+export * from "./language-features.js";
 export * from "./indent-guide-columns.js";
 export * from "./languages.js";
 export * from "./onboarding-vsix.js";

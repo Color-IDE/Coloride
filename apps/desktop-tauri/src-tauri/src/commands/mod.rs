@@ -2,6 +2,7 @@
 
 pub mod context_index;
 pub mod documents;
+pub mod language;
 pub mod migration;
 pub mod search;
 pub mod session_cache;

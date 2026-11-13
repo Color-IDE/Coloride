@@ -1,4 +1,4 @@
-import type { DocumentDiagnostics } from "@coloride/protocol-types";
+import type { DocumentDiagnostics, LanguageFeatureResponse } from "@coloride/protocol-types";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -166,6 +166,15 @@ function ColorideDesktopApp() {
           loadNativeMigrationReport: () =>
             invoke<NativeMigrationReport>("run_native_migration_command"),
         });
+        // Completions, F12 and Shift+Alt+F, answered by vtsls/Biome about one exact revision.
+        desktop.editorView.setLanguageFeatureProvider(
+          (request) => invoke<LanguageFeatureResponse>("language_feature_command", { request }),
+          (location) => {
+            if (location.inside_workspace) {
+              void desktop?.domController?.openWorkspaceFile(location.file_path);
+            }
+          },
+        );
         sessionPersistenceTimer = window.setInterval(persistSession, 2_000);
         // The editor places each batch by its revision, and drops what its text has moved past.
         void listen<DocumentDiagnostics>(DOCUMENT_DIAGNOSTICS_EVENT, (event) => {

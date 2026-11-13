@@ -58,6 +58,7 @@ pub fn run() {
             commands::search::search_workspace_command,
             commands::search::analyze_document_command,
             commands::migration::run_native_migration_command,
+            commands::language::language_feature_command,
             commands::trust::workspace_trust_command,
             commands::trust::request_workspace_trust_command,
             commands::trust::revoke_workspace_trust_command,

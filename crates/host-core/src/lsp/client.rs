@@ -29,6 +29,10 @@ pub enum LspError {
     Timeout { method: String },
     #[error("language server answered `{method}` with an error: {message}")]
     Response { method: String, message: String },
+    #[error("the document is at revision {current}, not {requested}: request it again")]
+    StaleRevision { requested: u32, current: u32 },
+    #[error("no language server provides this feature for the document")]
+    NoServer,
     #[error("language server protocol violation: {0}")]
     Protocol(String),
 }
