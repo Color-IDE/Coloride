@@ -145,6 +145,11 @@ export interface CockpitStoreBundle extends WorkspaceNavigationActions {
    * tab does not exist or the panel would drop below the minimum size in the measured area.
    */
   createChat(options?: CreateChatOptions): string | null;
+  /**
+   * Shows a session alone in its tab, or, when it already is, goes back to the tiled panels.
+   * While one is maximized the header tabs switch which one is shown.
+   */
+  toggleMaximizeChat(chatId: string): void;
   /** Same check as `createChat`, without creating anything. */
   canCreateChat(options?: CreateChatOptions): boolean;
   /** Size in pixels of the area holding the panels; unknown (null) means no size limit. */

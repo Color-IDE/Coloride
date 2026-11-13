@@ -17,7 +17,7 @@ export { AtomicStore, type StoreListener } from "../atomic-store.js";
 export { COLORIDE_DESIGN_TOKENS, type DesignStateTokens } from "../design-state-tokens.js";
 export type { AreaSize } from "../layout-tree.js";
 export type { WorkGroup, WorkspaceNavigationState } from "../workspace-navigation.js";
-export { resolveGroupLayout } from "../workspace-navigation.js";
+export { resolveGroupLayout, resolveGroupMaximized } from "../workspace-navigation.js";
 export type * from "./types.js";
 
 /**

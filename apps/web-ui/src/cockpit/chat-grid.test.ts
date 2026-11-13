@@ -464,4 +464,129 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
       root.remove();
     });
   });
+
+  describe("maximizing a panel", () => {
+    function setup(ids: readonly string[] = ["a", "b", "c"]) {
+      const root = document.createElement("div");
+      document.body.appendChild(root);
+      const stores = createCockpitStoreBundle({
+        initialChats: ids.map((chatId) => ({
+          chatId,
+          title: chatId.toUpperCase(),
+          modelName: "Codex",
+          validationState: "UnchangedBlue" as const,
+        })),
+      });
+      const editorView = new ColorideEditorView({
+        initialDocumentId: "src/main.ts",
+        initialContent: "const ready = true;",
+        ipcChannel: new InMemoryBinaryHostBridge(),
+      });
+      const controller = new CockpitDomController({ rootContainer: root, stores, editorView });
+      const shown = () =>
+        Array.from(root.querySelectorAll<HTMLElement>(".coloride-zone-3-grid .coloride-chat-cell"))
+          .map((cell) => cell.dataset.chatId)
+          .sort();
+      const button = (chatId: string) =>
+        root.querySelector<HTMLButtonElement>(
+          `.coloride-chat-cell[data-chat-id="${chatId}"] .coloride-maximize-panel`,
+        );
+      const tab = (chatId: string) =>
+        root.querySelector<HTMLElement>(
+          `.coloride-zone-3-header .coloride-header-tab[data-chat-id="${chatId}"]`,
+        );
+      return { root, stores, controller, shown, button, tab };
+    }
+
+    it("shows only that panel when maximized, and every panel again when restored", () => {
+      const { root, controller, shown, button } = setup();
+      expect(shown()).toEqual(["a", "b", "c"]);
+      expect(button("b")?.getAttribute("aria-label")).toBe("Maximize panel");
+      button("b")?.click();
+      expect(shown()).toEqual(["b"]);
+      // The separators have nothing to separate while one panel fills the tab.
+      expect(root.querySelector(".coloride-layout-handle")).toBeNull();
+      expect(button("b")?.getAttribute("aria-label")).toBe("Restore panels");
+      button("b")?.click();
+      expect(shown()).toEqual(["a", "b", "c"]);
+      expect(root.querySelectorAll(".coloride-layout-handle").length).toBeGreaterThan(0);
+      controller.destroy();
+      root.remove();
+    });
+
+    it("also toggles with a double click on the panel header, but not on its buttons", () => {
+      const { root, controller, shown } = setup();
+      const header = root.querySelector<HTMLElement>(
+        '.coloride-chat-cell[data-chat-id="c"] .coloride-chat-cell-header',
+      ) as HTMLElement;
+      header.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+      expect(shown()).toEqual(["c"]);
+      header.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+      expect(shown()).toHaveLength(3);
+      // A double click on a button (it would double-trigger the action) is not a header gesture.
+      const close = root.querySelector<HTMLElement>(
+        '.coloride-chat-cell[data-chat-id="c"] .coloride-split-right',
+      ) as HTMLElement;
+      close.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+      expect(shown()).toHaveLength(3);
+      controller.destroy();
+      root.remove();
+    });
+
+    it("uses the header tabs to switch the session shown alone", () => {
+      const { root, controller, shown, button, tab } = setup();
+      button("a")?.click();
+      expect(shown()).toEqual(["a"]);
+      tab("c")?.click();
+      expect(shown()).toEqual(["c"]);
+      expect(tab("c")?.getAttribute("aria-selected")).toBe("true");
+      // All the sessions are still tabs; maximizing never hides them.
+      expect(root.querySelectorAll(".coloride-zone-3-header .coloride-header-tab")).toHaveLength(3);
+      controller.destroy();
+      root.remove();
+    });
+
+    it("keeps each panel's content and scroll while it is hidden by another one", () => {
+      const { root, stores, controller, button, shown } = setup();
+      stores.zone3.setState((prev) => ({
+        ...prev,
+        messagesByChatId: {
+          ...prev.messagesByChatId,
+          b: [
+            {
+              messageId: "m1",
+              chatId: "b",
+              role: "assistant",
+              content: "keep me",
+              renderedHtmlBlocks: ["keep me"],
+              streaming: false,
+            },
+          ],
+        },
+      }));
+      const cell = root.querySelector<HTMLElement>('.coloride-chat-cell[data-chat-id="b"]');
+      button("a")?.click();
+      expect(shown()).toEqual(["a"]);
+      button("a")?.click();
+      // The same element comes back (not a rebuilt one), with its content.
+      expect(root.querySelector('.coloride-chat-cell[data-chat-id="b"]')).toBe(cell);
+      expect(cell?.textContent).toContain("keep me");
+      controller.destroy();
+      root.remove();
+    });
+
+    it("hides the button when the tab has a single panel, and goes back when a panel is split", () => {
+      const single = setup(["a"]);
+      expect(single.button("a")?.hidden).toBe(true);
+      single.controller.destroy();
+      single.root.remove();
+
+      const { root, stores, controller, shown, button } = setup(["a", "b"]);
+      button("a")?.click();
+      stores.createChat({ from: "a", direction: "row" });
+      expect(shown()).toHaveLength(3);
+      controller.destroy();
+      root.remove();
+    });
+  });
 });

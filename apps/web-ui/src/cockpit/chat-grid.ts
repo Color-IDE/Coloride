@@ -4,6 +4,7 @@ import {
   MIN_PANEL_SIZE_PX,
   minExtentPx,
   nodeAt,
+  panel,
   panelIds,
   reconcileLayout,
   resizeBoundary,
@@ -14,11 +15,18 @@ import {
   type CockpitChatTab,
   type CockpitStoreBundle,
   resolveGroupLayout,
+  resolveGroupMaximized,
 } from "../stores/index.js";
 import { UI_STRINGS, uiText } from "../ui-strings.js";
 import { VirtualChatMessageListRenderer } from "../virtualizer.js";
 import { type HeaderTabSpec, HeaderTabs } from "./header-tabs.js";
-import { CLOSE_PANEL_ICON, SPLIT_DOWN_ICON, SPLIT_RIGHT_ICON } from "./panel-icons.js";
+import {
+  CLOSE_PANEL_ICON,
+  MAXIMIZE_ICON,
+  RESTORE_ICON,
+  SPLIT_DOWN_ICON,
+  SPLIT_RIGHT_ICON,
+} from "./panel-icons.js";
 
 interface ChatCellNodes {
   readonly el: HTMLElement;
@@ -26,6 +34,7 @@ interface ChatCellNodes {
   readonly title: HTMLElement;
   readonly splitRight: HTMLButtonElement;
   readonly splitDown: HTMLButtonElement;
+  readonly maximize: HTMLButtonElement;
   readonly close: HTMLButtonElement;
   readonly messages: HTMLElement;
   readonly logs: HTMLElement;
@@ -50,6 +59,10 @@ export class ChatGrid {
   /** The layout on screen and the group it belongs to (what a drag starts from and saves into). */
   private shownLayout: LayoutNode | null = null;
   private shownGroupId: string | null = null;
+  /** The session shown alone in the active tab, if any. */
+  private maximizedId: string | null = null;
+  /** Scroll of every panel, kept while a rebuild or a maximize takes it out of the page. */
+  private readonly savedScrolls = new Map<string, number>();
   /** What the enabled/disabled state of the creation buttons was computed for. */
   private actionsKey = "";
   private readonly resizeObserver: ResizeObserver | null;
@@ -129,10 +142,11 @@ export class ChatGrid {
     const { navigation } = this.stores;
     const nav = navigation.getState();
     const area = this.stores.getPanelArea();
-    const key = `${nav.activeGroupId}|${this.layoutShape}|${z3.chats.length}|${area?.widthPx}x${area?.heightPx}|${z3.activeRunningAgentChatId}|${z3.sequentialAgentQueue.join(",")}`;
+    const key = `${nav.activeGroupId}|${this.layoutShape}|${z3.chats.length}|${area?.widthPx}x${area?.heightPx}|${z3.activeRunningAgentChatId}|${z3.sequentialAgentQueue.join(",")}|${this.maximizedId}`;
     if (!force && key === this.actionsKey) return;
     this.actionsKey = key;
     const noRoom = UI_STRINGS.chat.noRoom;
+    const panelCount = panelIds(this.shownLayout).length;
     const canAny = this.stores.canCreateChat();
     for (const btn of [this.addButton, this.emptyAdd]) {
       btn.disabled = !canAny;
@@ -146,6 +160,14 @@ export class ChatGrid {
       cell.splitDown.disabled = !down;
       cell.splitDown.title = down ? UI_STRINGS.chat.splitDown : noRoom;
       cell.close.disabled = !this.canCloseSession(chatId);
+      // Showing one panel alone only makes sense when there are others.
+      const alone = this.maximizedId === chatId;
+      cell.maximize.hidden = panelCount <= 1;
+      cell.maximize.innerHTML = alone ? RESTORE_ICON : MAXIMIZE_ICON;
+      const label = alone ? UI_STRINGS.chat.restorePanels : UI_STRINGS.chat.maximizePanel;
+      cell.maximize.setAttribute("aria-label", label);
+      cell.maximize.title = label;
+      cell.maximize.setAttribute("aria-pressed", String(alone));
     }
   }
 
@@ -209,6 +231,8 @@ export class ChatGrid {
 
     this.shownLayout = layout;
     this.shownGroupId = activeGroup?.id ?? null;
+    const maximized = activeGroup ? resolveGroupMaximized(activeGroup) : null;
+    this.maximizedId = maximized && chatsById.has(maximized) ? maximized : null;
     const shownIds = new Set(panelIds(layout));
     for (const id of this.cells.keys()) if (!shownIds.has(id)) this.cells.delete(id);
     if (!layout) {
@@ -222,18 +246,25 @@ export class ChatGrid {
       if (chat) this.updateCell(chat, z3.activeChatId === id);
     }
 
-    const shape = layoutShape(layout);
+    // A session shown alone is the whole layout; the other panels stay out of the page (their
+    // cells are kept, so they come back as they were) and need no separators.
+    const displayed = this.maximizedId ? panel(this.maximizedId) : layout;
+    const shape = layoutShape(displayed);
     if (this.layoutRoot?.isConnected && shape === this.layoutShape) {
-      applySizes(layout, this.layoutRoot, true);
+      applySizes(displayed, this.layoutRoot, true);
       return;
     }
-    // Moving a cell in the DOM resets its scroll position: put it back after the rebuild.
-    const scrolls = new Map<string, number>();
-    for (const [id, cell] of this.cells) scrolls.set(id, cell.messages.scrollTop);
-    this.layoutRoot = this.buildLayout(layout, true, []);
+    // Moving a cell in the DOM resets its scroll position: put it back after the rebuild. The
+    // ones out of the page keep what they had before they left.
+    for (const [id, cell] of this.cells) {
+      if (cell.el.isConnected) this.savedScrolls.set(id, cell.messages.scrollTop);
+    }
+    this.layoutRoot = this.buildLayout(displayed, true, []);
     this.layoutShape = shape;
     reconcile(this.grid, [this.layoutRoot]);
-    for (const [id, cell] of this.cells) cell.messages.scrollTop = scrolls.get(id) ?? 0;
+    for (const [id, cell] of this.cells) {
+      if (cell.el.isConnected) cell.messages.scrollTop = this.savedScrolls.get(id) ?? 0;
+    }
   }
 
   /** `path` is the child indices from the root to `node`; separators remember it. */
@@ -429,17 +460,28 @@ export class ChatGrid {
       UI_STRINGS.chat.splitDown,
       () => this.stores.createChat({ from: chatId, direction: "column" }),
     );
+    const maximize = action(
+      "coloride-maximize-panel",
+      MAXIMIZE_ICON,
+      UI_STRINGS.chat.maximizePanel,
+      () => this.stores.toggleMaximizeChat(chatId),
+    );
+    // Double click on the title shows the panel alone, like the maximize button.
+    header.addEventListener("dblclick", (event) => {
+      if ((event.target as HTMLElement).closest("button")) return;
+      this.stores.toggleMaximizeChat(chatId);
+    });
     const close = action("coloride-close-panel", CLOSE_PANEL_ICON, UI_STRINGS.chat.closePanel, () =>
       this.stores.closeChat(chatId),
     );
-    actions.append(splitRight, splitDown, close);
+    actions.append(splitRight, splitDown, maximize, close);
     header.append(title, actions);
     const messages = doc.createElement("div");
     messages.className = "coloride-chat-cell-messages";
     const logs = doc.createElement("div");
     logs.className = "coloride-chat-cell-logs";
     el.append(header, messages, logs);
-    return { el, header, title, splitRight, splitDown, close, messages, logs };
+    return { el, header, title, splitRight, splitDown, maximize, close, messages, logs };
   }
 }
 

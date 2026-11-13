@@ -40,6 +40,8 @@ export const UI_STRINGS = {
     newSession: "New session",
     newSessionIn: "New session in",
     resizePanels: "Resize panels",
+    maximizePanel: "Maximize panel",
+    restorePanels: "Restore panels",
     splitRight: "Split right",
     splitDown: "Split down",
     closePanel: "Close session",

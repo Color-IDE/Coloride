@@ -162,9 +162,10 @@ export class CockpitDomController {
               .map((group) => `${group.id}:${group.title}:${group.chatIds.join(",")}`)
               .join("|"),
             state.groups.find((group) => group.id === state.activeGroupId)?.layout,
+            state.groups.find((group) => group.id === state.activeGroupId)?.maximizedChatId,
           ] as const,
         () => this.chatGrid.update(),
-        (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3],
+        (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3] && a[4] === b[4],
       ),
       stores.zone1.subscribe(() => {
         this.renderLayout();

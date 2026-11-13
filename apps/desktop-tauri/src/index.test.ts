@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { CONTRACT_SCHEMA_VERSION } from "@coloride/protocol-types";
-import { resolveGroupLayout } from "@coloride/web-ui";
+import { resolveGroupLayout, resolveGroupMaximized } from "@coloride/web-ui";
 import { describe, expect, it } from "vitest";
 import {
   bootstrapDesktopShell,
@@ -46,6 +46,25 @@ describe("@coloride/desktop-tauri — LOT-005 Lazy Boot & Inspector Sync", () =>
     expect(restoredGroup.chatIds).toEqual([base, right, below]);
     expect(resolveGroupLayout(restoredGroup)).toEqual(expected);
     expect(resolveGroupLayout(restoredGroup)).toMatchObject({ kind: "split", sizes: [0.3, 0.7] });
+    restored.destroy();
+  });
+
+  it("restores the session shown alone in a tab, and drops it if that session is gone", () => {
+    const first = lazyBootDesktopCockpit();
+    first.stores.setPanelArea({ widthPx: 1600, heightPx: 900 });
+    const base = first.stores.zone3.getState().activeChatId;
+    const other = first.stores.createChat({ from: base, direction: "row" }) as string;
+    first.stores.toggleMaximizeChat(other);
+    const bytes = first.exportSessionCacheBinary();
+    first.destroy();
+
+    const restored = lazyBootDesktopCockpit({ cachedSessionBytes: bytes });
+    const group = restored.stores.navigation.getState().groups[0];
+    if (!group) throw new Error("Missing group");
+    expect(resolveGroupMaximized(group)).toBe(other);
+    expect(restored.stores.zone3.getState().activeChatId).toBe(other);
+    // A saved id that is no longer a session of the tab is ignored, never shown.
+    expect(resolveGroupMaximized({ ...group, chatIds: [base] })).toBeNull();
     restored.destroy();
   });
 
