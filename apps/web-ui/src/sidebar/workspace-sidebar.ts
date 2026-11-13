@@ -222,6 +222,29 @@ export class WorkspaceSidebar {
     return { el, row, sessions, chats: new Map() };
   }
 
+  /**
+   * Adds a group to a project and leaves its name ready to type: the group is created with a
+   * default name, selected, and its row goes straight into rename (Escape keeps the default).
+   */
+  private addGroup(projectPath: string): void {
+    const { stores } = this.options;
+    this.withProject(projectPath, () => {
+      this.error.hidden = true;
+      stores.setProjectExpanded(true, projectPath);
+      const taken = new Set(stores.navigation.getState().groups.map((group) => group.title));
+      const base = UI_STRINGS.sidebar.newGroup;
+      let title = base;
+      for (let n = 2; taken.has(title); n += 1) title = `${base} ${n}`;
+      stores.createWorkGroup(title);
+      // The navigation subscription has already rendered the new row.
+      const id = stores.navigation.getState().activeGroupId;
+      this.projects
+        .get(projectPath)
+        ?.groups.get(id)
+        ?.row.rename(title, (name) => stores.renameWorkGroup(id, name));
+    });
+  }
+
   private createSession(projectPath: string, groupId: string, chat: CockpitChatTab): SidebarRow {
     const { stores, treeHost } = this.options;
     const row = new SidebarRow(treeHost.ownerDocument, {
@@ -266,12 +289,15 @@ export class WorkspaceSidebar {
     tree.className = "sidebar-group-tree";
     const folder = new SidebarRow(doc, {
       kind: "folder",
+      onAdd: () => this.addGroup(path),
+      addLabel: { aria: UI_STRINGS.sidebar.newGroupIn, title: UI_STRINGS.sidebar.newGroup },
       onSelect: () => {
         const entry = listProjects(stores.navigation.getState()).find((item) => item.path === path);
         stores.setProjectExpanded(!(entry?.expanded ?? true), path);
       },
       onMore: (anchor) =>
         this.menu.open(anchor, [
+          { label: UI_STRINGS.sidebar.newGroup, run: () => this.addGroup(path) },
           {
             label: UI_STRINGS.sidebar.expandAll,
             run: () => this.withProject(path, () => this.expandAll(true)),

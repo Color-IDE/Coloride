@@ -93,6 +93,8 @@ export const UI_STRINGS = {
     collapseAll: "Collapse all groups",
     removeProject: "Remove from list",
     noRoom: "No room for another panel",
+    newGroup: "New group",
+    newGroupIn: "New group in",
     renameGroup: "Rename group",
     expandGroup: "Expand group",
     collapseGroup: "Collapse group",

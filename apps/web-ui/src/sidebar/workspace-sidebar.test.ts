@@ -300,4 +300,77 @@ describe("Workspace sidebar", () => {
     await vi.waitFor(() => expect(root.querySelectorAll(".sidebar-project")).toHaveLength(1));
     expect(stores.navigation.getState().projectPath).toBe("/projects/Website");
   });
+
+  describe("new group in a project", () => {
+    const groupTitles = (root: HTMLElement, project: string) =>
+      Array.from(
+        root.querySelectorAll<HTMLElement>(
+          `.sidebar-project[data-project-path="${project}"] .sidebar-row--group .sidebar-row-title`,
+        ),
+      ).map((el) => el.textContent);
+    const renameInput = (root: HTMLElement) =>
+      root.querySelector<HTMLInputElement>(".sidebar-rename-input");
+
+    it("has a + on the project row that creates a group, selects it and asks for its name", () => {
+      const { stores, root, get } = setup();
+      const add = get(".sidebar-row--folder .sidebar-add");
+      expect(add.getAttribute("aria-label")).toBe("New group in Coloride");
+      add.click();
+
+      const groups = stores.navigation.getState().groups;
+      expect(groups.map((group) => group.title)).toEqual(["Workspace", "New group"]);
+      expect(stores.navigation.getState().activeGroupId).toBe(groups[1]?.id);
+      // It is already being named: type and press Enter.
+      const input = renameInput(root);
+      expect(input?.value).toBe("New group");
+      expect(document.activeElement).toBe(input);
+      if (!input) throw new Error("Missing rename input");
+      input.value = "Payments";
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      expect(groupTitles(root, "/projects/Coloride")).toEqual(["Workspace", "Payments"]);
+      expect(stores.navigation.getState().groups[1]?.title).toBe("Payments");
+    });
+
+    it("keeps the default name when the naming is cancelled, and numbers repeated ones", () => {
+      const { stores, root, get } = setup();
+      get(".sidebar-row--folder .sidebar-add").click();
+      renameInput(root)?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+      get(".sidebar-row--folder .sidebar-add").click();
+      expect(stores.navigation.getState().groups.map((group) => group.title)).toEqual([
+        "Workspace",
+        "New group",
+        "New group 2",
+      ]);
+    });
+
+    it("is also in the project's menu, and expands a collapsed project to show the group", () => {
+      const { stores, root, get } = setup();
+      get(".sidebar-row--folder .sidebar-row-select").click();
+      expect(stores.navigation.getState().expanded).toBe(false);
+      get(".sidebar-row--folder .sidebar-more").click();
+      const item = Array.from(root.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find(
+        (el) => el.textContent === "New group",
+      );
+      if (!item) throw new Error("Missing menu item");
+      item.click();
+      expect(stores.navigation.getState().groups).toHaveLength(2);
+      expect(stores.navigation.getState().expanded).toBe(true);
+      expect(renameInput(root)).not.toBeNull();
+    });
+
+    it("creates the group in the project whose + was pressed, even if another is active", async () => {
+      const { stores, root } = setup();
+      stores.setProjectPath("/projects/Website");
+      const coloride = root.querySelector<HTMLElement>(
+        '.sidebar-project[data-project-path="/projects/Coloride"] .sidebar-row--folder .sidebar-add',
+      );
+      coloride?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(stores.navigation.getState().projectPath).toBe("/projects/Coloride");
+      expect(groupTitles(root, "/projects/Coloride")).toEqual(["Workspace", "New group"]);
+      expect(groupTitles(root, "/projects/Website")).toEqual(["Workspace"]);
+    });
+  });
 });
