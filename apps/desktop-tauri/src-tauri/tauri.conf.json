@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "dev.coloride.desktop",
   "build": {
-    "beforeDevCommand": "pnpm --filter @coloride/web-ui build && pnpm dev",
+    "beforeDevCommand": "pnpm --filter @coloride/web-ui build && pnpm dev:watch",
     "devUrl": "http://127.0.0.1:1420",
     "beforeBuildCommand": "pnpm --filter @coloride/web-ui build && pnpm build",
     "frontendDist": "../dist"
