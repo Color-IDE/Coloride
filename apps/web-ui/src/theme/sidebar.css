@@ -234,18 +234,26 @@
     color: #fca5a5;
     padding: 0 8px;
   }
+  /* Renaming happens in place: the field looks like the label it replaces (no border, background
+     or focus ring); the selected text and the caret show that it is being edited. */
   .sidebar-rename-input {
     flex: 1;
     min-width: 0;
     height: var(--sidebar-icon-size);
-    padding: 0 4px;
-    border: 1px solid var(--color-text-secondary);
-    border-radius: 4px;
-    background: var(--color-main);
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    outline: none;
+    box-shadow: none;
+    background: transparent;
     color: var(--color-text-primary);
     font: inherit;
-    font-size: 13px;
+    font-size: 14px;
     user-select: text;
+  }
+  .sidebar-row--folder .sidebar-rename-input,
+  .sidebar-row--session .sidebar-rename-input {
+    font-size: 13px;
   }
   .sidebar-menu {
     position: absolute;
