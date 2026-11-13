@@ -46,7 +46,6 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
   it("initializes the 4-zone Cockpit shell in Develop mode with code-diff inspector", () => {
     const state = createInitialCockpitShellState();
     expect(state.activePersona).toBe("Develop");
-    expect(state.gridMode).toBe(1);
     expect(state.activeInspectorTab).toBe("code-diff");
   });
   it("enforces persona invariants: no panel disappears during a task, file tree stays accessible, and MVP queues concurrent agents sequentially", () => {
@@ -112,7 +111,6 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
           targetDocumentContent: "export const stripe = true;\n",
         },
       ],
-      initialGridMode: 2,
     });
 
     const ipcChannel = new InMemoryBinaryHostBridge();

@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "./sidebar.css";
 @import "./inspector.css";
+@import "./header-tabs.css";
 @source "../**/*.ts";
 
 @theme {
@@ -77,8 +78,10 @@
     left: 120px;
   }
 
+  /* The panel toggle (26px + 8px from the edge) sits over the header: the strip ends 34px in, so
+     the "+" (4px margin) is 4px from the toggle, like it is 4px from the divider when open. */
   .coloride-macos-titlebar[data-inspector-open="false"] .coloride-zone-3-header {
-    padding-right: 42px;
+    padding-right: 34px;
   }
 
   .coloride-history-btn {
@@ -134,49 +137,6 @@
     border-radius: 1px;
     pointer-events: none;
     z-index: 20;
-  }
-
-  .coloride-zone-3-header::after,
-  .coloride-zone-4-header::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    z-index: 10;
-    background: none;
-  }
-
-  .coloride-zone-3-header[data-scroll-left="true"][data-scroll-right="false"]::after,
-  .coloride-zone-4-header[data-scroll-left="true"][data-scroll-right="false"]::after {
-    background: linear-gradient(
-      to right,
-      var(--color-topbar) 0px,
-      rgba(38, 38, 38, 0.85) 8px,
-      transparent 28px
-    );
-  }
-
-  .coloride-zone-3-header[data-scroll-left="false"][data-scroll-right="true"]::after,
-  .coloride-zone-4-header[data-scroll-left="false"][data-scroll-right="true"]::after {
-    background: linear-gradient(
-      to left,
-      var(--color-topbar) 0px,
-      rgba(38, 38, 38, 0.85) 8px,
-      transparent 28px
-    );
-  }
-
-  .coloride-zone-3-header[data-scroll-left="true"][data-scroll-right="true"]::after,
-  .coloride-zone-4-header[data-scroll-left="true"][data-scroll-right="true"]::after {
-    background: linear-gradient(
-      to right,
-      var(--color-topbar) 0px,
-      rgba(38, 38, 38, 0.85) 8px,
-      transparent 28px,
-      transparent calc(100% - 28px),
-      rgba(38, 38, 38, 0.85) calc(100% - 8px),
-      var(--color-topbar) 100%
-    );
   }
 
   /* One thin overlay scrollbar for every scroller: header tabs, file tree, code editor. */
@@ -276,7 +236,6 @@
 
   .coloride-group-empty {
     @apply flex items-center justify-center h-full text-center text-[13px] text-text-muted p-6;
-    grid-column: 1 / -1;
   }
 
   .coloride-open-workspace-btn {
@@ -321,89 +280,136 @@
     @apply bg-main border-t border-b border-l border-white/8 flex flex-col h-full;
   }
 
-  .coloride-chat-tab-bar,
-  .coloride-grid-mode-selector {
-    @apply flex items-center gap-1 flex-nowrap overflow-x-auto px-2;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-
-  .coloride-chat-tab-bar::-webkit-scrollbar,
-  .coloride-grid-mode-selector::-webkit-scrollbar {
-    display: none;
-  }
-
-  .coloride-chat-tab,
-  .coloride-chat-tab-btn,
-  .coloride-grid-mode-btn,
-  .coloride-inspector-tab-btn {
-    @apply relative inline-flex items-center gap-1.5 h-[25px] bg-transparent text-text-secondary rounded-[6px] py-0.5 pl-2.5 pr-1.5 text-[12px] whitespace-nowrap cursor-pointer hover:bg-selected hover:text-text-primary aria-selected:bg-selected aria-selected:text-text-primary aria-pressed:bg-selected aria-pressed:text-text-primary;
-    border: 0.5px solid transparent;
-  }
-
-  .coloride-chat-tab + .coloride-chat-tab::before,
-  .coloride-inspector-tab-btn + .coloride-inspector-tab-btn::before {
-    content: "";
-    position: absolute;
-    left: -2.5px;
-    top: 6px;
-    bottom: 6px;
-    width: 1px;
-    background-color: rgba(255, 255, 255, 0.11);
-    border-radius: 1px;
-    pointer-events: none;
-  }
-
-  .coloride-chat-tab[aria-selected="true"]::before,
-  .coloride-chat-tab[aria-selected="true"] + .coloride-chat-tab::before,
-  .coloride-chat-tab:hover::before,
-  .coloride-chat-tab:hover + .coloride-chat-tab::before,
-  .coloride-inspector-tab-btn[aria-pressed="true"]::before,
-  .coloride-inspector-tab-btn[aria-pressed="true"] + .coloride-inspector-tab-btn::before,
-  .coloride-inspector-tab-btn:hover::before,
-  .coloride-inspector-tab-btn:hover + .coloride-inspector-tab-btn::before {
-    opacity: 0;
-  }
-
-  .coloride-chat-tab[aria-selected="true"],
-  .coloride-chat-tab-btn[aria-selected="true"],
-  .coloride-grid-mode-btn[aria-pressed="true"],
-  .coloride-inspector-tab-btn[aria-pressed="true"] {
-    border-color: rgba(255, 255, 255, 0.028);
-  }
-
-  .coloride-tab-icon {
-    @apply inline-flex items-center justify-center text-[11.5px] shrink-0;
-  }
-
-  .coloride-tab-label {
-    @apply truncate;
-  }
-
-  .coloride-tab-close-btn {
-    @apply w-[18px] h-[18px] rounded-[5px] !border-0 bg-transparent text-text-muted inline-flex items-center justify-center shrink-0 cursor-pointer hover:bg-white/12 hover:text-text-primary;
-  }
-
   .coloride-zone-3-grid {
-    @apply flex-1 !p-0 !gap-0 overflow-auto;
+    @apply flex-1 !p-0 !gap-0 overflow-hidden;
+  }
+
+  /* Panels of a tab: nested splits sized by flex-grow. Panels share the area and shrink to fit,
+     never scroll; creating one that would drop below the minimum size is refused instead. */
+  .coloride-layout-root {
+    width: 100%;
+    height: 100%;
+  }
+  .coloride-layout-split {
+    display: flex;
+  }
+  .coloride-layout-split > * {
+    min-width: 0;
+    min-height: 0;
+  }
+  .coloride-layout-split[data-direction="row"] {
+    flex-direction: row;
+  }
+  .coloride-layout-split[data-direction="column"] {
+    flex-direction: column;
+  }
+  /* Hairline between neighbours (an inset shadow: cell borders are reset elsewhere). */
+  .coloride-layout-split[data-direction="row"] > * + * {
+    box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.08);
+  }
+  .coloride-layout-split[data-direction="column"] > * + * {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   }
 
   .coloride-chat-cell {
-    @apply !bg-transparent !border-0 rounded-none p-3.5 flex flex-col gap-2.5 !text-text-primary;
+    @apply !bg-transparent !border-0 rounded-none flex flex-col !text-text-primary;
+    padding: 0;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .coloride-chat-cell-header,
   .coloride-chat-cell-badge {
-    @apply text-[12.5px] font-medium !text-text-primary pb-2 border-b border-white/8;
+    @apply text-[12.5px] font-medium !text-text-primary border-b border-white/8;
+  }
+
+  /* The header owns its small padding so its divider runs edge to edge of the panel. */
+  .coloride-chat-cell-header {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 5px 8px 5px 12px;
+  }
+  .coloride-chat-cell-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* Panel actions appear on hover or keyboard focus, like the tab close buttons. */
+  .coloride-chat-cell-actions {
+    display: flex;
+    flex: none;
+    gap: 2px;
+    opacity: 0;
+  }
+  .coloride-chat-cell:hover .coloride-chat-cell-actions,
+  .coloride-chat-cell:focus-within .coloride-chat-cell-actions {
+    opacity: 1;
+  }
+  .coloride-chat-cell-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+  }
+  .coloride-chat-cell-action:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--color-text-primary);
+  }
+  .coloride-chat-cell-action:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+  /* The empty state fills the (flex) panel area and centers its content. */
+  .coloride-group-empty {
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .coloride-group-empty p {
+    margin: 0;
+  }
+  .coloride-group-empty-add {
+    padding: 2px 9px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .coloride-group-empty-add:hover:not(:disabled) {
+    border-color: rgba(255, 255, 255, 0.24);
+    color: var(--color-text-primary);
+  }
+  .coloride-group-empty-add:disabled {
+    opacity: 0.4;
+    cursor: default;
   }
 
   .coloride-chat-cell-messages {
     @apply flex-1 text-[13px] leading-[1.55] !text-text-secondary select-text;
+    min-height: 0;
+    padding: 10px 12px;
   }
 
   .coloride-chat-cell-logs,
   .coloride-chat-cell-terminal {
     @apply font-mono text-[11.5px] bg-composer border border-white/8 py-2 px-2.5 rounded-[8px] text-text-secondary select-text;
+    margin: 0 12px 12px;
   }
 
   .coloride-zone-4-inspector {

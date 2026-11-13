@@ -1,12 +1,14 @@
 import { attribute, button, label, visibility } from "../dom-utils.js";
 import { UI_STRINGS } from "../ui-strings.js";
-import { CHEVRON_ICON, MORE_ICON } from "./icons.js";
+import { CHEVRON_ICON, MORE_ICON, PLUS_ICON } from "./icons.js";
 
 export interface SidebarRowOptions {
   readonly kind: "folder" | "group" | "session";
   readonly onSelect: () => void;
   readonly onToggle?: () => void;
   readonly onMore: (anchor: HTMLButtonElement) => void;
+  /** Adds a "+" next to the options button (shown on hover). */
+  readonly onAdd?: () => void;
   readonly icon?: string;
 }
 
@@ -15,6 +17,7 @@ export class SidebarRow {
   readonly el: HTMLDivElement;
   readonly select: HTMLButtonElement;
   readonly more: HTMLButtonElement;
+  readonly add: HTMLButtonElement | undefined;
   readonly toggle: HTMLButtonElement | undefined;
   private readonly title: HTMLSpanElement;
   private readonly arrow: HTMLSpanElement;
@@ -51,13 +54,24 @@ export class SidebarRow {
     this.more.setAttribute("aria-haspopup", "menu");
     this.more.setAttribute("aria-expanded", "false");
     this.more.addEventListener("click", () => options.onMore(this.more));
-    this.el.append(this.select, this.more);
+    if (options.onAdd) {
+      this.add = button(doc, "sidebar-icon-button sidebar-add");
+      this.add.innerHTML = PLUS_ICON;
+      this.add.addEventListener("click", options.onAdd);
+      this.el.append(this.select, this.add, this.more);
+    } else {
+      this.el.append(this.select, this.more);
+    }
   }
 
   update(title: string, selected: boolean, expanded?: boolean): void {
     label(this.title, title);
     attribute(this.select, "title", title);
     attribute(this.more, "aria-label", `Options for ${title}`);
+    if (this.add) {
+      attribute(this.add, "aria-label", `${UI_STRINGS.chat.newSessionIn} ${title}`);
+      attribute(this.add, "title", UI_STRINGS.chat.newSession);
+    }
     attribute(this.el, "data-selected", String(selected));
     if (expanded !== undefined) {
       attribute(this.toggle ?? this.select, "aria-expanded", String(expanded));
@@ -100,7 +114,7 @@ export class SidebarRow {
     });
     input.addEventListener("blur", () => finish(false));
     visibility(this.select, false);
-    this.el.insertBefore(input, this.more);
+    this.el.insertBefore(input, this.add ?? this.more);
     input.focus();
     input.select();
   }

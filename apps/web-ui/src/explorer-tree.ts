@@ -1,4 +1,4 @@
-import { COLORIDE_DESIGN_TOKENS, type CockpitFileTreeNode } from "./stores.js";
+import { COLORIDE_DESIGN_TOKENS, type CockpitFileTreeNode } from "./stores/index.js";
 import {
   TREE_CHEVRON_SVG,
   TREE_FOLDER_CLOSED_SVG,

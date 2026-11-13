@@ -4,7 +4,7 @@ import {
   ExplorerTreeRenderer,
   visibleExplorerNodes,
 } from "../explorer-tree.js";
-import type { CockpitFileTreeNode } from "../stores.js";
+import type { CockpitFileTreeNode } from "../stores/index.js";
 import { type ThinScrollbar, attachThinScrollbar } from "../thin-scrollbar.js";
 import { UI_STRINGS } from "../ui-strings.js";
 

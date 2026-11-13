@@ -1,0 +1,163 @@
+@layer components {
+  /* Tab strip shared by the Zone 3 (sessions) and Zone 4 (files) headers. */
+  .coloride-header-tab-track {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    padding: 0 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .coloride-header-tab {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    max-width: 200px;
+    padding: 0 6px 0 8px;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: 12px;
+    cursor: pointer;
+    outline: none;
+  }
+  .coloride-header-tab {
+    position: relative;
+  }
+  .coloride-header-tab:hover,
+  .coloride-header-tab[aria-selected="true"] {
+    background: var(--color-selected);
+    color: var(--color-text-primary);
+  }
+  /* Short vertical divider between tabs; never touching the active (or hovered) one. */
+  .coloride-header-tab::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: -2px;
+    width: 1px;
+    height: 14px;
+    transform: translateY(-50%);
+    background: rgba(255, 255, 255, 0.16);
+    pointer-events: none;
+  }
+  .coloride-header-tab:last-child::after,
+  .coloride-header-tab:has(+ .coloride-header-tab-add)::after,
+  .coloride-header-tab[aria-selected="true"]::after,
+  .coloride-header-tab:hover::after,
+  .coloride-header-tab:has(+ .coloride-header-tab[aria-selected="true"])::after,
+  .coloride-header-tab:has(+ .coloride-header-tab:hover)::after {
+    display: none;
+  }
+  .coloride-header-tab-icon {
+    display: inline-flex;
+    flex: none;
+    width: 14px;
+    height: 14px;
+  }
+  .coloride-header-tab-icon svg {
+    width: 14px;
+    height: 14px;
+  }
+  .coloride-header-tab .coloride-header-tab-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .coloride-header-tab-dot {
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--color-text-secondary);
+  }
+  .coloride-header-tab-close {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .coloride-header-tab:hover .coloride-header-tab-close,
+  .coloride-header-tab[aria-selected="true"] .coloride-header-tab-close,
+  .coloride-header-tab-close:focus-visible {
+    opacity: 1;
+  }
+  .coloride-header-tab-close:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
+  /* Edge fades: the strip's own content fades where more tabs are hidden (state set on the header
+     by attachHeaderScroll). A mask, not an overlay, so nothing next to the strip is dimmed. */
+  [data-scrollable="true"] > .coloride-header-tab-track {
+    --fade-left: 0px;
+    --fade-right: 0px;
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent 0,
+      #000 var(--fade-left),
+      #000 calc(100% - var(--fade-right)),
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to right,
+      transparent 0,
+      #000 var(--fade-left),
+      #000 calc(100% - var(--fade-right)),
+      transparent 100%
+    );
+  }
+  [data-scroll-left="true"] > .coloride-header-tab-track {
+    --fade-left: 28px;
+  }
+  [data-scroll-right="true"] > .coloride-header-tab-track {
+    --fade-right: 28px;
+  }
+  /* Zone 3: the "+" sits outside the strip, right after it. The strip is as wide as its tabs and
+     shrinks (then scrolls) when they do not fit, so the "+" follows the last tab and, once the
+     tabs fill the header, stays at the right edge with nothing ever under it. */
+  .coloride-macos-titlebar .coloride-zone-3-header {
+    justify-content: flex-start;
+  }
+  .coloride-zone-3-header .coloride-header-tab-track {
+    flex: 0 1 auto;
+    padding-right: 0;
+  }
+  /* No tabs yet: the strip's left padding would only push the "+" away from the divider. */
+  .coloride-zone-3-header .coloride-header-tab-track:empty {
+    padding-left: 0;
+  }
+  .coloride-header-tab-add {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    margin: 0 4px 0 2px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+  }
+  .coloride-header-tab-add:hover:not(:disabled) {
+    background: var(--color-selected);
+    color: var(--color-text-primary);
+  }
+  .coloride-header-tab-add:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+}

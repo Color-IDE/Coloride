@@ -9,7 +9,7 @@ export const UI_STRINGS = {
     sidebar: "Sidebar",
     chatGrid: "Multi-chat grid",
     inspector: "Inspector",
-    chatGroups: "Chat groups",
+    openSessions: "Open sessions",
     openFiles: "Open files",
   },
   activity: {
@@ -38,6 +38,12 @@ export const UI_STRINGS = {
   },
   chat: {
     emptyGroup: "This group is empty. Agent and terminal panels will appear here.",
+    newSession: "New session",
+    newSessionIn: "New session in",
+    splitRight: "Split right",
+    splitDown: "Split down",
+    closePanel: "Close session",
+    noRoom: "No room for another panel",
   },
   search: {
     panel: "Global search (FTS5 BM25)",
@@ -70,6 +76,10 @@ export const UI_STRINGS = {
     noFile: "No file open",
     unsaved: "Unsaved changes",
     saveFailed: "Save failed",
+    unsavedTitle: "Unsaved changes",
+    save: "Save",
+    discard: "Don't save",
+    cancel: "Cancel",
   },
   sidebar: {
     navigation: "Folder, groups and sessions",
@@ -83,6 +93,7 @@ export const UI_STRINGS = {
     expandAll: "Expand all groups",
     collapseAll: "Collapse all groups",
     removeProject: "Remove from list",
+    noRoom: "No room for another panel",
     renameGroup: "Rename group",
     expandGroup: "Expand group",
     collapseGroup: "Collapse group",
@@ -115,6 +126,7 @@ export const uiText = {
   chatCellHeader: (icon: string, title: string, model: string, state: string) =>
     `${icon} ${title} [${model}] — ${state}`,
   closeTab: (name: string) => `Close ${name}`,
+  unsavedPrompt: (name: string) => `Do you want to save the changes you made to ${name}?`,
   mcpSummary: (keymap: string, theme: string, servers: number) =>
     `Keymap: ${keymap} · Theme: ${theme} · MCP: ${servers}`,
   searchHit: (path: string, line: number, freshness: string, snippet: string) =>

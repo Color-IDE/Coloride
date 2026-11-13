@@ -44,7 +44,7 @@ describe("@coloride/web-ui — LOT-005 virtualization and typing under load", ()
     expect(mdCache.getParseCallCount()).toBe(callsAfterStep1 + 1);
     expect(mdCache.getCachedStableBlockCount()).toBe(2);
   });
-  it("BLOCKING SCENARIO: Typing stability in CodeMirror 6 under 150 tokens/s streaming + continuous terminal logs + 30,000-file tree + grid 1|2|4|8 switches (0 remounts, p95 <= 16 ms)", () => {
+  it("BLOCKING SCENARIO: Typing stability in CodeMirror 6 under 150 tokens/s streaming + continuous terminal logs + 30,000-file tree + panel layout rebuilds (0 remounts, p95 <= 16 ms)", () => {
     const rootContainer = document.createElement("div");
     document.body.appendChild(rootContainer);
 
@@ -97,10 +97,11 @@ describe("@coloride/web-ui — LOT-005 virtualization and typing under load", ()
     const initialZone4Renders = controller.getZone4RenderCount();
 
     // Simulate 150 tokens/s streaming (150 token chunks across 10 frames = ~2.5 tokens/frame at 60 FPS)
-    // + continuous terminal log output + 30,000-node file tree scrolling + Grid 1 | 2 | 4 | 8 switching
+    // + continuous terminal log output + 30,000-node file tree scrolling + panel layout rebuilds (8 panels shrinking to 1 as inactive chats close)
     // while typing 40 TypeScript characters into CodeMirror 6.
     const keystrokeLatenciesMs: number[] = [];
-    const gridSequence = [1, 2, 4, 8, 4, 2, 1] as const;
+    // Chats 8..2 are closed one by one (chat-1 stays active): each close rebuilds the layout.
+    const closableChats = ["chat-8", "chat-7", "chat-6", "chat-5", "chat-4", "chat-3", "chat-2"];
 
     for (let step = 0; step < 40; step += 1) {
       // Enqueue 4 streaming tokens (~240 tokens/s > 150 tokens/s requirement) + 2 terminal log lines
@@ -114,15 +115,15 @@ describe("@coloride/web-ui — LOT-005 virtualization and typing under load", ()
       streamRenderer.enqueueTerminalLog("chat-1", `[stdout] compiling module chunk #${step}...`);
       streamRenderer.enqueueTerminalLog("chat-1", `[test] PASS suite-${step}.test.ts`);
 
-      // Every 4 steps, flush the 16ms rAF batch, scroll the 30,000-node file tree, and cycle Grid 1|2|4|8
+      // Every 4 steps, flush the 16ms rAF batch, scroll the 30,000-node file tree, and rebuild the panel layout
       if (step % 4 === 0) {
         while (pendingFrames.length > 0) {
           const nextFrame = pendingFrames.shift();
           nextFrame?.();
         }
         controller.scrollFileTree(step * 480, 600);
-        const nextGrid = gridSequence[(step / 4) % gridSequence.length] ?? 1;
-        stores.setGridMode(nextGrid);
+        const closing = closableChats[step / 4 - 1];
+        if (closing) stores.closeChat(closing);
       }
 
       // Perform a local TypeScript keystroke on line 1 (before trailing newline) in CodeMirror 6 and measure latency
@@ -144,7 +145,7 @@ describe("@coloride/web-ui — LOT-005 virtualization and typing under load", ()
     const p95KeystrokeMs = percentile95(keystrokeLatenciesMs);
     expect(p95KeystrokeMs).toBeLessThanOrEqual(16);
 
-    // Zero remounts of CodeMirror 6 and zero spurious Zone 4 re-renders during streaming & grid switches
+    // Zero remounts of CodeMirror 6 and zero spurious Zone 4 re-renders during streaming & layout rebuilds
     expect(editorView.getStoreSnapshot().mountCount).toBe(1);
     expect(controller.getZone4RenderCount()).toBe(initialZone4Renders);
 

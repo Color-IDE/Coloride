@@ -1,4 +1,4 @@
-import type { ActivityBarSection } from "../stores.js";
+import type { ActivityBarSection } from "../stores/index.js";
 
 export interface StatefulActivityIcon {
   readonly inactive: string;

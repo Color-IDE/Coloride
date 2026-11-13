@@ -476,3 +476,85 @@ fn sqlite_wal_replay_file_removal_and_corrupted_store_rebuild() {
     assert!(recovered.files_table().contains_key("src/a.ts"));
     assert!(!recovered.query_hybrid("alpha", 5).is_empty());
 }
+
+#[cfg(unix)]
+#[test]
+fn rebuild_skips_symlinks_and_unreadable_folders_instead_of_failing() {
+    use std::os::unix::fs::PermissionsExt;
+    let outside = tempdir().expect("tempdir");
+    std::fs::write(
+        outside.path().join("leak.ts"),
+        "export const outsideOnly = 1;\n",
+    )
+    .unwrap();
+    let workspace = tempdir().expect("tempdir");
+    let root = workspace.path();
+    std::fs::create_dir(root.join("src")).unwrap();
+    std::fs::write(root.join("src/app.ts"), "export const insideApp = 1;\n").unwrap();
+    // A link cycle and a link pointing out of the workspace.
+    std::os::unix::fs::symlink(root, root.join("src/loop")).unwrap();
+    std::os::unix::fs::symlink(outside.path(), root.join("escape")).unwrap();
+    // A folder that cannot be read.
+    let locked = root.join("locked");
+    std::fs::create_dir(&locked).unwrap();
+    std::fs::write(locked.join("hidden.ts"), "export const hidden = 1;\n").unwrap();
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+
+    let db = tempdir().expect("tempdir");
+    let result = SqliteWalContextEngine::open_or_rebuild_from_workspace(
+        db.path().join("ctx.sqlite"),
+        root,
+        "main",
+    );
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let mut engine = result.expect("rebuild must not fail on links or one unreadable folder");
+
+    let hits = engine.query_hybrid("insideApp", 10);
+    assert!(hits
+        .iter()
+        .any(|hit| hit.excerpt.source_path == "src/app.ts"));
+    assert!(engine
+        .query_hybrid("outsideOnly", 10)
+        .iter()
+        .all(|hit| !hit.excerpt.source_path.contains("leak")));
+}
+
+#[test]
+fn bundles_without_secrets_stay_internal_after_another_file_had_redactions() {
+    let workspace = tempdir().expect("tempdir");
+    let root = workspace.path();
+    std::fs::write(
+        root.join("config.ts"),
+        "export const token = \"ghp_abcdefghijklmnopqrstuvwxyz0123456789\";\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("math.ts"),
+        "export function addNumbers(a: number, b: number) { return a + b; }\n",
+    )
+    .unwrap();
+    let db = tempdir().expect("tempdir");
+    let mut engine = SqliteWalContextEngine::open_or_rebuild_from_workspace(
+        db.path().join("ctx.sqlite"),
+        root,
+        "main",
+    )
+    .expect("rebuild");
+    assert!(!engine.audit_log().is_empty());
+
+    let clean = engine.export_context_bundle(
+        "clean",
+        "addNumbers",
+        8_000,
+        AuthorizedDestination::LocalOnly,
+    );
+    assert!(!clean.excerpts.is_empty());
+    assert_eq!(clean.classification, DataClassification::Internal);
+
+    let secret =
+        engine.export_context_bundle("secret", "token", 8_000, AuthorizedDestination::LocalOnly);
+    assert_eq!(
+        secret.classification,
+        DataClassification::RestrictedFiltered
+    );
+}

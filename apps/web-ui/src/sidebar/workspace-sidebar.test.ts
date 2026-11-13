@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createCockpitStoreBundle } from "../stores.js";
+import { createCockpitStoreBundle } from "../stores/index.js";
 import { FrameBatchedStreamRenderer } from "../stream-renderer.js";
 import { WorkspaceSidebar } from "./workspace-sidebar.js";
 

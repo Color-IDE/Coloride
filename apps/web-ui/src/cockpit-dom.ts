@@ -13,7 +13,7 @@ import type {
   CockpitStoreBundle,
   Zone1ActivityState,
   Zone4InspectorState,
-} from "./stores.js";
+} from "./stores/index.js";
 import { UI_STRINGS } from "./ui-strings.js";
 
 export interface CockpitDomControllerOptions {
@@ -63,11 +63,14 @@ export class CockpitDomController {
   private readonly inspector: Inspector;
   private zone4RenderCount = 0;
   private analysisRequestSequence = 0;
+  /** Project whose file the editor holds (document ids alone do not say which). */
+  private editorProjectPath: string;
 
   constructor(options: CockpitDomControllerOptions) {
     const { rootContainer, stores, editorView } = options;
     this.stores = stores;
     this.editorView = editorView;
+    this.editorProjectPath = stores.navigation.getState().projectPath;
     this.analyzeDocument = options.analyzeDocument;
     this.ownsOnboardingController = !options.onboardingController;
     this.onboardingController =
@@ -92,6 +95,7 @@ export class CockpitDomController {
       stores,
       editorView,
       header: this.titleBar.zone4Header,
+      saveActiveDocument: () => this.saveActiveDocument(),
       onFileShown: (path) => this.requestNativeAnalysis(path),
       onTreeScroll: (scrollTopPx, viewportHeightPx) =>
         this.storeFileTreeScroll(scrollTopPx, viewportHeightPx),
@@ -100,7 +104,7 @@ export class CockpitDomController {
     this.sidebar = new SidebarPanels(doc, {
       stores,
       onboarding: this.onboardingController,
-      openFile: (path, onError) => this.inspector.openFile(path, onError),
+      openFile: (path, onError) => void this.inspector.openFile(path, onError),
       ...(options.openWorkspace ? { openWorkspace: options.openWorkspace } : {}),
       ...(options.switchWorkspace ? { switchWorkspace: options.switchWorkspace } : {}),
       ...(options.searchWorkspace ? { searchWorkspace: options.searchWorkspace } : {}),
@@ -134,17 +138,24 @@ export class CockpitDomController {
 
     this.unsubscribers.push(
       stores.navigation.subscribeSelector(
-        (state) => state.projectPath,
-        (projectPath) => this.inspector.changeProject(projectPath),
+        (state) => [state.projectPath, state.activeGroupId] as const,
+        ([projectPath, groupId]) => this.inspector.changeScope(projectPath, groupId),
+        (a, b) => a[0] === b[0] && a[1] === b[1],
       ),
+      // What Zone 3 shows: the active group's sessions and layout. The project matters too, since
+      // every project has a group "Workspace" with the same id but its own sessions.
       stores.navigation.subscribeSelector(
         (state) =>
           [
+            state.projectPath,
             state.activeGroupId,
-            state.groups.map((group) => `${group.id}:${group.title}`).join("|"),
+            state.groups
+              .map((group) => `${group.id}:${group.title}:${group.chatIds.join(",")}`)
+              .join("|"),
+            state.groups.find((group) => group.id === state.activeGroupId)?.layout,
           ] as const,
         () => this.chatGrid.update(),
-        (a, b) => a[0] === b[0] && a[1] === b[1],
+        (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3],
       ),
       stores.zone1.subscribe(() => {
         this.renderLayout();
@@ -165,11 +176,23 @@ export class CockpitDomController {
       stores.zone4.subscribe((next, prev) => {
         this.zone4RenderCount += 1;
         this.inspector.update();
-        if (next.activeDocumentId !== prev.activeDocumentId) this.syncEditorDocument(next);
+        // Document ids are paths relative to the project, so the same id in another project is
+        // another file: once one is shown there, the editor must load it too.
+        const projectPath = stores.navigation.getState().projectPath;
+        const otherProjectsFile =
+          this.editorProjectPath !== projectPath && this.inspector.isShowingFile();
+        if (next.activeDocumentId !== prev.activeDocumentId || otherProjectsFile) {
+          this.editorProjectPath = projectPath;
+          this.syncEditorDocument(next);
+        }
       }),
       editorView.subscribe(() => {
         const snap = editorView.getStoreSnapshot();
-        const hasUnsaved = Boolean(snap.lastAckSnapshot?.has_unsaved_changes);
+        // Until host-core acknowledges the shown document (just after a switch), keep the flag the
+        // buffer already had: a file reopened with unsaved edits must not look saved.
+        const hasUnsaved = snap.lastAckSnapshot
+          ? snap.lastAckSnapshot.has_unsaved_changes
+          : stores.isDocumentUnsaved(snap.documentId);
         stores.updateInMemoryDocumentContent(
           snap.documentId,
           editorView.getDocumentText(),
@@ -190,6 +213,8 @@ export class CockpitDomController {
   }
 
   async saveActiveDocument(): Promise<void> {
+    // With no file shown the editor may still hold another group's or project's document.
+    if (!this.inspector.isShowingFile()) return;
     const snap = await this.editorView.requestSave();
     this.stores.markDocumentSaved(snap.document_id);
     this.inspector.setUnsaved(false);
