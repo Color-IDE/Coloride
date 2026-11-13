@@ -55,10 +55,9 @@ pub(crate) fn start_language_servers(state: &DesktopAppState) -> LanguageServers
     };
     let biome = host_core::resolve_workspace_tool(&gate, "biome")
         .is_some_and(|program| services.ensure_server(&host_core::biome_server_spec(program)));
-    LanguageServersReady {
-        biome,
-        vtsls: false,
-    }
+    let vtsls = host_core::resolve_workspace_tool(&gate, "vtsls")
+        .is_some_and(|program| services.ensure_server(&host_core::vtsls_server_spec(program)));
+    LanguageServersReady { biome, vtsls }
 }
 
 pub(crate) fn ensure_context_engine(state: &DesktopAppState) -> bool {

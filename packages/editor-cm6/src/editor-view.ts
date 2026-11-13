@@ -21,6 +21,7 @@ import {
 } from "@codemirror/view";
 import {
   CONTRACT_SCHEMA_VERSION,
+  type DocumentDiagnostics,
   type EditorSnapshot,
   type EditorTransaction,
   type TextChange,
@@ -38,6 +39,16 @@ import {
   setColorideDecorationsEffect,
   suppressLocalInvalidationAnnotation,
 } from "./decorations.js";
+import {
+  type DiagnosticsApplyResult,
+  type EditorDiagnostic,
+  RevisionHistory,
+  clearDiagnosticsEffect,
+  colorideDiagnostics,
+  diagnosticsField,
+  diagnosticsFromBatch,
+  setSourceDiagnosticsEffect,
+} from "./diagnostics.js";
 import { createLezerHighlightingExtensions } from "./languages.js";
 import {
   type Cm6TranslatedKeybinding,
@@ -66,6 +77,8 @@ export interface ColorideEditorStoreSnapshot {
   readonly imeComposing: boolean;
   readonly lastAckSnapshot: EditorSnapshot | null;
   readonly droppedStaleIpcPackets: number;
+  /** Diagnostics refused or dropped because the text had changed since they were computed. */
+  readonly discardedStaleDiagnostics: number;
   readonly mountCount: number;
   readonly activeKeymapPreset: KeymapPresetId;
   readonly activeThemeLabel: string;
@@ -99,6 +112,8 @@ export class ColorideEditorView {
   private lastAckSnapshot: EditorSnapshot | null = null;
   private lastIpcError: string | null = null;
   private droppedStaleIpcPackets = 0;
+  private discardedStaleDiagnostics = 0;
+  private readonly revisionHistory = new RevisionHistory();
   private mountCount = 0;
   private activeKeymapPreset: KeymapPresetId;
   private customKeybindings: Cm6TranslatedKeybinding[] = [];
@@ -173,6 +188,46 @@ export class ColorideEditorView {
   }
 
   /**
+   * Shows the diagnostics one tool computed for one revision of this document (`LOT-010`).
+   *
+   * The batch replaces that tool's previous diagnostics. It is refused as a whole if it was
+   * computed for another document, an earlier opening of this one, or a revision the editor
+   * cannot map from. If the text has changed since `base_revision`, each diagnostic is either
+   * shifted by the edits made around it or, when its line was edited, discarded: a diagnostic
+   * is never drawn at offsets that no longer hold the code it was computed for.
+   */
+  applyDocumentDiagnostics(batch: DocumentDiagnostics): DiagnosticsApplyResult {
+    const reject = (rejected: NonNullable<DiagnosticsApplyResult["rejected"]>) => {
+      this.discardedStaleDiagnostics += batch.items.length;
+      this.notifyStoreListeners();
+      return { applied: 0, discarded: batch.items.length, rejected };
+    };
+    if (
+      batch.document_id !== this.documentId ||
+      batch.session_generation !== this.sessionGeneration
+    ) {
+      return reject("stale-session");
+    }
+    const rebased = this.revisionHistory.rebase(
+      diagnosticsFromBatch(batch),
+      batch.base_revision,
+      this.localRevision,
+    );
+    if (!rebased) return reject("unknown-revision");
+    this.discardedStaleDiagnostics += rebased.discarded;
+    this.getEditorView().dispatch({
+      effects: setSourceDiagnosticsEffect.of({ source: batch.source, diagnostics: rebased.kept }),
+    });
+    this.notifyStoreListeners();
+    return { applied: rebased.kept.length, discarded: rebased.discarded };
+  }
+
+  /** Diagnostics currently shown, at offsets of the current text. */
+  getDiagnostics(): readonly EditorDiagnostic[] {
+    return this.getEditorView().state.field(diagnosticsField).diagnostics;
+  }
+
+  /**
    * Switch to another file inside the existing `EditorView` instance without remounting DOM.
    * Increments `sessionGeneration` so any delayed IPC event from the previous file is dropped.
    */
@@ -185,6 +240,7 @@ export class ColorideEditorView {
     this.sessionGeneration += 1;
     this.documentId = nextDocumentId;
     this.localRevision = 0;
+    this.revisionHistory.clear();
     this.imeComposing = false;
     this.imeBasePos = null;
     this.imePreviewLength = 0;
@@ -201,6 +257,7 @@ export class ColorideEditorView {
       selection: CmSelection.cursor(0),
       effects: [
         this.historyCompartment.reconfigure([]),
+        clearDiagnosticsEffect.of(null),
         setColorideDecorationsEffect.of(decorations),
         suppressLocalInvalidationAnnotation.of(true),
       ],
@@ -321,6 +378,7 @@ export class ColorideEditorView {
       imeComposing: this.imeComposing,
       lastAckSnapshot: this.lastAckSnapshot,
       droppedStaleIpcPackets: this.droppedStaleIpcPackets,
+      discardedStaleDiagnostics: this.discardedStaleDiagnostics,
       mountCount: this.mountCount,
       activeKeymapPreset: this.activeKeymapPreset,
       activeThemeLabel: this.activeTheme.label,
@@ -465,6 +523,7 @@ export class ColorideEditorView {
         EditorState.tabSize.of(2),
         indentUnit.of("  "),
         ...colorideStateDecorations(),
+        colorideDiagnostics(),
         highlightSelectedLineGutter(),
         scopeGuides(),
         textOnlySelection(),
@@ -558,6 +617,9 @@ export class ColorideEditorView {
         const sel = update.state.selection.main;
         const headLine = update.state.doc.lineAt(sel.head);
         const baseRevision = this.localRevision;
+        // Kept so that diagnostics computed for this revision can still be placed, or refused,
+        // if they arrive after the text has moved on.
+        this.revisionHistory.record(baseRevision, update.startState.doc, update.changes.desc);
         this.localRevision += 1;
         this.opSequence += 1;
 

@@ -1,3 +1,4 @@
+import type { DocumentDiagnostics } from "@coloride/protocol-types";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -45,6 +46,9 @@ interface NativeAstAnalysis {
   }>;
 }
 
+/** Carries one tool's diagnostics for one revision of one document (see `lsp/session.rs`). */
+const DOCUMENT_DIAGNOSTICS_EVENT = "coloride-document-diagnostics";
+
 /** Sent by the Rust side when closing or quitting was held back because of unsaved changes. */
 const CLOSE_REQUESTED_EVENT = "coloride-close-requested";
 
@@ -65,6 +69,7 @@ function ColorideDesktopApp() {
     let desktop: ReturnType<typeof lazyBootDesktopCockpit> | undefined;
     let sessionPersistenceTimer: number | undefined;
     let stopListeningForClose: (() => void) | undefined;
+    let stopListeningForDiagnostics: (() => void) | undefined;
     const persistSession = () => {
       if (!desktop) return;
       const payload = Array.from(desktop.exportSessionCacheBinary());
@@ -162,6 +167,13 @@ function ColorideDesktopApp() {
             invoke<NativeMigrationReport>("run_native_migration_command"),
         });
         sessionPersistenceTimer = window.setInterval(persistSession, 2_000);
+        // The editor places each batch by its revision, and drops what its text has moved past.
+        void listen<DocumentDiagnostics>(DOCUMENT_DIAGNOSTICS_EVENT, (event) => {
+          desktop?.editorView.applyDocumentDiagnostics(event.payload);
+        }).then((stopListening) => {
+          if (cancelled) stopListening();
+          else stopListeningForDiagnostics = stopListening;
+        });
         // Closing or quitting with unsaved changes: ask here, then tell Rust to go ahead.
         void listen(CLOSE_REQUESTED_EVENT, async () => {
           const allowed = (await desktop?.domController?.confirmClose()) ?? true;
@@ -178,6 +190,7 @@ function ColorideDesktopApp() {
       cancelled = true;
       if (sessionPersistenceTimer !== undefined) window.clearInterval(sessionPersistenceTimer);
       stopListeningForClose?.();
+      stopListeningForDiagnostics?.();
       if (desktop) {
         persistSession();
         desktop.destroy();

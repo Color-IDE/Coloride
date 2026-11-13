@@ -8,7 +8,9 @@ use std::sync::Mutex;
 use ropey::Rope;
 use serde_json::Value;
 
-use super::session::{DiagnosticsSink, DocumentRef, LanguageServerProfile, LanguageServerSession};
+use super::session::{
+    DiagnosticsMode, DiagnosticsSink, DocumentRef, LanguageServerProfile, LanguageServerSession,
+};
 use crate::contracts::{DiagnosticSource, TextChange};
 use crate::document::DocumentSession;
 use crate::trust::WorkspaceTrustGate;
@@ -66,6 +68,7 @@ pub fn biome_server_spec(program: PathBuf) -> LanguageServerSpec {
             program,
             args: vec!["lsp-proxy".to_string()],
             initialization_options: Value::Null,
+            diagnostics: DiagnosticsMode::Push,
         },
         language_ids: vec![
             "typescript",
@@ -76,6 +79,46 @@ pub fn biome_server_spec(program: PathBuf) -> LanguageServerSpec {
             "jsonc",
             "css",
         ],
+    }
+}
+
+const TYPESCRIPT_LANGUAGE_IDS: [&str; 4] = [
+    "typescript",
+    "typescriptreact",
+    "javascript",
+    "javascriptreact",
+];
+
+/// `vtsls`: TypeScript/JavaScript semantics (type errors, definitions, references, rename,
+/// completions) on top of `tsserver`.
+#[must_use]
+pub fn vtsls_server_spec(program: PathBuf) -> LanguageServerSpec {
+    LanguageServerSpec {
+        profile: LanguageServerProfile {
+            source: DiagnosticSource::Vtsls,
+            program,
+            args: vec!["--stdio".to_string()],
+            initialization_options: Value::Null,
+            diagnostics: DiagnosticsMode::TsserverPull,
+        },
+        language_ids: TYPESCRIPT_LANGUAGE_IDS.to_vec(),
+    }
+}
+
+/// Adapter for `tsgo` (the native TypeScript server), a drop-in replacement for `vtsls` that
+/// speaks standard LSP with pull diagnostics. Its diagnostics are reported under the same
+/// source, so the two are never run together for one workspace.
+#[must_use]
+pub fn tsgo_server_spec(program: PathBuf) -> LanguageServerSpec {
+    LanguageServerSpec {
+        profile: LanguageServerProfile {
+            source: DiagnosticSource::Vtsls,
+            program,
+            args: vec!["--lsp".to_string(), "--stdio".to_string()],
+            initialization_options: Value::Null,
+            diagnostics: DiagnosticsMode::LspPull,
+        },
+        language_ids: TYPESCRIPT_LANGUAGE_IDS.to_vec(),
     }
 }
 

@@ -1,5 +1,6 @@
 export * from "./binary-ipc.js";
 export * from "./decorations.js";
+export * from "./diagnostics.js";
 export * from "./editor-view.js";
 export * from "./in-memory-host-bridge.js";
 export * from "./indent-guide-columns.js";

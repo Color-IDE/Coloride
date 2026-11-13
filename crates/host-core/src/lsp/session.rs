@@ -1,13 +1,14 @@
 //! One language server working on the open documents, fed from the `ropey` buffers.
 //!
 //! The session remembers the exact text (`Rope` clones are cheap) of every revision it sent.
-//! A `publishDiagnostics` names the version it was computed for; its positions are converted
-//! against **that** text and delivered tagged with that revision, never against whatever the
-//! buffer has become meanwhile. Diagnostics that cannot be tied to a known revision are dropped.
+//! Diagnostics are delivered tagged with the revision they were computed for, their positions
+//! converted against **that** text, never against whatever the buffer has become meanwhile.
+//! How the revision is established depends on the server ([`DiagnosticsMode`]); diagnostics
+//! that cannot be tied to a known revision are dropped.
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 
 use ropey::Rope;
@@ -23,12 +24,31 @@ use crate::offsets::{line_col_to_utf16_clamped, utf16_to_char_idx, utf16_to_line
 use crate::trust::{GatedCapability, WorkspaceTrustGate};
 
 const INITIALIZE_TIMEOUT: Duration = Duration::from_secs(20);
+/// Pulled diagnostics wait for typing to pause, then for the server to answer.
+const PULL_DEBOUNCE: Duration = Duration::from_millis(120);
+const PULL_TIMEOUT: Duration = Duration::from_secs(30);
 /// Revisions kept per document while waiting for the server's diagnostics.
 const MAX_RETAINED_REVISIONS: usize = 256;
 /// Bounds on what one untrusted `publishDiagnostics` may make us keep and render.
 const MAX_DIAGNOSTICS_PER_DOCUMENT: usize = 2_000;
 const MAX_MESSAGE_CHARS: usize = 4_000;
 const MAX_CODE_CHARS: usize = 200;
+
+/// How the revision of a server's diagnostics is established.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiagnosticsMode {
+    /// The server pushes `publishDiagnostics` carrying the document `version` (Biome).
+    /// A push without a version is dropped.
+    Push,
+    /// The server pushes diagnostics without a version (`vtsls`), so pushes are ignored and
+    /// diagnostics are requested instead, through `typescript.tsserverRequest`. An answer is
+    /// attributed to revision V only if V was the last revision sent when the request was
+    /// queued and still is when the answer arrives: the server then saw no other text between
+    /// the two. Otherwise the answer is dropped and asked again.
+    TsserverPull,
+    /// Same rule, with the standard LSP 3.17 `textDocument/diagnostic` request (`tsgo`).
+    LspPull,
+}
 
 /// How to launch a server and what its diagnostics are attributed to.
 #[derive(Debug, Clone)]
@@ -37,6 +57,7 @@ pub struct LanguageServerProfile {
     pub program: PathBuf,
     pub args: Vec<String>,
     pub initialization_options: Value,
+    pub diagnostics: DiagnosticsMode,
 }
 
 /// Receives each batch of revision-tagged diagnostics (called on the server's reader thread).
@@ -56,6 +77,8 @@ struct TrackedDocument {
     document_id: String,
     session_generation: u32,
     uri: String,
+    /// The last revision sent to the server: the only text it can be working on.
+    latest: u32,
     /// Text and content hash of each revision sent and not yet superseded by diagnostics.
     revisions: BTreeMap<u32, (Rope, String)>,
 }
@@ -64,10 +87,12 @@ type DocumentTable = Arc<Mutex<HashMap<PathBuf, TrackedDocument>>>;
 
 #[derive(Debug)]
 pub struct LanguageServerSession {
-    client: LspClient,
+    client: Arc<LspClient>,
     source: DiagnosticSource,
     documents: DocumentTable,
     incremental_sync: bool,
+    /// Pull modes: paths whose diagnostics must be requested (again).
+    pull_queue: Option<mpsc::Sender<PathBuf>>,
 }
 
 impl LanguageServerSession {
@@ -86,17 +111,21 @@ impl LanguageServerSession {
 
         let documents: DocumentTable = Arc::default();
         let source = profile.source;
+        let mode = profile.diagnostics;
         let handler_documents = Arc::clone(&documents);
-        let client = LspClient::spawn(
+        let handler_sink = Arc::clone(&sink);
+        let client = Arc::new(LspClient::spawn(
             command,
             Box::new(move |method, params| {
-                if method == "textDocument/publishDiagnostics" {
-                    if let Some(batch) = resolve_diagnostics(&handler_documents, source, params) {
-                        sink(batch);
+                if mode == DiagnosticsMode::Push && method == "textDocument/publishDiagnostics" {
+                    if let Some(batch) =
+                        resolve_pushed_diagnostics(&handler_documents, source, params)
+                    {
+                        handler_sink(batch);
                     }
                 }
             }),
-        )?;
+        )?);
 
         let root_uri = path_to_file_uri(gate.workspace_root());
         let initialized = client.request(
@@ -138,11 +167,25 @@ impl LanguageServerSession {
         });
         client.notify("initialized", json!({}))?;
 
+        let pull_queue = (mode != DiagnosticsMode::Push).then(|| {
+            let (queue, dirty) = mpsc::channel();
+            let worker = PullWorker {
+                client: Arc::clone(&client),
+                documents: Arc::clone(&documents),
+                source,
+                mode,
+                sink,
+            };
+            std::thread::spawn(move || worker.run(&dirty));
+            queue
+        });
+
         Ok(Self {
             client,
             source,
             documents,
             incremental_sync: sync_kind == Some(2),
+            pull_queue,
         })
     }
 
@@ -178,12 +221,16 @@ impl LanguageServerSession {
         content_blake3_hash: &str,
     ) -> Result<(), LspError> {
         let uri = path_to_file_uri(document.path);
-        let previous = lock(&self.documents).insert(
+        // Messages are queued while the table is locked, so the order in which revisions are
+        // recorded here is the order in which the server receives them.
+        let mut documents = lock(&self.documents);
+        let previous = documents.insert(
             document.path.to_path_buf(),
             TrackedDocument {
                 document_id: document.document_id.to_string(),
                 session_generation: document.session_generation,
                 uri: uri.clone(),
+                latest: revision,
                 revisions: BTreeMap::from([(
                     revision,
                     (rope.clone(), content_blake3_hash.to_string()),
@@ -204,7 +251,16 @@ impl LanguageServerSession {
                 "version": revision,
                 "text": rope.to_string(),
             }}),
-        )
+        )?;
+        drop(documents);
+        self.request_pull(document.path);
+        Ok(())
+    }
+
+    fn request_pull(&self, path: &Path) {
+        if let Some(queue) = &self.pull_queue {
+            let _ = queue.send(path.to_path_buf());
+        }
     }
 
     /// Forwards one applied `EditorTransaction`: `changes` turned `rope_before` into
@@ -219,36 +275,37 @@ impl LanguageServerSession {
         rope_after: &Rope,
         content_blake3_hash: &str,
     ) -> Result<bool, LspError> {
-        let uri = {
-            let mut documents = lock(&self.documents);
-            let Some(tracked) = documents.get_mut(document.path) else {
-                return Ok(false);
-            };
-            if tracked.session_generation != document.session_generation {
-                return Ok(false);
-            }
-            tracked.revisions.insert(
-                revision,
-                (rope_after.clone(), content_blake3_hash.to_string()),
-            );
-            while tracked.revisions.len() > MAX_RETAINED_REVISIONS {
-                tracked.revisions.pop_first();
-            }
-            tracked.uri.clone()
+        let mut documents = lock(&self.documents);
+        let Some(tracked) = documents.get_mut(document.path) else {
+            return Ok(false);
         };
+        if tracked.session_generation != document.session_generation {
+            return Ok(false);
+        }
+        tracked.latest = revision;
+        tracked.revisions.insert(
+            revision,
+            (rope_after.clone(), content_blake3_hash.to_string()),
+        );
+        while tracked.revisions.len() > MAX_RETAINED_REVISIONS {
+            tracked.revisions.pop_first();
+        }
         let content_changes = if self.incremental_sync {
             incremental_content_changes(rope_before, changes)
         } else {
             None
         }
         .unwrap_or_else(|| vec![json!({"text": rope_after.to_string()})]);
+        // Queued under the lock: see `open_document`.
         self.client.notify(
             "textDocument/didChange",
             json!({
-                "textDocument": {"uri": uri, "version": revision},
+                "textDocument": {"uri": tracked.uri, "version": revision},
                 "contentChanges": content_changes,
             }),
         )?;
+        drop(documents);
+        self.request_pull(document.path);
         Ok(true)
     }
 
@@ -302,7 +359,7 @@ fn incremental_content_changes(rope_before: &Rope, changes: &[TextChange]) -> Op
 }
 
 /// Turns an untrusted `publishDiagnostics` into a revision-tagged batch, or drops it.
-fn resolve_diagnostics(
+fn resolve_pushed_diagnostics(
     documents: &DocumentTable,
     source: DiagnosticSource,
     params: &Value,
@@ -312,18 +369,34 @@ fn resolve_diagnostics(
     let version = u32::try_from(params.get("version")?.as_u64()?).ok()?;
     let mut documents = lock(documents);
     let tracked = documents.get_mut(&path)?;
+    let diagnostics = params.get("diagnostics").and_then(Value::as_array);
+    batch_for_revision(
+        tracked,
+        source,
+        version,
+        diagnostics.map_or(&[], Vec::as_slice),
+        lsp_range,
+    )
+}
+
+/// Builds the batch for `version` from raw diagnostics, converting positions against the text
+/// of that revision. `None` if that text is no longer known.
+fn batch_for_revision(
+    tracked: &mut TrackedDocument,
+    source: DiagnosticSource,
+    version: u32,
+    diagnostics: &[Value],
+    range_of: fn(&Value) -> Option<(LineCol, LineCol)>,
+) -> Option<DocumentDiagnostics> {
     let (rope, hash) = tracked.revisions.get(&version)?.clone();
     // Diagnostics for older revisions can no longer be the latest word: forget those texts.
     tracked.revisions = tracked.revisions.split_off(&version);
-
-    let items = params
-        .get("diagnostics")
-        .and_then(Value::as_array)
-        .map(Vec::as_slice)
-        .unwrap_or_default()
+    let items = diagnostics
         .iter()
         .take(MAX_DIAGNOSTICS_PER_DOCUMENT)
-        .filter_map(|diagnostic| diagnostic_entry(&tracked.document_id, source, &rope, diagnostic))
+        .filter_map(|diagnostic| {
+            diagnostic_entry(&tracked.document_id, source, &rope, diagnostic, range_of)
+        })
         .collect();
     Some(DocumentDiagnostics {
         schema_version: CONTRACT_SCHEMA_VERSION,
@@ -336,25 +409,157 @@ fn resolve_diagnostics(
     })
 }
 
+fn position(value: &Value, line_key: &str, column_key: &str, base: u64) -> Option<LineCol> {
+    Some(LineCol::new(
+        u32::try_from(value.get(line_key)?.as_u64()?.checked_sub(base)?).ok()?,
+        u32::try_from(value.get(column_key)?.as_u64()?.checked_sub(base)?).ok()?,
+    ))
+}
+
+/// LSP: `range.start` / `range.end`, zero-based `line` and `character`.
+fn lsp_range(diagnostic: &Value) -> Option<(LineCol, LineCol)> {
+    Some((
+        position(diagnostic.pointer("/range/start")?, "line", "character", 0)?,
+        position(diagnostic.pointer("/range/end")?, "line", "character", 0)?,
+    ))
+}
+
+/// tsserver: `start` / `end`, one-based `line` and `offset` (UTF-16 units).
+fn tsserver_range(diagnostic: &Value) -> Option<(LineCol, LineCol)> {
+    Some((
+        position(diagnostic.get("start")?, "line", "offset", 1)?,
+        position(diagnostic.get("end")?, "line", "offset", 1)?,
+    ))
+}
+
+/// Requests diagnostics from a server that cannot say which revision its pushes are for.
+struct PullWorker {
+    client: Arc<LspClient>,
+    documents: DocumentTable,
+    source: DiagnosticSource,
+    mode: DiagnosticsMode,
+    sink: DiagnosticsSink,
+}
+
+impl PullWorker {
+    fn run(&self, dirty: &mpsc::Receiver<PathBuf>) {
+        while let Ok(first) = dirty.recv() {
+            // Let a burst of keystrokes settle: only the last revision is worth asking about.
+            let mut paths = vec![first];
+            while let Ok(next) = dirty.recv_timeout(PULL_DEBOUNCE) {
+                if !paths.contains(&next) {
+                    paths.push(next);
+                }
+            }
+            for path in paths {
+                if !self.client.is_alive() {
+                    return;
+                }
+                self.pull(&path);
+            }
+        }
+    }
+
+    fn pull(&self, path: &Path) {
+        // Queue the requests while the table is locked: they follow the `didChange` of
+        // `version` in the stream, and no later change can slip in between.
+        let (version, pending) = {
+            let documents = lock(&self.documents);
+            let Some(tracked) = documents.get(path) else {
+                return;
+            };
+            let requests: Vec<(&str, Value)> = match self.mode {
+                DiagnosticsMode::TsserverPull => [
+                    "syntacticDiagnosticsSync",
+                    "semanticDiagnosticsSync",
+                    "suggestionDiagnosticsSync",
+                ]
+                .into_iter()
+                .map(|command| {
+                    (
+                        "workspace/executeCommand",
+                        json!({
+                            "command": "typescript.tsserverRequest",
+                            "arguments": [command, {"file": path.to_string_lossy()}],
+                        }),
+                    )
+                })
+                .collect(),
+                DiagnosticsMode::LspPull => vec![(
+                    "textDocument/diagnostic",
+                    json!({"textDocument": {"uri": tracked.uri}}),
+                )],
+                DiagnosticsMode::Push => return,
+            };
+            let pending: Vec<_> = requests
+                .into_iter()
+                .filter_map(|(method, params)| self.client.begin_request(method, params).ok())
+                .collect();
+            (tracked.latest, pending)
+        };
+
+        let mut diagnostics = Vec::new();
+        for request in pending {
+            let Ok(answer) = request.wait(PULL_TIMEOUT) else {
+                return; // an incomplete picture is not published
+            };
+            let items = match self.mode {
+                DiagnosticsMode::TsserverPull => answer.get("body"),
+                _ => answer.get("items"),
+            };
+            if let Some(items) = items.and_then(Value::as_array) {
+                diagnostics.extend(items.iter().cloned());
+            }
+        }
+
+        let batch = {
+            let mut documents = lock(&self.documents);
+            let Some(tracked) = documents.get_mut(path) else {
+                return;
+            };
+            // A change was sent while the server was answering: it may have seen either text.
+            // Drop the answer; that change has queued another pull.
+            if tracked.latest != version {
+                return;
+            }
+            let range_of = match self.mode {
+                DiagnosticsMode::TsserverPull => tsserver_range,
+                _ => lsp_range,
+            };
+            batch_for_revision(tracked, self.source, version, &diagnostics, range_of)
+        };
+        if let Some(batch) = batch {
+            (self.sink)(batch);
+        }
+    }
+}
+
 fn diagnostic_entry(
     document_id: &str,
     source: DiagnosticSource,
     rope: &Rope,
     diagnostic: &Value,
+    range_of: fn(&Value) -> Option<(LineCol, LineCol)>,
 ) -> Option<DiagnosticEntry> {
-    let position = |pointer: &str| -> Option<LineCol> {
-        let position = diagnostic.pointer(pointer)?;
-        Some(LineCol::new(
-            u32::try_from(position.get("line")?.as_u64()?).ok()?,
-            u32::try_from(position.get("character")?.as_u64()?).ok()?,
-        ))
-    };
-    let start = line_col_to_utf16_clamped(rope, position("/range/start")?);
-    let end = line_col_to_utf16_clamped(rope, position("/range/end")?).max(start);
-    let severity = match diagnostic.get("severity").and_then(Value::as_u64) {
-        Some(1) | None => DiagnosticSeverity::Error,
-        Some(2) => DiagnosticSeverity::Warning,
-        Some(_) => DiagnosticSeverity::Information,
+    let (start, end) = range_of(diagnostic)?;
+    let start = line_col_to_utf16_clamped(rope, start);
+    let end = line_col_to_utf16_clamped(rope, end).max(start);
+    // LSP numbers severities; tsserver names categories.
+    let severity = match diagnostic
+        .get("severity")
+        .or_else(|| diagnostic.get("category"))
+    {
+        Some(Value::Number(severity)) => match severity.as_u64() {
+            Some(1) => DiagnosticSeverity::Error,
+            Some(2) => DiagnosticSeverity::Warning,
+            _ => DiagnosticSeverity::Information,
+        },
+        Some(Value::String(category)) => match category.as_str() {
+            "error" => DiagnosticSeverity::Error,
+            "warning" => DiagnosticSeverity::Warning,
+            _ => DiagnosticSeverity::Information,
+        },
+        _ => DiagnosticSeverity::Error,
     };
     let code = match diagnostic.get("code") {
         Some(Value::String(code)) => code.chars().take(MAX_CODE_CHARS).collect(),
@@ -363,6 +568,7 @@ fn diagnostic_entry(
     };
     let message = diagnostic
         .get("message")
+        .or_else(|| diagnostic.get("text"))
         .and_then(Value::as_str)
         .unwrap_or_default()
         .chars()
@@ -400,6 +606,7 @@ mod tests {
             document_id: "src/a.ts".into(),
             session_generation: 7,
             uri: path_to_file_uri(path),
+            latest: revisions.last().map_or(0, |(revision, _)| *revision),
             revisions: revisions
                 .iter()
                 .map(|(revision, text)| {
@@ -452,7 +659,7 @@ mod tests {
         let path = Path::new("/w/src/a.ts");
         // R4: the flagged token `x` is on line 0. R5 inserted a line above it.
         let documents = table(path, &[(4, "let 𝄞 = x;\n"), (5, "// new\nlet 𝄞 = x;\n")]);
-        let batch = resolve_diagnostics(
+        let batch = resolve_pushed_diagnostics(
             &documents,
             DiagnosticSource::Vtsls,
             &publish(path, Some(4), 0, 9, 10),
@@ -477,27 +684,27 @@ mod tests {
         let path = Path::new("/w/src/a.ts");
         let documents = table(path, &[(4, "let a;\n"), (5, "let ab;\n")]);
         // No version at all.
-        assert!(resolve_diagnostics(
+        assert!(resolve_pushed_diagnostics(
             &documents,
             DiagnosticSource::Biome,
             &publish(path, None, 0, 0, 1)
         )
         .is_none());
         // A version we never sent.
-        assert!(resolve_diagnostics(
+        assert!(resolve_pushed_diagnostics(
             &documents,
             DiagnosticSource::Biome,
             &publish(path, Some(9), 0, 0, 1)
         )
         .is_none());
         // A document we do not track, and a non-file URI.
-        assert!(resolve_diagnostics(
+        assert!(resolve_pushed_diagnostics(
             &documents,
             DiagnosticSource::Biome,
             &publish(Path::new("/w/other.ts"), Some(4), 0, 0, 1)
         )
         .is_none());
-        assert!(resolve_diagnostics(
+        assert!(resolve_pushed_diagnostics(
             &documents,
             DiagnosticSource::Biome,
             &json!({"uri": "https://x/a.ts", "version": 4, "diagnostics": []})
@@ -505,13 +712,13 @@ mod tests {
         .is_none());
 
         // Once R5 diagnostics arrived, a late batch for R4 can no longer be resolved.
-        assert!(resolve_diagnostics(
+        assert!(resolve_pushed_diagnostics(
             &documents,
             DiagnosticSource::Biome,
             &publish(path, Some(5), 0, 0, 1)
         )
         .is_some());
-        assert!(resolve_diagnostics(
+        assert!(resolve_pushed_diagnostics(
             &documents,
             DiagnosticSource::Biome,
             &publish(path, Some(4), 0, 0, 1)
@@ -537,7 +744,8 @@ mod tests {
                 "not an object",
             ],
         });
-        let batch = resolve_diagnostics(&documents, DiagnosticSource::Biome, &params).unwrap();
+        let batch =
+            resolve_pushed_diagnostics(&documents, DiagnosticSource::Biome, &params).unwrap();
         let spans: Vec<(u32, u32)> = batch
             .items
             .iter()

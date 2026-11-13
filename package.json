@@ -18,8 +18,9 @@
     "build": "tsc -b && pnpm --filter @coloride/web-ui build && pnpm --filter @coloride/desktop-tauri build"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "2.12.4",
     "@biomejs/biome": "1.9.4",
+    "@tauri-apps/cli": "2.12.4",
+    "@vtsls/language-server": "0.3.0",
     "happy-dom": "^21.0.4",
     "typescript": "5.7.3",
     "vitest": "^4.1.12"

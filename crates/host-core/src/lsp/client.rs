@@ -144,6 +144,16 @@ impl LspClient {
         params: Value,
         timeout: Duration,
     ) -> Result<Value, LspError> {
+        self.begin_request(method, params)?.wait(timeout)
+    }
+
+    /// Queues a request without waiting. The request takes its place in the outgoing stream
+    /// now, so the caller can order it against notifications it sends before and after.
+    pub fn begin_request(
+        &self,
+        method: &str,
+        params: Value,
+    ) -> Result<PendingRequest<'_>, LspError> {
         if !self.is_alive() {
             return Err(LspError::Disconnected);
         }
@@ -157,22 +167,12 @@ impl LspClient {
             lock(&self.pending).remove(&id);
             return Err(LspError::Disconnected);
         }
-        match answered.recv_timeout(timeout) {
-            Ok(Ok(result)) => Ok(result),
-            Ok(Err(message)) => Err(LspError::Response {
-                method: method.to_string(),
-                message,
-            }),
-            Err(RecvTimeoutError::Timeout) => {
-                lock(&self.pending).remove(&id);
-                // Tell the server we no longer want the answer.
-                let _ = self.notify("$/cancelRequest", json!({"id": id}));
-                Err(LspError::Timeout {
-                    method: method.to_string(),
-                })
-            }
-            Err(RecvTimeoutError::Disconnected) => Err(LspError::Disconnected),
-        }
+        Ok(PendingRequest {
+            client: self,
+            id,
+            method: method.to_string(),
+            answered,
+        })
     }
 
     /// Asks the server to stop, then kills its process group whatever it answered.
@@ -182,6 +182,37 @@ impl LspClient {
             let _ = self.notify("exit", Value::Null);
         }
         lock(&self.child).kill();
+    }
+}
+
+/// A request already on its way to the server.
+pub struct PendingRequest<'a> {
+    client: &'a LspClient,
+    id: i64,
+    method: String,
+    answered: mpsc::Receiver<Result<Value, String>>,
+}
+
+impl PendingRequest<'_> {
+    pub fn wait(self, timeout: Duration) -> Result<Value, LspError> {
+        match self.answered.recv_timeout(timeout) {
+            Ok(Ok(result)) => Ok(result),
+            Ok(Err(message)) => Err(LspError::Response {
+                method: self.method,
+                message,
+            }),
+            Err(RecvTimeoutError::Timeout) => {
+                lock(&self.client.pending).remove(&self.id);
+                // Tell the server we no longer want the answer.
+                let _ = self
+                    .client
+                    .notify("$/cancelRequest", json!({"id": self.id}));
+                Err(LspError::Timeout {
+                    method: self.method,
+                })
+            }
+            Err(RecvTimeoutError::Disconnected) => Err(LspError::Disconnected),
+        }
     }
 }
 
