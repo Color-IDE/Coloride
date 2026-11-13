@@ -1,9 +1,10 @@
 import type { ColorideEditorView } from "@coloride/editor-cm6";
 import type { CockpitStoreBundle } from "../stores.js";
+import { fileTreeIconColor, fileTreeIconSvg } from "../theme/file-tree-icons.js";
 import { type ThinScrollbar, attachThinScrollbar } from "../thin-scrollbar.js";
-import { UI_STRINGS } from "../ui-strings.js";
-import { EditorTabs } from "./editor-tabs.js";
+import { UI_STRINGS, uiText } from "../ui-strings.js";
 import { FileTreePanel } from "./file-tree-panel.js";
+import { type HeaderTabSpec, HeaderTabs } from "./header-tabs.js";
 import { askUnsavedChoice } from "./unsaved-dialog.js";
 
 export interface InspectorOptions {
@@ -29,7 +30,7 @@ export class Inspector {
   readonly tree: FileTreePanel;
   private readonly previewHost: HTMLElement;
   private readonly empty: HTMLElement;
-  private readonly tabs: EditorTabs;
+  private readonly tabs: HeaderTabs;
   private editorScrollbar: ThinScrollbar | null = null;
   /** Files opened in this project, in opening order. They accumulate until closed. */
   private openTabs: string[] = [];
@@ -90,9 +91,13 @@ export class Inspector {
     body.append(editorColumn, this.tree.element);
     this.element.append(body);
 
-    this.tabs = new EditorTabs(doc, options.header, {
-      open: (path) => this.openFile(path),
-      close: (path) => this.requestCloseTab(path),
+    this.tabs = new HeaderTabs(doc, options.header, {
+      ariaLabel: UI_STRINGS.shell.openFiles,
+      dataKey: "path",
+      closeLabel: uiText.closeTab,
+      unsavedLabel: UI_STRINGS.editor.unsaved,
+      onSelect: (path) => this.openFile(path),
+      onClose: (path) => this.requestCloseTab(path),
     });
   }
 
@@ -224,8 +229,19 @@ export class Inspector {
 
   private renderTabs(activePath: string | null): void {
     const { stores } = this.options;
-    const unsaved = new Set(this.openTabs.filter((path) => stores.isDocumentUnsaved(path)));
-    this.tabs.update(this.openTabs, activePath, unsaved);
+    this.tabs.update(
+      this.openTabs.map((path): HeaderTabSpec => {
+        const name = path.split("/").pop() || path;
+        return {
+          key: path,
+          label: name,
+          title: path,
+          icon: { svg: fileTreeIconSvg(name), className: fileTreeIconColor(name) },
+          selected: path === activePath,
+          unsaved: stores.isDocumentUnsaved(path),
+        };
+      }),
+    );
   }
 
   /** Closes a tab; one with unsaved changes first asks whether to save, discard or keep it. */

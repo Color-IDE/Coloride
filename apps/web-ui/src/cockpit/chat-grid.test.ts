@@ -47,8 +47,10 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     stores.createWorkGroup("Authentication");
     expect(stores.navigation.getState().groups.at(-1)?.title).toBe("Authentication");
     // The header lists the sessions of the active group; a new, empty group has none.
-    expect(rootContainer.querySelectorAll(".coloride-session-tab")).toHaveLength(0);
-    expect(rootContainer.querySelector(".coloride-chat-tab-add")).not.toBeNull();
+    expect(
+      rootContainer.querySelectorAll(".coloride-zone-3-header .coloride-header-tab"),
+    ).toHaveLength(0);
+    expect(rootContainer.querySelector(".coloride-header-tab-add")).not.toBeNull();
     expect(rootContainer.querySelectorAll(".coloride-chat-cell")).toHaveLength(0);
     rootContainer
       .querySelector<HTMLButtonElement>('button[data-group-id="initial-group"]')
@@ -217,7 +219,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
 
   it("creates sessions from the header + and from each panel's split buttons", () => {
     const { root, stores, cells, editorView, cleanup } = mount();
-    root.querySelector<HTMLButtonElement>(".coloride-chat-tab-add")?.click();
+    root.querySelector<HTMLButtonElement>(".coloride-header-tab-add")?.click();
     expect(cells().map((c) => c.dataset.chatId)).toContain("chat-3");
     expect(stores.zone3.getState().activeChatId).toBe("chat-3");
 
@@ -250,7 +252,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     stores.setPanelArea({ widthPx: 440, heightPx: 270 });
     // Any state change refreshes the buttons (in the app the ResizeObserver also does).
     stores.zone3.setState((prev) => ({ ...prev }));
-    const add = root.querySelector<HTMLButtonElement>(".coloride-chat-tab-add");
+    const add = root.querySelector<HTMLButtonElement>(".coloride-header-tab-add");
     expect(add?.disabled).toBe(true);
     expect(add?.title).toBe("No room for another panel");
     const cellA = cells()[0] as HTMLElement;
@@ -286,10 +288,13 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
   });
   it("shows one header tab per session of the active group instead of the group name", () => {
     const { root, stores, cells, cleanup } = mount();
-    const tabs = () => Array.from(root.querySelectorAll<HTMLElement>(".coloride-session-tab"));
+    const tabs = () =>
+      Array.from(
+        root.querySelectorAll<HTMLElement>(".coloride-zone-3-header .coloride-header-tab"),
+      );
     expect(tabs().map((tab) => tab.dataset.chatId)).toEqual(["a", "b"]);
     expect(tabs()[1]?.textContent).toContain("b");
-    expect(root.querySelector(".coloride-chat-tab-bar")?.textContent).not.toContain("Workspace");
+    expect(root.querySelector(".coloride-zone-3-header")?.textContent).not.toContain("Workspace");
     expect(root.querySelector(".coloride-work-group-tab")).toBeNull();
 
     tabs()[0]?.click();
@@ -298,10 +303,10 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     expect(tabs()[1]?.getAttribute("aria-selected")).toBe("false");
 
     // New sessions appear as tabs as they are created; closing one removes its tab and panel.
-    root.querySelector<HTMLButtonElement>(".coloride-chat-tab-add")?.click();
+    root.querySelector<HTMLButtonElement>(".coloride-header-tab-add")?.click();
     expect(tabs().map((tab) => tab.dataset.chatId)).toEqual(["a", "b", "chat-3"]);
     expect(tabs()[2]?.getAttribute("aria-selected")).toBe("true");
-    tabs()[1]?.querySelector<HTMLButtonElement>(".coloride-tab-close-btn")?.click();
+    tabs()[1]?.querySelector<HTMLButtonElement>(".coloride-header-tab-close")?.click();
     expect(tabs().map((tab) => tab.dataset.chatId)).toEqual(["a", "chat-3"]);
     expect(cells().map((cell) => cell.dataset.chatId)).not.toContain("b");
 

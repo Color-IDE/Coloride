@@ -9,15 +9,8 @@ import {
 } from "../stores.js";
 import { UI_STRINGS, uiText } from "../ui-strings.js";
 import { VirtualChatMessageListRenderer } from "../virtualizer.js";
-import { attachHeaderScroll } from "./header-scroll.js";
+import { type HeaderTabSpec, HeaderTabs } from "./header-tabs.js";
 import { CLOSE_PANEL_ICON, SPLIT_DOWN_ICON, SPLIT_RIGHT_ICON } from "./panel-icons.js";
-
-interface SessionTabNodes {
-  readonly el: HTMLElement;
-  readonly icon: HTMLElement;
-  readonly label: HTMLElement;
-  readonly close: HTMLButtonElement;
-}
 
 interface ChatCellNodes {
   readonly el: HTMLElement;
@@ -39,8 +32,7 @@ interface ChatCellNodes {
 export class ChatGrid {
   readonly element: HTMLElement;
   private readonly grid: HTMLElement;
-  private readonly tabBar: HTMLElement;
-  private readonly tabs = new Map<string, SessionTabNodes>();
+  private readonly tabs: HeaderTabs;
   private readonly cells = new Map<string, ChatCellNodes>();
   private readonly empty: HTMLElement;
   private readonly addButton: HTMLButtonElement;
@@ -51,7 +43,6 @@ export class ChatGrid {
   private actionsKey = "";
   private readonly resizeObserver: ResizeObserver | null;
   private readonly messageRenderer = new VirtualChatMessageListRenderer();
-  private readonly releaseHeaderScroll: () => void;
 
   constructor(
     doc: Document,
@@ -81,15 +72,18 @@ export class ChatGrid {
     );
     this.empty.append(emptyText, this.emptyAdd);
 
-    this.tabBar = doc.createElement("div");
-    this.tabBar.className = "coloride-chat-tab-bar";
-    this.tabBar.setAttribute("data-tauri-drag-region", "");
-    this.tabBar.setAttribute("role", "tablist");
-    this.addButton = this.createAddButton(doc, "coloride-chat-tab-add", "");
+    this.addButton = this.createAddButton(doc, "coloride-header-tab-add", "");
     this.addButton.setAttribute("aria-label", UI_STRINGS.chat.newSession);
     this.addButton.innerHTML = PLUS_ICON;
-    header.replaceChildren(this.tabBar);
-    this.releaseHeaderScroll = attachHeaderScroll(header, this.tabBar);
+    this.tabs = new HeaderTabs(doc, header, {
+      ariaLabel: UI_STRINGS.shell.openSessions,
+      dataKey: "chatId",
+      closeLabel: () => UI_STRINGS.chat.closePanel,
+      unsavedLabel: UI_STRINGS.editor.unsaved,
+      onSelect: (chatId) => this.stores.selectChat(chatId),
+      onClose: (chatId) => this.stores.closeChat(chatId),
+      trailing: [this.addButton],
+    });
 
     // The panel area drives how many panels fit; it is unknown (no limit) without layout.
     this.resizeObserver =
@@ -140,11 +134,7 @@ export class ChatGrid {
       cell.splitRight.title = right ? UI_STRINGS.chat.splitRight : noRoom;
       cell.splitDown.disabled = !down;
       cell.splitDown.title = down ? UI_STRINGS.chat.splitDown : noRoom;
-      const busy =
-        z3.chats.length <= 1 ||
-        z3.activeRunningAgentChatId === chatId ||
-        z3.sequentialAgentQueue.includes(chatId);
-      cell.close.disabled = busy;
+      cell.close.disabled = !this.canCloseSession(chatId);
     }
   }
 
@@ -156,7 +146,7 @@ export class ChatGrid {
 
   destroy(): void {
     this.resizeObserver?.disconnect();
-    this.releaseHeaderScroll();
+    this.tabs.destroy();
   }
 
   /** One header tab per session of the active group; selecting one focuses its panel. */
@@ -166,65 +156,30 @@ export class ChatGrid {
     const activeGroup = navigation.groups.find((group) => group.id === navigation.activeGroupId);
     const chatsById = new Map(z3.chats.map((chat) => [chat.chatId, chat]));
     const chats = (activeGroup?.chatIds ?? []).flatMap((id) => chatsById.get(id) ?? []);
-    const ids = new Set(chats.map((chat) => chat.chatId));
-    for (const id of this.tabs.keys()) if (!ids.has(id)) this.tabs.delete(id);
-    const ordered = chats.map((chat) => {
-      let tab = this.tabs.get(chat.chatId);
-      if (!tab) {
-        tab = this.createSessionTab(chat.chatId);
-        this.tabs.set(chat.chatId, tab);
-      }
-      const token = COLORIDE_DESIGN_TOKENS[chat.validationState];
-      if (tab.label.textContent !== chat.title) tab.label.textContent = chat.title;
-      if (tab.icon.textContent !== token.icon) tab.icon.textContent = token.icon;
-      tab.el.dataset.validationState = chat.validationState;
-      tab.el.title = `${chat.title} · ${chat.modelName}`;
-      tab.el.setAttribute("aria-selected", String(chat.chatId === z3.activeChatId));
-      tab.close.disabled =
-        z3.chats.length <= 1 ||
-        z3.activeRunningAgentChatId === chat.chatId ||
-        z3.sequentialAgentQueue.includes(chat.chatId);
-      return tab.el;
-    });
-    reconcile(this.tabBar, [...ordered, this.addButton]);
+    this.tabs.update(
+      chats.map((chat): HeaderTabSpec => {
+        const token = COLORIDE_DESIGN_TOKENS[chat.validationState];
+        return {
+          key: chat.chatId,
+          label: chat.title,
+          title: `${chat.title} · ${chat.modelName}`,
+          icon: { text: token.icon },
+          selected: chat.chatId === z3.activeChatId,
+          closable: this.canCloseSession(chat.chatId),
+          data: { validationState: chat.validationState },
+        };
+      }),
+    );
   }
 
-  private createSessionTab(chatId: string): SessionTabNodes {
-    const doc = this.tabBar.ownerDocument;
-    const el = doc.createElement("div");
-    el.className = "coloride-chat-tab coloride-session-tab";
-    el.setAttribute("role", "tab");
-    el.tabIndex = 0;
-    el.dataset.chatId = chatId;
-    const icon = doc.createElement("span");
-    icon.className = "coloride-tab-icon";
-    icon.setAttribute("aria-hidden", "true");
-    const label = doc.createElement("span");
-    label.className = "coloride-tab-label";
-    const close = doc.createElement("button");
-    close.type = "button";
-    close.className = "coloride-tab-close-btn";
-    close.setAttribute("aria-label", UI_STRINGS.chat.closePanel);
-    close.title = UI_STRINGS.chat.closePanel;
-    close.innerHTML = CLOSE_PANEL_ICON;
-    close.addEventListener("click", (event) => {
-      event.stopPropagation();
-      if (!close.disabled) this.stores.closeChat(chatId);
-    });
-    el.append(icon, label, close);
-    el.addEventListener("click", () => this.stores.selectChat(chatId));
-    el.addEventListener("keydown", (event: KeyboardEvent) => {
-      if (event.target !== el || (event.key !== "Enter" && event.key !== " ")) return;
-      event.preventDefault();
-      this.stores.selectChat(chatId);
-    });
-    // Middle click closes, like the file tabs.
-    el.addEventListener("auxclick", (event: MouseEvent) => {
-      if (event.button !== 1) return;
-      event.preventDefault();
-      if (!close.disabled) this.stores.closeChat(chatId);
-    });
-    return { el, icon, label, close };
+  /** The last session stays, and one with a running or queued agent cannot be closed. */
+  private canCloseSession(chatId: string): boolean {
+    const z3 = this.stores.zone3.getState();
+    return !(
+      z3.chats.length <= 1 ||
+      z3.activeRunningAgentChatId === chatId ||
+      z3.sequentialAgentQueue.includes(chatId)
+    );
   }
 
   private updateGrid(): void {

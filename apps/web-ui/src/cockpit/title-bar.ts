@@ -45,7 +45,7 @@ export class TitleBar {
     this.zone3Header = doc.createElement("div");
     this.zone3Header.className = "coloride-zone-3-header";
     this.zone3Header.setAttribute("data-tauri-drag-region", "");
-    this.zone3Header.setAttribute("aria-label", UI_STRINGS.shell.chatGroups);
+    this.zone3Header.setAttribute("aria-label", UI_STRINGS.shell.openSessions);
 
     this.zone4Header = doc.createElement("div");
     this.zone4Header.className = "coloride-zone-4-header";

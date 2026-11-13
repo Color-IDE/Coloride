@@ -9,7 +9,7 @@ export const UI_STRINGS = {
     sidebar: "Sidebar",
     chatGrid: "Multi-chat grid",
     inspector: "Inspector",
-    chatGroups: "Chat groups",
+    openSessions: "Open sessions",
     openFiles: "Open files",
   },
   activity: {

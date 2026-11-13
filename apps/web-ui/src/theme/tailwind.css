@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "./sidebar.css";
 @import "./inspector.css";
+@import "./header-tabs.css";
 @source "../**/*.ts";
 
 @theme {
@@ -321,69 +322,6 @@
     @apply bg-main border-t border-b border-l border-white/8 flex flex-col h-full;
   }
 
-  .coloride-chat-tab-bar,
-  .coloride-grid-mode-selector {
-    @apply flex items-center gap-1 flex-nowrap overflow-x-auto px-2;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-
-  .coloride-chat-tab-bar::-webkit-scrollbar,
-  .coloride-grid-mode-selector::-webkit-scrollbar {
-    display: none;
-  }
-
-  .coloride-chat-tab,
-  .coloride-chat-tab-btn,
-  .coloride-grid-mode-btn,
-  .coloride-inspector-tab-btn {
-    @apply relative inline-flex items-center gap-1.5 h-[25px] bg-transparent text-text-secondary rounded-[6px] py-0.5 pl-2.5 pr-1.5 text-[12px] whitespace-nowrap cursor-pointer hover:bg-selected hover:text-text-primary aria-selected:bg-selected aria-selected:text-text-primary aria-pressed:bg-selected aria-pressed:text-text-primary;
-    border: 0.5px solid transparent;
-  }
-
-  .coloride-chat-tab + .coloride-chat-tab::before,
-  .coloride-inspector-tab-btn + .coloride-inspector-tab-btn::before {
-    content: "";
-    position: absolute;
-    left: -2.5px;
-    top: 6px;
-    bottom: 6px;
-    width: 1px;
-    background-color: rgba(255, 255, 255, 0.11);
-    border-radius: 1px;
-    pointer-events: none;
-  }
-
-  .coloride-chat-tab[aria-selected="true"]::before,
-  .coloride-chat-tab[aria-selected="true"] + .coloride-chat-tab::before,
-  .coloride-chat-tab:hover::before,
-  .coloride-chat-tab:hover + .coloride-chat-tab::before,
-  .coloride-inspector-tab-btn[aria-pressed="true"]::before,
-  .coloride-inspector-tab-btn[aria-pressed="true"] + .coloride-inspector-tab-btn::before,
-  .coloride-inspector-tab-btn:hover::before,
-  .coloride-inspector-tab-btn:hover + .coloride-inspector-tab-btn::before {
-    opacity: 0;
-  }
-
-  .coloride-chat-tab[aria-selected="true"],
-  .coloride-chat-tab-btn[aria-selected="true"],
-  .coloride-grid-mode-btn[aria-pressed="true"],
-  .coloride-inspector-tab-btn[aria-pressed="true"] {
-    border-color: rgba(255, 255, 255, 0.028);
-  }
-
-  .coloride-tab-icon {
-    @apply inline-flex items-center justify-center text-[11.5px] shrink-0;
-  }
-
-  .coloride-tab-label {
-    @apply truncate;
-  }
-
-  .coloride-tab-close-btn {
-    @apply w-[18px] h-[18px] rounded-[5px] !border-0 bg-transparent text-text-muted inline-flex items-center justify-center shrink-0 cursor-pointer hover:bg-white/12 hover:text-text-primary;
-  }
-
   .coloride-zone-3-grid {
     @apply flex-1 !p-0 !gap-0 overflow-hidden;
   }
@@ -468,28 +406,6 @@
     color: var(--color-text-primary);
   }
   .coloride-chat-cell-action:disabled {
-    opacity: 0.35;
-    cursor: default;
-  }
-  /* "+" at the end of the group tabs in the Zone 3 header */
-  .coloride-chat-tab-add {
-    display: inline-flex;
-    flex: none;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    border: 0;
-    border-radius: 6px;
-    background: transparent;
-    color: var(--color-text-muted);
-    cursor: pointer;
-  }
-  .coloride-chat-tab-add:hover:not(:disabled) {
-    background: var(--color-selected);
-    color: var(--color-text-primary);
-  }
-  .coloride-chat-tab-add:disabled {
     opacity: 0.35;
     cursor: default;
   }

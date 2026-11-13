@@ -46,7 +46,7 @@ describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () =
     expect(stores.zone4.getState().activeDocumentId).toBe("src/app.ts");
     expect(
       rootContainer
-        .querySelector('.coloride-inspector-tab[data-path="src/app.ts"]')
+        .querySelector('.coloride-zone-4-header .coloride-header-tab[data-path="src/app.ts"]')
         ?.getAttribute("aria-selected"),
     ).toBe("true");
     expect(editorView.getEditorView().dom).toBe(editorDom);
@@ -66,14 +66,16 @@ describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () =
     const controller = new CockpitDomController({ rootContainer, stores, editorView });
     const editorDom = editorView.getEditorView().dom;
     const tabs = () =>
-      Array.from(rootContainer.querySelectorAll<HTMLElement>(".coloride-inspector-tab"));
+      Array.from(
+        rootContainer.querySelectorAll<HTMLElement>(".coloride-zone-4-header .coloride-header-tab"),
+      );
     const paths = () => tabs().map((tab) => tab.dataset.path);
     const active = () => stores.zone4.getState().activeDocumentId;
     const first = active();
     stores.selectFileFromTree("src/a.cpp");
     stores.selectFileFromTree("src/b.cpp");
     expect(paths()).toEqual([first, "src/a.cpp", "src/b.cpp"]);
-    expect(tabs()[1]?.querySelector(".coloride-inspector-tab-icon svg")).not.toBeNull();
+    expect(tabs()[1]?.querySelector(".coloride-header-tab-icon svg")).not.toBeNull();
     expect(tabs()[1]?.textContent).toContain("a.cpp");
 
     tabs()[1]?.click();
@@ -111,9 +113,9 @@ describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () =
     });
     const controller = new CockpitDomController({ rootContainer, stores, editorView });
     const paths = () =>
-      Array.from(rootContainer.querySelectorAll<HTMLElement>(".coloride-inspector-tab")).map(
-        (tab) => tab.dataset.path,
-      );
+      Array.from(
+        rootContainer.querySelectorAll<HTMLElement>(".coloride-zone-4-header .coloride-header-tab"),
+      ).map((tab) => tab.dataset.path);
     const empty = () =>
       rootContainer.querySelector<HTMLElement>(".coloride-zone-4-empty")?.hidden === false;
 
@@ -153,9 +155,11 @@ describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () =
     });
     const controller = new CockpitDomController({ rootContainer, stores, editorView });
     const tab = (path: string) =>
-      rootContainer.querySelector<HTMLElement>(`.coloride-inspector-tab[data-path="${path}"]`);
+      rootContainer.querySelector<HTMLElement>(
+        `.coloride-zone-4-header .coloride-header-tab[data-path="${path}"]`,
+      );
     const dotShown = (path: string) =>
-      tab(path)?.querySelector<HTMLElement>(".coloride-inspector-unsaved-dot")?.hidden === false;
+      tab(path)?.querySelector<HTMLElement>(".coloride-header-tab-dot")?.hidden === false;
     const close = (path: string) =>
       rootContainer
         .querySelector<HTMLButtonElement>(`[aria-label="Close ${path.split("/").pop()}"]`)
