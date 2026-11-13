@@ -38,3 +38,24 @@ Already in the dependency tree (via `tempfile`). Used for one call: `kill_proces
 Pinned exactly. `vtsls` is a dev dependency so tests run the real server (it bundles the
 TypeScript language service; it is not shipped with the app by this LOT). xterm.js 6.0.0 and
 its fit addon are the upstream terminal emulator used by VS Code; published 2025-12-22.
+
+## vscode-js-debug `v1.140.0`, DAP build (debugger, LOT-010) — 2026-11-13
+
+Not on npm; fetched by `pnpm fetch:js-debug` (`scripts/fetch-js-debug.mjs`) from the GitHub
+release of `microsoft/vscode-js-debug` (published 2026-09-23). The archive is verified against a
+pinned SHA-256 (`27dab92937ec1ab35821ae955aac867544fe06a1b6307229049f2d789af10968`, the digest
+GitHub publishes for the asset) before it is extracted into the git-ignored `tools/` folder.
+The app never downloads it; it looks for it at `$COLORIDE_JS_DEBUG`, in its data folder, or (in
+development builds) in `tools/`.
+
+Review: provenance only (publisher, release, digest). The 2.6 MB bundled, minified JavaScript
+was **not** reviewed line by line. What limits it on our side: it starts only for a trusted
+workspace (`GatedCapability::DebugAdapter`), as a supervised process group (the debuggee is in
+that group and dies with it, including on an abrupt Host exit); we answer none of its reverse
+requests except `startDebugging`, whose configuration we rebuild from its target id alone;
+`runInTerminal` is refused.
+
+Known limit: its DAP server listens on a TCP port of `127.0.0.1` without authentication for the
+length of a session. Another process of the same user could connect to it and launch programs;
+such a process can already run programs as that user, so this does not cross a privilege
+boundary, but it is wider than a stdio pipe.

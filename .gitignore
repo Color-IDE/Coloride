@@ -31,3 +31,5 @@ coverage/
 # Local notes
 docs/
 
+# Downloaded developer tools (scripts/fetch-js-debug.mjs), verified by pinned SHA-256
+/tools/

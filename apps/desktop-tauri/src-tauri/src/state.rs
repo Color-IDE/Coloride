@@ -30,6 +30,8 @@ pub(crate) struct DesktopAppState {
     /// Open terminals by id. Dropping one kills its shell and jobs.
     pub(crate) terminals: Mutex<HashMap<u32, Arc<host_core::TerminalSession>>>,
     pub(crate) next_terminal_id: AtomicU32,
+    /// The program being debugged, if any (one at a time).
+    pub(crate) debug_session: Mutex<Option<Arc<host_core::DebugSession>>>,
     pub(crate) app_data_dir: PathBuf,
     pub(crate) context_engine: Mutex<Option<SqliteWalContextEngine>>,
     /// Bumped (under the `context_engine` lock) each time a workspace is opened. An index built
@@ -66,6 +68,7 @@ impl DesktopAppState {
             latest_diagnostics,
             terminals: Mutex::new(HashMap::new()),
             next_terminal_id: AtomicU32::new(1),
+            debug_session: Mutex::new(None),
             app_data_dir,
             context_engine: Mutex::new(None),
             workspace_generation: AtomicU64::new(0),

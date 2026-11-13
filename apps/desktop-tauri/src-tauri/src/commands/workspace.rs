@@ -119,6 +119,7 @@ pub(crate) fn load_workspace(
     state.latest_diagnostics.clear();
     // Terminals ran in the previous folder, under its trust: they go with it.
     crate::commands::terminal::close_all_terminals(state);
+    crate::commands::debug::stop_debugging(state);
     *language_services = trust_gate.as_ref().map(|gate| {
         std::sync::Arc::new(host_core::LanguageServices::new(
             gate.clone(),

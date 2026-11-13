@@ -1,4 +1,5 @@
 export * from "./binary-ipc.js";
+export * from "./breakpoints.js";
 export * from "./decorations.js";
 export * from "./diagnostics.js";
 export * from "./editor-view.js";

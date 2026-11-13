@@ -14,6 +14,7 @@ import {
 } from "./index.js";
 import "./shell.css";
 import { TauriBinaryHostBridge } from "./tauri-binary-host-bridge.js";
+import { createTauriDebugHost } from "./tauri-debug-host.js";
 import { createTauriTerminalHost } from "./tauri-terminal-host.js";
 
 interface NativeWorkspaceNode {
@@ -145,6 +146,8 @@ function ColorideDesktopApp() {
           },
           // Ctrl+`: shells in the trusted workspace, streamed over a binary channel.
           terminalHost: createTauriTerminalHost(invoke, () => new Channel<ArrayBuffer>()),
+          // F5: debug the shown JavaScript file (vscode-js-debug, trusted workspaces only).
+          debugHost: createTauriDebugHost(invoke, () => new Channel<ArrayBuffer>()),
           // The decision is taken in a native dialog owned by the Rust side (commands/trust.rs).
           workspaceTrust: {
             getTrust: () => invoke<WorkspaceTrustReport>("workspace_trust_command"),

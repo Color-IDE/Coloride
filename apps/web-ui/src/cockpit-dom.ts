@@ -1,6 +1,7 @@
 import type { ColorideEditorView } from "@coloride/editor-cm6";
 import { ActivityBar } from "./cockpit/activity-bar.js";
 import { ChatGrid } from "./cockpit/chat-grid.js";
+import { type DebugHost, DebugPanel } from "./cockpit/debug-panel.js";
 import { Inspector } from "./cockpit/inspector.js";
 import { SidebarPanels } from "./cockpit/sidebar-panels.js";
 import {
@@ -28,6 +29,11 @@ import type {
 } from "./stores/index.js";
 import { UI_STRINGS, uiText } from "./ui-strings.js";
 
+export type {
+  DebugCommandMessage,
+  DebugEventMessage,
+  DebugHost,
+} from "./cockpit/debug-panel.js";
 export type {
   TerminalHandle,
   TerminalHost,
@@ -61,6 +67,8 @@ export interface CockpitDomControllerOptions {
   readonly workspaceTrust?: WorkspaceTrustHost;
   /** Shells for the integrated terminal (Ctrl+`). Without it the terminal is not offered. */
   readonly terminalHost?: TerminalHost;
+  /** JavaScript debugging (F5). Without it the debugger is not offered. */
+  readonly debugHost?: DebugHost;
   /** The terminal emulator; xterm.js by default. */
   readonly createTerminalView?: TerminalViewFactory;
   readonly searchWorkspace?: (query: string) => Promise<readonly CockpitSearchResultItem[]>;
@@ -102,6 +110,11 @@ export class CockpitDomController {
   private readonly inspector: Inspector;
   private readonly trustBanner: TrustBanner | null;
   private readonly terminal: TerminalDrawer | null;
+  private readonly debugPanel: DebugPanel | null;
+  /** Breakpoints of every file, keyed by project and document id. */
+  private readonly breakpoints = new Map<string, readonly number[]>();
+  /** Set while the editor switches file: its breakpoint changes then are not the user's. */
+  private switchingDocument = false;
   private zone4RenderCount = 0;
   private analysisRequestSequence = 0;
   private readonly onUnsavedCountChange: ((count: number) => void) | undefined;
@@ -181,6 +194,15 @@ export class CockpitDomController {
       ? new TerminalDrawer(doc, options.terminalHost, options.createTerminalView ?? createXtermView)
       : null;
     if (this.terminal) this.chatGrid.element.append(this.terminal.element);
+    this.debugPanel = options.debugHost
+      ? new DebugPanel(doc, options.debugHost, {
+          currentFile: () =>
+            this.inspector.isShowingFile() ? editorView.getStoreSnapshot().documentId : null,
+          breakpoints: () => this.projectBreakpoints(),
+          projectPath: () => stores.navigation.getState().projectPath,
+        })
+      : null;
+    if (this.debugPanel) this.sidebar.debugSection.prepend(this.debugPanel.element);
     this.trustBanner = options.workspaceTrust ? new TrustBanner(doc, options.workspaceTrust) : null;
     if (this.trustBanner) {
       this.shell.append(this.trustBanner.element);
@@ -272,6 +294,12 @@ export class CockpitDomController {
         this.reportUnsaved();
         if (snap.lastIpcError) this.inspector.reportError(snap.lastIpcError);
         if (snap.lastAckSnapshot) this.requestNativeAnalysis(snap.documentId);
+      }),
+      editorView.onBreakpointsChange((lines) => {
+        if (this.switchingDocument || !this.inspector.isShowingFile()) return;
+        const documentId = editorView.getStoreSnapshot().documentId;
+        this.breakpoints.set(this.breakpointKey(documentId), lines);
+        this.debugPanel?.breakpointsChanged(documentId, lines);
       }),
       this.onboardingController.store.subscribe(() => {
         if (stores.zone1.getState().activeSection === "mcp") this.sidebar.update();
@@ -428,14 +456,41 @@ export class CockpitDomController {
       .chats.find((chat) => chat.chatId === z4.syncedChatId);
     const content =
       storedContent ?? targetChat?.targetDocumentContent ?? this.editorView.getDocumentText();
-    this.editorView.switchDocument(z4.activeDocumentId, content, [
-      {
-        fromLine: 1,
-        toLine: 1,
-        state: z4.activeValidationState,
-        snapshotHash: `sync-${z4.syncedChatId}`,
-      },
-    ]);
+    // Read before switching: the switch clears the editor's breakpoints.
+    const breakpoints = this.breakpoints.get(this.breakpointKey(z4.activeDocumentId)) ?? [];
+    this.switchingDocument = true;
+    try {
+      this.editorView.switchDocument(z4.activeDocumentId, content, [
+        {
+          fromLine: 1,
+          toLine: 1,
+          state: z4.activeValidationState,
+          snapshotHash: `sync-${z4.syncedChatId}`,
+        },
+      ]);
+      if (breakpoints.length > 0) this.editorView.setBreakpointLines(breakpoints);
+    } finally {
+      this.switchingDocument = false;
+    }
+  }
+
+  private breakpointKey(documentId: string): string {
+    return `${this.stores.navigation.getState().projectPath}\n${documentId}`;
+  }
+
+  /** The open project's breakpoints, by document id. */
+  private projectBreakpoints(): Map<string, readonly number[]> {
+    const prefix = `${this.stores.navigation.getState().projectPath}\n`;
+    const result = new Map<string, readonly number[]>();
+    for (const [key, lines] of this.breakpoints) {
+      if (key.startsWith(prefix) && lines.length > 0) result.set(key.slice(prefix.length), lines);
+    }
+    return result;
+  }
+
+  /** The debugger panel; null when the host offers none. */
+  getDebugPanel(): DebugPanel | null {
+    return this.debugPanel;
   }
 
   /** The integrated terminal; null when the host offers none. */
@@ -444,6 +499,10 @@ export class CockpitDomController {
   }
 
   private handleShortcut(event: KeyboardEvent): void {
+    if (this.debugPanel?.handleKey(event)) {
+      event.preventDefault();
+      return;
+    }
     // Ctrl+` (also on macOS, as in VS Code): show or hide the terminal.
     if (this.terminal && event.ctrlKey && !event.metaKey && event.code === "Backquote") {
       event.preventDefault();

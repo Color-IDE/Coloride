@@ -184,6 +184,11 @@ export class SidebarPanels {
     );
   }
 
+  /** The Debug section, where the debugger panel is placed above the AST lists. */
+  get debugSection(): HTMLElement {
+    return this.debug;
+  }
+
   private updateDebug(
     symbols: readonly CockpitAstSymbolItem[],
     impacted: readonly CockpitImpactedTestItem[],

@@ -38,6 +38,13 @@ import {
   encodeEditorTransactionBinary,
 } from "./binary-ipc.js";
 import {
+  breakpointKeyBindings,
+  breakpointLines,
+  breakpointsField,
+  colorideBreakpoints,
+  setBreakpointsEffect,
+} from "./breakpoints.js";
+import {
   type EditorRangeDecoration,
   colorideStateDecorations,
   colorideStateField,
@@ -139,6 +146,7 @@ export class ColorideEditorView {
     },
   });
   private discardedStaleLanguageAnswers = 0;
+  private readonly breakpointListeners = new Set<(lines: readonly number[]) => void>();
   private mountCount = 0;
   private activeKeymapPreset: KeymapPresetId;
   private customKeybindings: Cm6TranslatedKeybinding[] = [];
@@ -263,6 +271,22 @@ export class ColorideEditorView {
     return this.languageFeatures;
   }
 
+  /** Breakpoints of the shown document (1-based lines), as moved by the edits since. */
+  getBreakpointLines(): number[] {
+    return breakpointLines(this.getEditorView().state);
+  }
+
+  /** Shows these breakpoints (another document's, after a switch). */
+  setBreakpointLines(lines: readonly number[]): void {
+    this.getEditorView().dispatch({ effects: setBreakpointsEffect.of(lines) });
+  }
+
+  /** Called with the lines whenever the user (or an edit) changes the breakpoints. */
+  onBreakpointsChange(listener: (lines: readonly number[]) => void): () => void {
+    this.breakpointListeners.add(listener);
+    return () => this.breakpointListeners.delete(listener);
+  }
+
   /** Diagnostics currently shown, at offsets of the current text. */
   getDiagnostics(): readonly EditorDiagnostic[] {
     return this.getEditorView().state.field(diagnosticsField).diagnostics;
@@ -299,6 +323,8 @@ export class ColorideEditorView {
       effects: [
         this.historyCompartment.reconfigure([]),
         clearDiagnosticsEffect.of(null),
+        // Breakpoints belong to the previous file (the cockpit restores this one's).
+        setBreakpointsEffect.of([]),
         setColorideDecorationsEffect.of(decorations),
         suppressLocalInvalidationAnnotation.of(true),
       ],
@@ -566,6 +592,7 @@ export class ColorideEditorView {
         indentUnit.of("  "),
         ...colorideStateDecorations(),
         colorideDiagnostics(),
+        colorideBreakpoints(),
         highlightSelectedLineGutter(),
         scopeGuides(),
         textOnlySelection(),
@@ -584,6 +611,7 @@ export class ColorideEditorView {
         autocompletion({ override: [this.languageFeatures.completionSource] }),
         keymap.of([
           ...this.languageFeatures.keyBindings(),
+          ...breakpointKeyBindings,
           ...closeBracketsKeymap,
           ...completionKeymap,
           ...defaultKeymap,
@@ -632,6 +660,10 @@ export class ColorideEditorView {
         },
       }),
       EditorView.updateListener.of((update) => {
+        if (update.state.field(breakpointsField) !== update.startState.field(breakpointsField)) {
+          const lines = breakpointLines(update.state);
+          for (const listener of this.breakpointListeners) listener(lines);
+        }
         if (!update.docChanged) {
           return;
         }

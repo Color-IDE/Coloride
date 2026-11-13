@@ -1,4 +1,5 @@
 pub mod contracts;
+pub mod dap;
 pub mod document;
 pub mod journal;
 pub mod lazy_boot;
@@ -10,6 +11,7 @@ pub mod terminal;
 pub mod trust;
 
 pub use contracts::*;
+pub use dap::*;
 pub use document::*;
 pub use journal::*;
 pub use lazy_boot::*;
