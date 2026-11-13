@@ -4,7 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { StrictMode, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import "@coloride/web-ui/theme.css";
-import type { NativeMigrationReport } from "@coloride/web-ui";
+import type { NativeMigrationReport, WorkspaceTrustReport } from "@coloride/web-ui";
 import {
   type BackgroundServicesState,
   decodeWorkspaceSessionCacheBinary,
@@ -136,6 +136,16 @@ function ColorideDesktopApp() {
           // Rust holds the window open while this is above zero (see commands/window.rs).
           onUnsavedCountChange: (count) => {
             void invoke("report_unsaved_buffers_command", { count });
+          },
+          // The decision is taken in a native dialog owned by the Rust side (commands/trust.rs).
+          workspaceTrust: {
+            getTrust: () => invoke<WorkspaceTrustReport>("workspace_trust_command"),
+            requestTrust: async () => {
+              const report = await invoke<WorkspaceTrustReport>("request_workspace_trust_command");
+              // Services that were held back (language servers, linters) may start now.
+              if (report.state === "Trusted") void invoke("initialize_background_services_command");
+              return report;
+            },
           },
           searchWorkspace: (query) =>
             invoke<NativeSearchResult[]>("search_workspace_command", { query, limit: 100 }),

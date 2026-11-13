@@ -85,6 +85,12 @@ export const UI_STRINGS = {
     discard: "Don't save",
     cancel: "Cancel",
   },
+  trust: {
+    restrictedTitle: "Restricted mode",
+    restrictedDetail:
+      "Nothing from this folder is run: no language servers, linters, Git hooks, tasks or debuggers.",
+    trustFolder: "Trust folder…",
+  },
   sidebar: {
     navigation: "Folder, groups and sessions",
     openProject: "Open project",

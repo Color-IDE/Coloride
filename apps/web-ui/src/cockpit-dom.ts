@@ -4,6 +4,11 @@ import { ChatGrid } from "./cockpit/chat-grid.js";
 import { Inspector } from "./cockpit/inspector.js";
 import { SidebarPanels } from "./cockpit/sidebar-panels.js";
 import { TitleBar } from "./cockpit/title-bar.js";
+import {
+  TrustBanner,
+  type WorkspaceTrustHost,
+  type WorkspaceTrustReport,
+} from "./cockpit/trust-banner.js";
 import { askUnsavedPrompt } from "./cockpit/unsaved-dialog.js";
 import { OnboardingModalController, createInitialOnboardingState } from "./onboarding/index.js";
 import type {
@@ -16,6 +21,12 @@ import type {
   Zone4InspectorState,
 } from "./stores/index.js";
 import { UI_STRINGS, uiText } from "./ui-strings.js";
+
+export type {
+  WorkspaceTrustHost,
+  WorkspaceTrustReport,
+  WorkspaceTrustState,
+} from "./cockpit/trust-banner.js";
 
 export interface CockpitDomControllerOptions {
   readonly rootContainer: HTMLElement;
@@ -30,6 +41,11 @@ export interface CockpitDomControllerOptions {
    * can hold back closing the window while it is above zero.
    */
   readonly onUnsavedCountChange?: (count: number) => void;
+  /**
+   * Workspace Trust decision kept by the host. Without it there is no host able to run anything
+   * from the folder, so no restricted-mode notice is shown.
+   */
+  readonly workspaceTrust?: WorkspaceTrustHost;
   readonly searchWorkspace?: (query: string) => Promise<readonly CockpitSearchResultItem[]>;
   readonly analyzeDocument?: (
     documentId: string,
@@ -67,6 +83,7 @@ export class CockpitDomController {
   private readonly sidebar: SidebarPanels;
   private readonly chatGrid: ChatGrid;
   private readonly inspector: Inspector;
+  private readonly trustBanner: TrustBanner | null;
   private zone4RenderCount = 0;
   private analysisRequestSequence = 0;
   private readonly onUnsavedCountChange: ((count: number) => void) | undefined;
@@ -142,6 +159,11 @@ export class CockpitDomController {
       this.inspector.element,
     );
     rootContainer.append(this.shell);
+    this.trustBanner = options.workspaceTrust ? new TrustBanner(doc, options.workspaceTrust) : null;
+    if (this.trustBanner) {
+      this.shell.append(this.trustBanner.element);
+      void this.trustBanner.refresh();
+    }
 
     this.onboardingController.mountModal(this.shell);
     this.renderLayout();
@@ -157,6 +179,11 @@ export class CockpitDomController {
     doc.addEventListener("keydown", onKeydown);
     this.unsubscribers.push(
       () => doc.removeEventListener("keydown", onKeydown),
+      // Each folder has its own trust decision: ask again whenever another one is opened.
+      stores.navigation.subscribeSelector(
+        (state) => state.projectPath,
+        () => void this.trustBanner?.refresh(),
+      ),
       stores.navigation.subscribeSelector(
         (state) => [state.projectPath, state.activeGroupId] as const,
         ([projectPath, groupId]) => this.inspector.changeScope(projectPath, groupId),
@@ -232,6 +259,16 @@ export class CockpitDomController {
 
   getOnboardingController(): OnboardingModalController {
     return this.onboardingController;
+  }
+
+  /** Trust decision last reported by the host; null when the cockpit has no trust host. */
+  getWorkspaceTrust(): WorkspaceTrustReport | null {
+    return this.trustBanner?.getReport() ?? null;
+  }
+
+  /** Re-reads the trust decision from the host (after it changed outside the banner). */
+  async refreshWorkspaceTrust(): Promise<void> {
+    await this.trustBanner?.refresh();
   }
 
   async saveActiveDocument(): Promise<void> {
@@ -326,6 +363,7 @@ export class CockpitDomController {
   destroy(): void {
     for (const unsubscribe of this.unsubscribers) unsubscribe();
     this.unsubscribers.length = 0;
+    this.trustBanner?.destroy();
     this.chatGrid.destroy();
     this.inspector.destroy();
     this.sidebar.destroy();

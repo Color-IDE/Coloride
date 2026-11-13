@@ -201,6 +201,54 @@
   .filetree-color-muted {
     color: #8a8a8a;
   }
+  /* Restricted-mode notice of an untrusted folder: floats over the shell, moves no zone */
+  .coloride-trust-banner {
+    position: absolute;
+    left: 60px;
+    bottom: 12px;
+    z-index: 15;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    max-width: min(520px, calc(100% - 72px));
+    padding: 8px 10px 8px 12px;
+    border: 1px solid rgba(255, 180, 80, 0.35);
+    border-radius: 10px;
+    background: var(--color-card);
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    box-shadow: 0 8px 24px #0006;
+  }
+  .coloride-trust-banner[hidden] {
+    display: none;
+  }
+  .coloride-trust-banner strong {
+    display: block;
+    color: #ffb450;
+    font-weight: 600;
+  }
+  .coloride-trust-banner button {
+    flex: none;
+    height: 26px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 6px;
+    background: #e8e8e8;
+    color: #1a1a1a;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .coloride-trust-banner button:hover {
+    background: #fff;
+  }
+  .coloride-trust-banner button:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+  .coloride-trust-banner button:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.5);
+    outline-offset: 2px;
+  }
   /* Confirmation shown when closing a tab that has unsaved changes */
   .coloride-unsaved-overlay {
     position: absolute;

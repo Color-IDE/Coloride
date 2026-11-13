@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Mutex;
 
 use context_engine::SqliteWalContextEngine;
+use host_core::{WorkspaceTrustGate, WORKSPACE_TRUST_STORE_FILENAME};
 
 use crate::bridge::DesktopBinaryEditorBridge;
 
@@ -10,6 +11,9 @@ use crate::bridge::DesktopBinaryEditorBridge;
 pub(crate) struct DesktopAppState {
     pub(crate) bridge: Mutex<DesktopBinaryEditorBridge>,
     pub(crate) workspace_root: Mutex<Option<PathBuf>>,
+    /// Trust gate of the open workspace. `None` (no workspace, or a root whose decision cannot
+    /// be recorded) means untrusted: nothing may be launched.
+    pub(crate) trust_gate: Mutex<Option<WorkspaceTrustGate>>,
     pub(crate) app_data_dir: PathBuf,
     pub(crate) context_engine: Mutex<Option<SqliteWalContextEngine>>,
     /// Bumped (under the `context_engine` lock) each time a workspace is opened. An index built
@@ -29,6 +33,7 @@ impl DesktopAppState {
         Self {
             bridge: Mutex::new(bridge),
             workspace_root: Mutex::new(None),
+            trust_gate: Mutex::new(None),
             app_data_dir,
             context_engine: Mutex::new(None),
             workspace_generation: AtomicU64::new(0),
@@ -36,6 +41,11 @@ impl DesktopAppState {
             unsaved_buffers: AtomicUsize::new(0),
             exit_confirmed: AtomicBool::new(false),
         }
+    }
+
+    /// Where the user's trust decisions are kept (survives restarts).
+    pub(crate) fn trust_store_path(&self) -> PathBuf {
+        self.app_data_dir.join(WORKSPACE_TRUST_STORE_FILENAME)
     }
 
     /// Whether closing the window or quitting must first ask the UI what to do with unsaved edits.

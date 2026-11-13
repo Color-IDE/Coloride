@@ -94,6 +94,20 @@ pub(crate) fn load_workspace(
         .context_engine
         .lock()
         .map_err(|_| "context engine lock poisoned".to_string())?;
+    // The previous workspace's gate is closed first: anything still holding it (a language
+    // server supervisor, a pending trust prompt) can no longer launch a process. The new
+    // workspace starts from its persisted decision, untrusted by default.
+    let mut trust_gate = state
+        .trust_gate
+        .lock()
+        .map_err(|_| "workspace trust lock poisoned".to_string())?;
+    if let Some(previous) = trust_gate.take() {
+        previous.close();
+    }
+    *trust_gate = host_core::WorkspaceTrustGate::open(state.trust_store_path(), &canonical)
+        .map_err(|error| tracing::warn!(%error, "workspace stays untrusted"))
+        .ok();
+    drop(trust_gate);
     *state
         .workspace_root
         .lock()

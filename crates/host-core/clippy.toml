@@ -1,0 +1,6 @@
+# Every process launched by host-core must go through `WorkspaceTrustGate::command`
+# (`src/trust.rs`), so that an untrusted workspace can never start one (AGENTS.md rule 6).
+disallowed-methods = [
+    { path = "std::process::Command::new", reason = "launch processes through WorkspaceTrustGate::command" },
+    { path = "tokio::process::Command::new", reason = "launch processes through WorkspaceTrustGate::command" },
+]
