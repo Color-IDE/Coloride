@@ -7,6 +7,7 @@ import type {
   CockpitSearchResultItem,
   CockpitStoreBundle,
 } from "../stores/index.js";
+import { type ThinScrollbar, attachThinScrollbar } from "../thin-scrollbar.js";
 import { UI_STRINGS, uiText } from "../ui-strings.js";
 
 export interface SidebarPanelsOptions {
@@ -39,6 +40,7 @@ export class SidebarPanels {
   private readonly mcp: HTMLElement;
   private readonly wizardButton: HTMLButtonElement;
   private readonly mcpSummary: HTMLElement;
+  private readonly scrollbar: ThinScrollbar;
 
   constructor(
     doc: Document,
@@ -50,7 +52,12 @@ export class SidebarPanels {
       "coloride-zone-2-sidebar bg-sidebar border-y border-l border-r-0 border-white/8 rounded-tl-[16px] rounded-bl-[16px] p-2.5 h-full";
     this.element.setAttribute("aria-label", UI_STRINGS.shell.sidebar);
     this.element.style.minWidth = "0";
-    this.element.style.overflow = "auto";
+    // The panel scrolls inside `scroll`, with the same thin overlay scrollbar as the file tree
+    // (the native one is hidden); the panel itself only clips and positions the scrollbar.
+    this.element.style.overflow = "hidden";
+    this.element.style.position = "relative";
+    const scroll = doc.createElement("div");
+    scroll.className = "coloride-zone-2-scroll";
 
     this.projectControls = doc.createElement("div");
     this.projectControls.className = "sidebar-project-controls";
@@ -95,7 +102,9 @@ export class SidebarPanels {
     this.mcpSummary.className = "coloride-mcp-onboarding-summary";
     this.mcp.append(this.wizardButton, this.mcpSummary);
 
-    this.element.append(this.projectControls, this.sessions, this.search, this.debug, this.mcp);
+    scroll.append(this.projectControls, this.sessions, this.search, this.debug, this.mcp);
+    this.element.append(scroll);
+    this.scrollbar = attachThinScrollbar(this.element, scroll, "y");
 
     this.workspaceSidebar = new WorkspaceSidebar({
       controlsHost: this.projectControls,
@@ -128,6 +137,7 @@ export class SidebarPanels {
   }
 
   destroy(): void {
+    this.scrollbar.destroy();
     this.workspaceSidebar.destroy();
   }
 

@@ -265,6 +265,16 @@
   .sidebar-row--session .sidebar-rename-input {
     font-size: 13px;
   }
+  /* The panel's scroller: native scrollbar hidden, a thin overlay one is drawn instead. */
+  .coloride-zone-2-scroll {
+    height: 100%;
+    padding-right: 4px; /* keeps the rows clear of the scrollbar */
+    overflow: auto;
+    scrollbar-width: none;
+  }
+  .coloride-zone-2-scroll::-webkit-scrollbar {
+    display: none;
+  }
   .sidebar-menu {
     position: absolute;
     right: var(--sidebar-edge);
