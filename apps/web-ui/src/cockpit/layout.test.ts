@@ -244,4 +244,36 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
     controller.destroy();
     rootContainer.remove();
   });
+  it("leaves Alt+Arrow to the text while editing, and switches sessions otherwise", () => {
+    const rootContainer = document.createElement("div");
+    document.body.appendChild(rootContainer);
+    const stores = createCockpitStoreBundle({
+      initialChats: [
+        { chatId: "chat-1", title: "#1", modelName: "Codex", validationState: "ValidatedGreen" },
+        { chatId: "chat-2", title: "#2", modelName: "Claude", validationState: "ReviewYellow" },
+      ],
+    });
+    const editorView = new ColorideEditorView({
+      initialDocumentId: "src/main.ts",
+      initialContent: "const ready = true;",
+      ipcChannel: new InMemoryBinaryHostBridge(),
+    });
+    const controller = new CockpitDomController({ rootContainer, stores, editorView });
+    const altRight = (target: EventTarget) =>
+      target.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowRight", altKey: true, bubbles: true }),
+      );
+    // In the editor (word movement) and in a text field: no session change.
+    altRight(editorView.getEditorView().contentDOM);
+    expect(stores.zone3.getState().activeChatId).toBe("chat-1");
+    const field = document.createElement("input");
+    rootContainer.append(field);
+    altRight(field);
+    expect(stores.zone3.getState().activeChatId).toBe("chat-1");
+    // Outside any text: it still switches.
+    altRight(document.body);
+    expect(stores.zone3.getState().activeChatId).toBe("chat-2");
+    controller.destroy();
+    rootContainer.remove();
+  });
 });

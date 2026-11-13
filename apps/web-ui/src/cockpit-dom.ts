@@ -315,6 +315,9 @@ export class CockpitDomController {
       return;
     }
     if (event.altKey && (event.key === "ArrowRight" || event.key === "ArrowLeft")) {
+      // Alt+Arrow also moves the caret by word in the editor and in text fields (macOS): there it
+      // belongs to the text, never to the session switcher.
+      if (event.defaultPrevented || isTextEditingTarget(event.target)) return;
       const { chats, activeChatId } = this.stores.zone3.getState();
       const index = chats.findIndex((chat) => chat.chatId === activeChatId);
       if (index < 0 || chats.length < 2) return;
@@ -342,4 +345,12 @@ export class CockpitDomController {
         // A newer document switch or edit may invalidate this request; the next host snapshot retries.
       });
   }
+}
+
+/** Whether keys typed at `target` edit text: a field, or the code editor's content. */
+function isTextEditingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return (
+    target.isContentEditable || target.closest("input, textarea, [contenteditable='true']") !== null
+  );
 }
