@@ -96,8 +96,12 @@ export interface CockpitChatMessage {
   readonly streaming: boolean;
 }
 
+/** What a Zone 3 panel holds: an agent session, or a shell. Absent means an agent session. */
+export type CockpitChatKind = "agent" | "terminal";
+
 export interface CockpitChatTab {
   readonly chatId: string;
+  readonly kind?: CockpitChatKind;
   readonly title: string;
   readonly modelName: string;
   readonly validationState: ColorideValidationState;
@@ -136,6 +140,12 @@ export interface CreateChatOptions {
   readonly position?: SplitPosition;
   readonly title?: string;
   readonly modelName?: string;
+  readonly kind?: CockpitChatKind;
+  /**
+   * Opens the panel to the right of the active one, so panels follow the order of the tabs.
+   * When that leaves no room it is placed wherever it fits.
+   */
+  readonly nextToActive?: boolean;
 }
 
 export interface CockpitStoreBundle extends WorkspaceNavigationActions {

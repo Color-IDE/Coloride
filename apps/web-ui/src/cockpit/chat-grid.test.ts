@@ -9,6 +9,17 @@ import {
 } from "../index.js";
 import { type LayoutNode, panelIds } from "../layout-tree.js";
 
+/** The header + opens a menu: Codex, then Interface, creates an agent session. */
+function addSessionFromMenu(root: HTMLElement): void {
+  root.querySelector<HTMLButtonElement>(".coloride-header-tab-add")?.click();
+  const pick = (label: string) =>
+    Array.from(document.querySelectorAll<HTMLButtonElement>(".coloride-new-panel-item"))
+      .find((item) => item.textContent?.startsWith(label))
+      ?.click();
+  pick("Codex");
+  pick("Interface");
+}
+
 describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
   it("keeps work groups separate when changing project folders", () => {
     const stores = createCockpitStoreBundle();
@@ -219,7 +230,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
 
   it("creates sessions from the header + and from each panel's split buttons", () => {
     const { root, stores, cells, editorView, cleanup } = mount();
-    root.querySelector<HTMLButtonElement>(".coloride-header-tab-add")?.click();
+    addSessionFromMenu(root);
     expect(cells().map((c) => c.dataset.chatId)).toContain("chat-3");
     expect(stores.zone3.getState().activeChatId).toBe("chat-3");
 
@@ -230,6 +241,62 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     // Acting on a panel's button must not also select that panel through its header.
     expect(stores.zone3.getState().activeChatId).toBe("chat-5");
     expect(editorView.getStoreSnapshot().mountCount).toBe(1);
+    cleanup();
+  });
+
+  it("a panel dragged by its header lands on an edge of another panel, or swaps with it", () => {
+    const { root, stores, cells, cleanup } = mount();
+    const layout = () =>
+      resolveGroupLayout(
+        stores.navigation.getState().groups.find((g) => g.id === "initial-group") as never,
+      );
+    const cell = (id: string) => cells().find((c) => c.dataset.chatId === id) as HTMLElement;
+    const header = (id: string) =>
+      cell(id).querySelector<HTMLElement>(".coloride-chat-cell-header") as HTMLElement;
+    const grid = root.querySelector<HTMLElement>(".coloride-zone-3-grid") as HTMLElement;
+    const pointer = (type: string, target: HTMLElement, x: number, y: number) =>
+      target.dispatchEvent(
+        Object.assign(new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0 }), {
+          pointerId: 1,
+        }),
+      );
+    // The pointer is over `b`, which is 100x100 at the origin (happy-dom has no layout).
+    document.elementFromPoint = () => cell("b");
+    cell("b").getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100 }) as DOMRect;
+
+    // A short press is a click (selects), not a move.
+    pointer("pointerdown", header("a"), 50, 50);
+    pointer("pointermove", header("a"), 52, 51);
+    expect(grid.dataset.dragging).toBeUndefined();
+    pointer("pointerup", header("a"), 52, 51);
+    expect(panelIds(layout())).toEqual(["a", "b"]);
+
+    // Dropped near the bottom edge of `b`: `a` goes under `b`.
+    pointer("pointerdown", header("a"), 50, 50);
+    pointer("pointermove", header("a"), 50, 95);
+    expect(grid.dataset.dragging).toBe("a");
+    expect(cell("a").dataset.dragging).toBe("true");
+    const indicator = cell("b").querySelector<HTMLElement>(".coloride-drop-indicator");
+    expect(indicator?.dataset.zone).toBe("bottom");
+    pointer("pointerup", header("a"), 50, 95);
+    expect(grid.dataset.dragging).toBeUndefined();
+    expect(root.querySelector(".coloride-drop-indicator")).toBeNull();
+    const moved = layout();
+    expect(moved?.kind).toBe("split");
+    expect(moved?.kind === "split" && moved.direction).toBe("column");
+    expect(panelIds(moved)).toEqual(["b", "a"]);
+
+    // Dropped in the middle of `b`: the two exchange places.
+    pointer("pointerdown", header("a"), 50, 50);
+    pointer("pointermove", header("a"), 50, 60);
+    expect(cell("b").querySelector<HTMLElement>(".coloride-drop-indicator")?.dataset.zone).toBe(
+      "center",
+    );
+    pointer("pointerup", header("a"), 50, 60);
+    const swapped = layout();
+    expect(panelIds(swapped)).toEqual(["a", "b"]);
+    expect(swapped?.kind === "split" && swapped.direction).toBe("column");
     cleanup();
   });
 
@@ -303,7 +370,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     expect(tabs()[1]?.getAttribute("aria-selected")).toBe("false");
 
     // New sessions appear as tabs as they are created; closing one removes its tab and panel.
-    root.querySelector<HTMLButtonElement>(".coloride-header-tab-add")?.click();
+    addSessionFromMenu(root);
     expect(tabs().map((tab) => tab.dataset.chatId)).toEqual(["a", "b", "chat-3"]);
     expect(tabs()[2]?.getAttribute("aria-selected")).toBe("true");
     tabs()[1]?.querySelector<HTMLButtonElement>(".coloride-header-tab-close")?.click();

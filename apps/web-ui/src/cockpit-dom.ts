@@ -4,11 +4,7 @@ import { ChatGrid } from "./cockpit/chat-grid.js";
 import { type DebugHost, DebugPanel } from "./cockpit/debug-panel.js";
 import { Inspector } from "./cockpit/inspector.js";
 import { SidebarPanels } from "./cockpit/sidebar-panels.js";
-import {
-  TerminalDrawer,
-  type TerminalHost,
-  type TerminalViewFactory,
-} from "./cockpit/terminal-drawer.js";
+import type { TerminalHost, TerminalViewFactory } from "./cockpit/terminal-pane.js";
 import { TitleBar } from "./cockpit/title-bar.js";
 import {
   TrustBanner,
@@ -39,7 +35,7 @@ export type {
   TerminalHost,
   TerminalView,
   TerminalViewFactory,
-} from "./cockpit/terminal-drawer.js";
+} from "./cockpit/terminal-pane.js";
 export { createXtermView } from "./cockpit/xterm-view.js";
 export type {
   WorkspaceTrustHost,
@@ -109,7 +105,7 @@ export class CockpitDomController {
   private readonly chatGrid: ChatGrid;
   private readonly inspector: Inspector;
   private readonly trustBanner: TrustBanner | null;
-  private readonly terminal: TerminalDrawer | null;
+  private readonly terminalAvailable: boolean;
   private readonly debugPanel: DebugPanel | null;
   /** Breakpoints of every file, keyed by project and document id. */
   private readonly breakpoints = new Map<string, readonly number[]>();
@@ -173,7 +169,17 @@ export class CockpitDomController {
       ...(options.switchWorkspace ? { switchWorkspace: options.switchWorkspace } : {}),
       ...(options.searchWorkspace ? { searchWorkspace: options.searchWorkspace } : {}),
     });
-    this.chatGrid = new ChatGrid(doc, stores, this.titleBar.zone3Header);
+    this.chatGrid = new ChatGrid(
+      doc,
+      stores,
+      this.titleBar.zone3Header,
+      options.terminalHost
+        ? {
+            host: options.terminalHost,
+            createView: options.createTerminalView ?? createXtermView,
+          }
+        : null,
+    );
 
     this.shell = doc.createElement("div");
     this.shell.className = "coloride-cockpit-shell";
@@ -190,10 +196,7 @@ export class CockpitDomController {
       this.inspector.element,
     );
     rootContainer.append(this.shell);
-    this.terminal = options.terminalHost
-      ? new TerminalDrawer(doc, options.terminalHost, options.createTerminalView ?? createXtermView)
-      : null;
-    if (this.terminal) this.chatGrid.element.append(this.terminal.element);
+    this.terminalAvailable = options.terminalHost !== undefined;
     this.debugPanel = options.debugHost
       ? new DebugPanel(doc, options.debugHost, {
           currentFile: () =>
@@ -420,7 +423,6 @@ export class CockpitDomController {
     for (const unsubscribe of this.unsubscribers) unsubscribe();
     this.unsubscribers.length = 0;
     this.trustBanner?.destroy();
-    this.terminal?.destroy();
     this.chatGrid.destroy();
     this.inspector.destroy();
     this.sidebar.destroy();
@@ -493,9 +495,11 @@ export class CockpitDomController {
     return this.debugPanel;
   }
 
-  /** The integrated terminal; null when the host offers none. */
-  getTerminal(): TerminalDrawer | null {
-    return this.terminal;
+  /** Shows the shell panel, creating it the first time (Ctrl+` / Ctrl+J). */
+  openTerminal(): void {
+    const existing = this.stores.zone3.getState().chats.find((chat) => chat.kind === "terminal");
+    if (existing) this.stores.selectChat(existing.chatId);
+    else this.stores.createChat({ kind: "terminal", nextToActive: true });
   }
 
   private handleShortcut(event: KeyboardEvent): void {
@@ -503,10 +507,15 @@ export class CockpitDomController {
       event.preventDefault();
       return;
     }
-    // Ctrl+` (also on macOS, as in VS Code): show or hide the terminal.
-    if (this.terminal && event.ctrlKey && !event.metaKey && event.code === "Backquote") {
+    // Ctrl+` (also on macOS, as in VS Code) or Ctrl/Cmd+J, for keyboards where the backtick is
+    // a dead key: go to the terminal panel, creating it if there is none.
+    const backtick =
+      event.ctrlKey && !event.metaKey && (event.code === "Backquote" || event.key === "`");
+    const panelKey =
+      (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "j";
+    if (this.terminalAvailable && (backtick || panelKey)) {
       event.preventDefault();
-      void this.terminal.toggle();
+      this.openTerminal();
       return;
     }
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {

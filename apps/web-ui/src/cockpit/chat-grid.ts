@@ -3,11 +3,13 @@ import {
   type LayoutNode,
   MIN_PANEL_SIZE_PX,
   minExtentPx,
+  movePanel,
   nodeAt,
   panel,
   panelIds,
   reconcileLayout,
   resizeBoundary,
+  swapPanels,
 } from "../layout-tree.js";
 import { PLUS_ICON } from "../sidebar/icons.js";
 import {
@@ -20,16 +22,46 @@ import {
 import { UI_STRINGS, uiText } from "../ui-strings.js";
 import { VirtualChatMessageListRenderer } from "../virtualizer.js";
 import { type HeaderTabSpec, HeaderTabs } from "./header-tabs.js";
+import { NewPanelMenu } from "./new-panel-menu.js";
 import {
   CLOSE_PANEL_ICON,
   MAXIMIZE_ICON,
   RESTORE_ICON,
   SPLIT_DOWN_ICON,
   SPLIT_RIGHT_ICON,
+  TERMINAL_ICON,
 } from "./panel-icons.js";
+import { type TerminalHost, TerminalPane, type TerminalViewFactory } from "./terminal-pane.js";
+
+/** What shells need: the host that starts them and the emulator that draws them. */
+export interface ChatGridTerminals {
+  readonly host: TerminalHost;
+  readonly createView: TerminalViewFactory;
+}
 
 /** A bar closer than this to another one of the same orientation is pulled onto it. */
 const SNAP_DISTANCE_PX = 8;
+/** A header pressed and moved less than this is a click, not a drag. */
+const DRAG_THRESHOLD_PX = 5;
+
+/** Where a dragged panel would land on the panel under the pointer. */
+type DropZone = "left" | "right" | "top" | "bottom" | "center";
+
+/** The edge nearest the pointer, or the middle (inner half of each side) of the target. */
+function dropZoneAt(rect: DOMRect, x: number, y: number): DropZone {
+  if (!(rect.width > 0) || !(rect.height > 0)) return "center";
+  const rx = (x - rect.left) / rect.width;
+  const ry = (y - rect.top) / rect.height;
+  if (rx > 0.25 && rx < 0.75 && ry > 0.25 && ry < 0.75) return "center";
+  const edges: Array<[DropZone, number]> = [
+    ["left", rx],
+    ["right", 1 - rx],
+    ["top", ry],
+    ["bottom", 1 - ry],
+  ];
+  edges.sort((a, b) => a[1] - b[1]);
+  return (edges[0] as [DropZone, number])[0];
+}
 
 interface ChatCellNodes {
   readonly el: HTMLElement;
@@ -41,6 +73,7 @@ interface ChatCellNodes {
   readonly close: HTMLButtonElement;
   readonly messages: HTMLElement;
   readonly logs: HTMLElement;
+  readonly kind: "agent" | "terminal";
 }
 
 /**
@@ -70,12 +103,31 @@ export class ChatGrid {
   private actionsKey = "";
   private readonly resizeObserver: ResizeObserver | null;
   private readonly messageRenderer = new VirtualChatMessageListRenderer();
+  /** One pane per terminal session, alive for as long as the session exists (any group). */
+  private readonly panes = new Map<string, TerminalPane>();
+  private readonly newPanelMenu: NewPanelMenu;
+  private focusedTerminalId: string | null = null;
+  /** Shown over the panel a dragged one would land on. */
+  private readonly dropIndicator: HTMLElement;
+  private drag: {
+    chatId: string;
+    header: HTMLElement;
+    pointerId: number;
+    startX: number;
+    startY: number;
+    started: boolean;
+    target: { chatId: string; zone: DropZone } | null;
+  } | null = null;
 
   constructor(
     doc: Document,
     private readonly stores: CockpitStoreBundle,
     header: HTMLElement,
+    private readonly terminals: ChatGridTerminals | null = null,
   ) {
+    this.newPanelMenu = new NewPanelMenu(doc);
+    this.dropIndicator = doc.createElement("div");
+    this.dropIndicator.className = "coloride-drop-indicator";
     this.element = doc.createElement("main");
     this.element.className =
       "coloride-zone-3-multichat bg-main border-t border-b border-l border-white/8 flex flex-col h-full";
@@ -96,11 +148,23 @@ export class ChatGrid {
       doc,
       "coloride-group-empty-add",
       UI_STRINGS.chat.newSession,
+      () => this.stores.createChat(),
     );
     this.empty.append(emptyText, this.emptyAdd);
 
-    this.addButton = this.createAddButton(doc, "coloride-header-tab-add", "");
-    this.addButton.setAttribute("aria-label", UI_STRINGS.chat.newSession);
+    this.addButton = this.createAddButton(doc, "coloride-header-tab-add", "", () =>
+      this.newPanelMenu.toggle(this.addButton, {
+        ...(this.terminals
+          ? {
+              openTerminal: () => this.stores.createChat({ kind: "terminal", nextToActive: true }),
+            }
+          : {}),
+        openAgentInterface: () => this.stores.createChat({ nextToActive: true }),
+      }),
+    );
+    this.addButton.setAttribute("aria-label", UI_STRINGS.chat.newMenu);
+    this.addButton.setAttribute("aria-haspopup", "menu");
+    this.addButton.setAttribute("aria-expanded", "false");
     this.addButton.innerHTML = PLUS_ICON;
     this.tabs = new HeaderTabs(doc, header, {
       ariaLabel: UI_STRINGS.shell.openSessions,
@@ -123,14 +187,19 @@ export class ChatGrid {
     this.resizeObserver?.observe(this.grid);
   }
 
-  private createAddButton(doc: Document, className: string, label: string): HTMLButtonElement {
+  private createAddButton(
+    doc: Document,
+    className: string,
+    label: string,
+    onClick: () => void,
+  ): HTMLButtonElement {
     const btn = doc.createElement("button");
     btn.type = "button";
     btn.className = className;
     if (label) btn.textContent = label;
     btn.addEventListener("click", () => {
       if (btn.disabled) return;
-      this.stores.createChat();
+      onClick();
     });
     return btn;
   }
@@ -181,7 +250,11 @@ export class ChatGrid {
   }
 
   destroy(): void {
+    this.cancelDrag();
     this.resizeObserver?.disconnect();
+    this.newPanelMenu.close(false);
+    for (const pane of this.panes.values()) pane.destroy();
+    this.panes.clear();
     this.tabs.destroy();
   }
 
@@ -198,8 +271,8 @@ export class ChatGrid {
         return {
           key: chat.chatId,
           label: chat.title,
-          title: `${chat.title} · ${chat.modelName}`,
-          icon: { text: token.icon },
+          title: chat.kind === "terminal" ? chat.title : `${chat.title} · ${chat.modelName}`,
+          icon: chat.kind === "terminal" ? { svg: TERMINAL_ICON } : { text: token.icon },
           selected: chat.chatId === z3.activeChatId,
           closable: this.canCloseSession(chat.chatId),
           data: { validationState: chat.validationState },
@@ -232,6 +305,13 @@ export class ChatGrid {
       );
     }
 
+    // A shell ends with its session, wherever the session was shown.
+    for (const [id, pane] of this.panes) {
+      if (!chatsById.has(id)) {
+        pane.destroy();
+        this.panes.delete(id);
+      }
+    }
     this.shownLayout = layout;
     this.shownGroupId = activeGroup?.id ?? null;
     const maximized = activeGroup ? resolveGroupMaximized(activeGroup) : null;
@@ -255,6 +335,7 @@ export class ChatGrid {
     const shape = layoutShape(displayed);
     if (this.layoutRoot?.isConnected && shape === this.layoutShape) {
       applySizes(displayed, this.layoutRoot, true);
+      this.startVisibleTerminals(z3.activeChatId);
       return;
     }
     // Moving a cell in the DOM resets its scroll position: put it back after the rebuild. The
@@ -268,6 +349,21 @@ export class ChatGrid {
     for (const [id, cell] of this.cells) {
       if (cell.el.isConnected) cell.messages.scrollTop = this.savedScrolls.get(id) ?? 0;
     }
+    this.startVisibleTerminals(z3.activeChatId);
+  }
+
+  /** Starts the shells that are on screen and gives the keyboard to a newly selected one. */
+  private startVisibleTerminals(activeChatId: string): void {
+    for (const [id, pane] of this.panes) {
+      if (!pane.element.isConnected) continue;
+      void pane.ensureStarted().then(() => {
+        if (this.focusedTerminalId !== activeChatId && id === activeChatId) {
+          this.focusedTerminalId = activeChatId;
+          pane.focus();
+        }
+      });
+    }
+    if (!this.panes.has(activeChatId)) this.focusedTerminalId = null;
   }
 
   /** `path` is the child indices from the root to `node`; separators remember it. */
@@ -447,12 +543,106 @@ export class ChatGrid {
     return bar;
   }
 
+  /**
+   * Dragging a panel by its header moves it: dropped on an edge of another panel it goes on
+   * that side of it; dropped in the middle the two exchange places. A short press is a click.
+   */
+  private beginDrag(chatId: string, header: HTMLElement, event: PointerEvent): void {
+    if (event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
+    // With one panel, or one shown alone, there is nowhere to go.
+    if (this.maximizedId || panelIds(this.shownLayout).length < 2) return;
+    this.drag = {
+      chatId,
+      header,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      started: false,
+      target: null,
+    };
+    header.setPointerCapture?.(event.pointerId);
+  }
+
+  private moveDrag(event: PointerEvent): void {
+    const drag = this.drag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    if (!drag.started) {
+      if (
+        Math.abs(event.clientX - drag.startX) < DRAG_THRESHOLD_PX &&
+        Math.abs(event.clientY - drag.startY) < DRAG_THRESHOLD_PX
+      )
+        return;
+      drag.started = true;
+      this.grid.dataset.dragging = drag.chatId;
+      this.cells.get(drag.chatId)?.el.setAttribute("data-dragging", "true");
+    }
+    const doc = this.grid.ownerDocument;
+    const under = doc.elementFromPoint?.(event.clientX, event.clientY) ?? null;
+    const cellEl = under?.closest<HTMLElement>(".coloride-chat-cell") ?? null;
+    const targetId = cellEl?.dataset.chatId;
+    if (!cellEl || !targetId || targetId === drag.chatId || !this.cells.has(targetId)) {
+      drag.target = null;
+      this.dropIndicator.remove();
+      return;
+    }
+    const zone = dropZoneAt(cellEl.getBoundingClientRect(), event.clientX, event.clientY);
+    drag.target = { chatId: targetId, zone };
+    this.dropIndicator.dataset.zone = zone;
+    if (this.dropIndicator.parentElement !== cellEl) cellEl.append(this.dropIndicator);
+  }
+
+  private endDrag(event: PointerEvent): void {
+    const drag = this.drag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    const { chatId, target, started } = drag;
+    this.cancelDrag();
+    if (!started || !target || !this.shownLayout || !this.shownGroupId) return;
+    const next =
+      target.zone === "center"
+        ? swapPanels(this.shownLayout, chatId, target.chatId)
+        : movePanel(
+            this.shownLayout,
+            chatId,
+            target.chatId,
+            target.zone === "left" || target.zone === "right" ? "row" : "column",
+            target.zone === "left" || target.zone === "top" ? "before" : "after",
+          );
+    if (next && next !== this.shownLayout) this.stores.setWorkGroupLayout(this.shownGroupId, next);
+  }
+
+  private cancelDrag(): void {
+    const drag = this.drag;
+    this.drag = null;
+    if (!drag) return;
+    drag.header.releasePointerCapture?.(drag.pointerId);
+    delete this.grid.dataset.dragging;
+    this.cells.get(drag.chatId)?.el.removeAttribute("data-dragging");
+    this.dropIndicator.remove();
+  }
+
   private updateCell(chat: CockpitChatTab, active: boolean): HTMLElement {
     const z3 = this.stores.zone3.getState();
     let cell = this.cells.get(chat.chatId);
     if (!cell) {
-      cell = this.createCell(chat.chatId);
+      cell = this.createCell(chat.chatId, chat.kind === "terminal" ? "terminal" : "agent");
       this.cells.set(chat.chatId, cell);
+    }
+    if (cell.kind === "terminal" && this.terminals) {
+      let pane = this.panes.get(chat.chatId);
+      if (!pane) {
+        pane = new TerminalPane(
+          this.grid.ownerDocument,
+          this.terminals.host,
+          this.terminals.createView,
+        );
+        this.panes.set(chat.chatId, pane);
+      }
+      if (pane.element.parentElement !== cell.el) cell.el.append(pane.element);
+      cell.el.dataset.kind = "terminal";
+      cell.el.dataset.active = String(active);
+      cell.el.setAttribute("aria-label", chat.title);
+      if (cell.title.textContent !== chat.title) cell.title.textContent = chat.title;
+      return cell.el;
     }
     const token = COLORIDE_DESIGN_TOKENS[chat.validationState];
     cell.el.dataset.validationState = chat.validationState;
@@ -471,14 +661,26 @@ export class ChatGrid {
     return cell.el;
   }
 
-  private createCell(chatId: string): ChatCellNodes {
+  private createCell(chatId: string, kind: "agent" | "terminal"): ChatCellNodes {
     const doc = this.grid.ownerDocument;
     const el = doc.createElement("section");
     el.className = "coloride-chat-cell";
     el.dataset.chatId = chatId;
+    // Working inside a panel (clicking its body, or focusing its terminal) selects it, so the
+    // header tab and the active panel follow where the user is.
+    const selectFromInside = () => {
+      if (this.stores.zone3.getState().activeChatId !== chatId) this.stores.selectChat(chatId);
+    };
+    el.addEventListener("pointerdown", selectFromInside);
+    el.addEventListener("focusin", selectFromInside);
     const header = doc.createElement("div");
     header.className = "coloride-chat-cell-header";
+    header.title = UI_STRINGS.chat.movePanel;
     header.addEventListener("click", () => this.stores.selectChat(chatId));
+    header.addEventListener("pointerdown", (event) => this.beginDrag(chatId, header, event));
+    header.addEventListener("pointermove", (event) => this.moveDrag(event));
+    header.addEventListener("pointerup", (event) => this.endDrag(event));
+    header.addEventListener("pointercancel", () => this.cancelDrag());
     const title = doc.createElement("span");
     title.className = "coloride-chat-cell-title";
     const actions = doc.createElement("div");
@@ -501,13 +703,23 @@ export class ChatGrid {
       "coloride-split-right",
       SPLIT_RIGHT_ICON,
       UI_STRINGS.chat.splitRight,
-      () => this.stores.createChat({ from: chatId, direction: "row" }),
+      () =>
+        this.stores.createChat({
+          from: chatId,
+          direction: "row",
+          ...(kind === "terminal" ? { kind } : {}),
+        }),
     );
     const splitDown = action(
       "coloride-split-down",
       SPLIT_DOWN_ICON,
       UI_STRINGS.chat.splitDown,
-      () => this.stores.createChat({ from: chatId, direction: "column" }),
+      () =>
+        this.stores.createChat({
+          from: chatId,
+          direction: "column",
+          ...(kind === "terminal" ? { kind } : {}),
+        }),
     );
     const maximize = action(
       "coloride-maximize-panel",
@@ -529,8 +741,13 @@ export class ChatGrid {
     messages.className = "coloride-chat-cell-messages";
     const logs = doc.createElement("div");
     logs.className = "coloride-chat-cell-logs";
+    // A shell shows its pane instead of messages and logs.
+    if (kind === "terminal") {
+      messages.hidden = true;
+      logs.hidden = true;
+    }
     el.append(header, messages, logs);
-    return { el, header, title, splitRight, splitDown, maximize, close, messages, logs };
+    return { el, header, title, splitRight, splitDown, maximize, close, messages, logs, kind };
   }
 }
 

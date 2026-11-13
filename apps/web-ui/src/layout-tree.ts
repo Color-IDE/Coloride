@@ -326,6 +326,20 @@ export function movePanel(
   return splitPanel(without, targetId, id, direction, position);
 }
 
+/** Exchanges the places of two panels, sizes included. Either id missing: no change. */
+export function swapPanels(root: LayoutNode | null, a: string, b: string): LayoutNode | null {
+  if (!root || a === b || !hasPanel(root, a) || !hasPanel(root, b)) return root;
+  const swapIn = (node: LayoutNode): LayoutNode =>
+    node.kind === "panel"
+      ? node.id === a
+        ? panel(b)
+        : node.id === b
+          ? panel(a)
+          : node
+      : { ...node, children: node.children.map(swapIn) };
+  return swapIn(root);
+}
+
 /** The split at `path` (child indices from the root); null when there is none (e.g. a panel). */
 export function nodeAt(root: LayoutNode, path: LayoutPath): SplitNode | null {
   let current: LayoutNode = root;

@@ -1,4 +1,11 @@
-import { type AreaSize, DEFAULT_LAYOUT_ASPECT, addPanel, placePanel } from "../layout-tree.js";
+import {
+  type AreaSize,
+  DEFAULT_LAYOUT_ASPECT,
+  type SplitDirection,
+  type SplitPosition,
+  addPanel,
+  placePanel,
+} from "../layout-tree.js";
 import { resolveGroupLayout, resolveGroupMaximized } from "../workspace-navigation.js";
 import type { StoreContext } from "./context.js";
 import type { CockpitChatTab, CockpitStoreBundle, CreateChatOptions } from "./types.js";
@@ -28,15 +35,28 @@ export function createChatActions(ctx: StoreContext): ChatActions {
     );
     if (!group) return null;
     const current = resolveGroupLayout(group);
-    const placement = {
-      ...(options?.from ? { target: options.from } : {}),
-      ...(options?.direction ? { direction: options.direction } : {}),
-      ...(options?.position ? { position: options.position } : {}),
-    };
-    // Without a measured area (not laid out yet) any placement is accepted.
-    const layout = panelArea
-      ? placePanel(current, chatId, panelArea, placement)
-      : addPanel(current, chatId, { ...placement, aspect: DEFAULT_LAYOUT_ASPECT });
+    const place = (placement: {
+      target?: string;
+      direction?: SplitDirection;
+      position?: SplitPosition;
+    }) =>
+      // Without a measured area (not laid out yet) any placement is accepted.
+      panelArea
+        ? placePanel(current, chatId, panelArea, placement)
+        : addPanel(current, chatId, { ...placement, aspect: DEFAULT_LAYOUT_ASPECT });
+    const active = zone3.getState().activeChatId;
+    const anchor = group.chatIds.includes(active) ? active : group.lastActiveChatId;
+    const inOrder =
+      options?.nextToActive && !options.from && anchor && group.chatIds.includes(anchor)
+        ? place({ target: anchor, direction: "row", position: "after" })
+        : null;
+    const layout =
+      inOrder ??
+      place({
+        ...(options?.from ? { target: options.from } : {}),
+        ...(options?.direction ? { direction: options.direction } : {}),
+        ...(options?.position ? { position: options.position } : {}),
+      });
     if (!layout) return null;
     return { group, layout };
   };
@@ -85,6 +105,9 @@ export function createChatActions(ctx: StoreContext): ChatActions {
     }
     if (chatState.activeChatId !== chatId)
       zone3.setState((prev) => ({ ...prev, activeChatId: chatId }));
+
+    // A shell has no document or validation state: the inspector keeps what it shows.
+    if (targetChat.kind === "terminal") return Math.max(0, performance.now() - t0);
 
     const nextDocId = targetChat.targetDocumentId ?? zone4.getState().activeDocumentId;
     const bufRecord = documents.get(nextDocId);
@@ -135,32 +158,47 @@ export function createChatActions(ctx: StoreContext): ChatActions {
       if (!plan) return null;
       const z3 = zone3.getState();
       const sibling = z3.chats.find((chat) => chat.chatId === (options?.from ?? z3.activeChatId));
-      const chat: CockpitChatTab = {
-        chatId,
-        title: options?.title?.trim() || `#${z3.chats.length + 1} New session`,
-        modelName: options?.modelName ?? sibling?.modelName ?? "Codex",
-        validationState: "UnchangedBlue",
-        agentExecutionStatus: "Idle",
-      };
+      const kind = options?.kind ?? "agent";
+      const chat: CockpitChatTab =
+        kind === "terminal"
+          ? {
+              chatId,
+              kind,
+              title:
+                options?.title?.trim() ||
+                `Terminal${z3.chats.filter((item) => item.kind === "terminal").length > 0 ? ` ${z3.chats.filter((item) => item.kind === "terminal").length + 1}` : ""}`,
+              modelName: "Shell",
+              validationState: "UnchangedBlue",
+            }
+          : {
+              chatId,
+              title: options?.title?.trim() || `#${z3.chats.length + 1} New session`,
+              modelName: options?.modelName ?? sibling?.modelName ?? "Codex",
+              validationState: "UnchangedBlue",
+              agentExecutionStatus: "Idle",
+            };
       zone3.setState((prev) => ({
         ...prev,
         chats: [...prev.chats, chat],
         messagesByChatId: { ...prev.messagesByChatId, [chatId]: [] },
         terminalLogsByChatId: { ...prev.terminalLogsByChatId, [chatId]: [] },
       }));
-      zone2.setState((prev) => ({
-        ...prev,
-        sessions: [
-          ...prev.sessions,
-          {
-            chatId,
-            title: chat.title,
-            modelName: chat.modelName,
-            validationState: chat.validationState,
-            targetDocumentId: zone4.getState().activeDocumentId,
-          },
-        ],
-      }));
+      // The sidebar lists agent sessions; a shell is only a panel.
+      if (kind !== "terminal") {
+        zone2.setState((prev) => ({
+          ...prev,
+          sessions: [
+            ...prev.sessions,
+            {
+              chatId,
+              title: chat.title,
+              modelName: chat.modelName,
+              validationState: chat.validationState,
+              targetDocumentId: zone4.getState().activeDocumentId,
+            },
+          ],
+        }));
+      }
       navigation.setState((prev) => ({
         ...prev,
         groups: prev.groups.map((group) =>

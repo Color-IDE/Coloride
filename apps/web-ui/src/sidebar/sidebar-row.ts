@@ -71,6 +71,25 @@ export class SidebarRow {
     }
   }
 
+  /** A small icon before the title of a session row (a terminal's, for instance); null removes it. */
+  setIcon(svg: string | null): void {
+    let icon = this.select.querySelector<HTMLElement>(".sidebar-row-icon");
+    if (svg === null) {
+      icon?.remove();
+      return;
+    }
+    if (!icon) {
+      icon = this.el.ownerDocument.createElement("span");
+      icon.className = "sidebar-row-icon";
+      icon.setAttribute("aria-hidden", "true");
+      this.select.insertBefore(icon, this.select.firstChild);
+    }
+    if (icon.dataset.svg !== svg) {
+      icon.dataset.svg = svg;
+      icon.innerHTML = svg;
+    }
+  }
+
   update(title: string, selected: boolean, expanded?: boolean): void {
     label(this.title, title);
     attribute(this.select, "title", title);
