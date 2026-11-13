@@ -265,6 +265,39 @@
   .sidebar-row--session .sidebar-rename-input {
     font-size: 13px;
   }
+  /* Bar between the side panel and Zone 3: a 9px grab area on the panel's right edge, with the
+     line shown on hover, focus and drag (the same look as the bars between panels). */
+  .coloride-shell-handle {
+    position: absolute;
+    z-index: 8;
+    top: 0;
+    bottom: 0;
+    left: calc(48px + var(--coloride-sidebar-width, 240px));
+    width: 9px;
+    margin-left: -4.5px;
+    cursor: col-resize;
+    touch-action: none;
+    outline: none;
+    -webkit-app-region: no-drag;
+  }
+  .coloride-shell-handle[hidden] {
+    display: none;
+  }
+  .coloride-shell-handle::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 4px;
+    width: 1px;
+    background: transparent;
+    transition: background 120ms ease;
+  }
+  .coloride-shell-handle:hover::after,
+  .coloride-shell-handle:focus-visible::after,
+  .coloride-shell-handle[data-dragging="true"]::after {
+    background: rgba(255, 255, 255, 0.4);
+  }
   /* The panel's scroller: native scrollbar hidden, a thin overlay one is drawn instead. */
   .coloride-zone-2-viewport {
     position: relative;
