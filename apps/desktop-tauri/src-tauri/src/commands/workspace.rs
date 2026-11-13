@@ -30,7 +30,13 @@ fn collect_workspace_nodes(
         .map_err(|error| format!("Failed to read {}: {error}", current.display()))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| format!("Failed to enumerate {}: {error}", current.display()))?;
-    entries.sort_by_key(|entry| entry.file_name().to_string_lossy().to_lowercase());
+    // Folders first, then files; each group alphabetical without regard to case (as in the
+    // usual editors), with the original name as the tie-break so the order is stable.
+    entries.sort_by_cached_key(|entry| {
+        let is_directory = entry.file_type().is_ok_and(|kind| kind.is_dir());
+        let name = entry.file_name().to_string_lossy().into_owned();
+        (!is_directory, name.to_lowercase(), name)
+    });
 
     for entry in entries {
         let path = entry.path();
@@ -208,6 +214,39 @@ mod tests {
         assert_eq!(state.workspace_generation.load(Ordering::SeqCst), 1);
         assert!(ensure_context_engine(&state));
         assert!(state.context_engine.lock().unwrap().is_some());
+    }
+
+    #[test]
+    fn the_tree_lists_folders_first_then_files_alphabetically_ignoring_case() {
+        let data = tempfile::tempdir().unwrap();
+        let workspace = tempfile::tempdir().unwrap();
+        for dir in ["zeta", "Apps", "crates", ".github"] {
+            std::fs::create_dir(workspace.path().join(dir)).unwrap();
+        }
+        for file in ["README.md", "biome.json", "AGENTS.md", ".gitignore"] {
+            std::fs::write(workspace.path().join(file), "x\n").unwrap();
+        }
+        std::fs::write(workspace.path().join("Apps/main.ts"), "x\n").unwrap();
+        let state = test_state(data.path());
+
+        let nodes = load_workspace(&state, workspace.path().to_str().unwrap()).unwrap();
+        assert_eq!(
+            nodes
+                .iter()
+                .map(|node| node.path.as_str())
+                .collect::<Vec<_>>(),
+            [
+                ".github",
+                "Apps",
+                "Apps/main.ts",
+                "crates",
+                "zeta",
+                ".gitignore",
+                "AGENTS.md",
+                "biome.json",
+                "README.md"
+            ]
+        );
     }
 
     #[test]

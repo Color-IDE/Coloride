@@ -63,6 +63,7 @@ export class FileTreePanel {
     readonly options: ExplorerTreeOptions;
   } | null = null;
   private scrollFrame = 0;
+  private resizeObserver: ResizeObserver | null = null;
 
   constructor(
     doc: Document,
@@ -118,6 +119,20 @@ export class FileTreePanel {
         this.options.onScroll?.(this.scrollTopPx, this.viewportHeightPx);
       });
     });
+    // The rows drawn depend on the viewport's height, which is only known once the panel is laid
+    // out (and changes with the window): without this the tree draws as many rows as the
+    // default height until the first scroll, and the rest of the list looks cut off.
+    if (typeof ResizeObserver !== "undefined") {
+      this.resizeObserver = new ResizeObserver(() => {
+        const height = this.scrollEl.clientHeight;
+        if (height > 0 && height !== this.viewportHeightPx) {
+          this.viewportHeightPx = height;
+          this.render();
+          this.options.onScroll?.(this.scrollTopPx, this.viewportHeightPx);
+        }
+      });
+      this.resizeObserver.observe(this.scrollEl);
+    }
     this.render();
   }
 
@@ -148,6 +163,7 @@ export class FileTreePanel {
   }
 
   destroy(): void {
+    this.resizeObserver?.disconnect();
     if (this.scrollFrame) cancelAnimationFrame(this.scrollFrame);
     this.scrollbar.destroy();
   }
