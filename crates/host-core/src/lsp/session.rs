@@ -15,14 +15,16 @@ use ropey::Rope;
 use serde_json::{json, Value};
 
 use super::client::{LspClient, LspError};
-use super::features;
-use super::uri::{file_uri_to_path, path_to_file_uri};
-use crate::contracts::{
-    DiagnosticEntry, DiagnosticSeverity, DiagnosticSource, DocumentDiagnostics,
-    LanguageFeatureRequest, LanguageFeatureResponse, LineCol, TextChange, Utf16Span,
-    CONTRACT_SCHEMA_VERSION,
+use super::diagnostics::{
+    batch_for_revision, lsp_range, resolve_pushed_diagnostics, tsserver_range,
 };
-use crate::offsets::{line_col_to_utf16_clamped, utf16_to_char_idx, utf16_to_line_col};
+use super::features;
+use super::uri::path_to_file_uri;
+use crate::contracts::{
+    DiagnosticSource, DocumentDiagnostics, LanguageFeatureRequest, LanguageFeatureResponse,
+    TextChange, CONTRACT_SCHEMA_VERSION,
+};
+use crate::offsets::{utf16_to_char_idx, utf16_to_line_col};
 use crate::trust::{GatedCapability, WorkspaceTrustGate};
 
 const INITIALIZE_TIMEOUT: Duration = Duration::from_secs(20);
@@ -31,11 +33,6 @@ const PULL_DEBOUNCE: Duration = Duration::from_millis(120);
 const PULL_TIMEOUT: Duration = Duration::from_secs(30);
 /// Revisions kept per document while waiting for the server's diagnostics.
 const MAX_RETAINED_REVISIONS: usize = 256;
-/// Bounds on what one untrusted `publishDiagnostics` may make us keep and render.
-const MAX_DIAGNOSTICS_PER_DOCUMENT: usize = 2_000;
-const MAX_MESSAGE_CHARS: usize = 4_000;
-const MAX_CODE_CHARS: usize = 200;
-
 /// How the revision of a server's diagnostics is established.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DiagnosticsMode {
@@ -75,17 +72,17 @@ pub struct DocumentRef<'a> {
 }
 
 #[derive(Debug)]
-struct TrackedDocument {
-    document_id: String,
-    session_generation: u32,
-    uri: String,
+pub(super) struct TrackedDocument {
+    pub(super) document_id: String,
+    pub(super) session_generation: u32,
+    pub(super) uri: String,
     /// The last revision sent to the server: the only text it can be working on.
-    latest: u32,
+    pub(super) latest: u32,
     /// Text and content hash of each revision sent and not yet superseded by diagnostics.
-    revisions: BTreeMap<u32, (Rope, String)>,
+    pub(super) revisions: BTreeMap<u32, (Rope, String)>,
 }
 
-type DocumentTable = Arc<Mutex<HashMap<PathBuf, TrackedDocument>>>;
+pub(super) type DocumentTable = Arc<Mutex<HashMap<PathBuf, TrackedDocument>>>;
 
 #[derive(Debug)]
 pub struct LanguageServerSession {
@@ -380,7 +377,7 @@ impl LanguageServerSession {
     }
 }
 
-fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+pub(super) fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -411,80 +408,6 @@ fn incremental_content_changes(rope_before: &Rope, changes: &[TextChange]) -> Op
         staged.insert(start_char, &change.inserted_text);
     }
     Some(content_changes)
-}
-
-/// Turns an untrusted `publishDiagnostics` into a revision-tagged batch, or drops it.
-fn resolve_pushed_diagnostics(
-    documents: &DocumentTable,
-    source: DiagnosticSource,
-    params: &Value,
-) -> Option<DocumentDiagnostics> {
-    let path = file_uri_to_path(params.get("uri")?.as_str()?)?;
-    // Without a version there is no way to know which text the ranges refer to.
-    let version = u32::try_from(params.get("version")?.as_u64()?).ok()?;
-    let mut documents = lock(documents);
-    let tracked = documents.get_mut(&path)?;
-    let diagnostics = params.get("diagnostics").and_then(Value::as_array);
-    batch_for_revision(
-        tracked,
-        source,
-        version,
-        diagnostics.map_or(&[], Vec::as_slice),
-        lsp_range,
-    )
-}
-
-/// Builds the batch for `version` from raw diagnostics, converting positions against the text
-/// of that revision. `None` if that text is no longer known.
-fn batch_for_revision(
-    tracked: &mut TrackedDocument,
-    source: DiagnosticSource,
-    version: u32,
-    diagnostics: &[Value],
-    range_of: fn(&Value) -> Option<(LineCol, LineCol)>,
-) -> Option<DocumentDiagnostics> {
-    let (rope, hash) = tracked.revisions.get(&version)?.clone();
-    // Diagnostics for older revisions can no longer be the latest word: forget those texts.
-    tracked.revisions = tracked.revisions.split_off(&version);
-    let items = diagnostics
-        .iter()
-        .take(MAX_DIAGNOSTICS_PER_DOCUMENT)
-        .filter_map(|diagnostic| {
-            diagnostic_entry(&tracked.document_id, source, &rope, diagnostic, range_of)
-        })
-        .collect();
-    Some(DocumentDiagnostics {
-        schema_version: CONTRACT_SCHEMA_VERSION,
-        document_id: tracked.document_id.clone(),
-        session_generation: tracked.session_generation,
-        base_revision: version,
-        content_blake3_hash: hash,
-        source,
-        items,
-    })
-}
-
-fn position(value: &Value, line_key: &str, column_key: &str, base: u64) -> Option<LineCol> {
-    Some(LineCol::new(
-        u32::try_from(value.get(line_key)?.as_u64()?.checked_sub(base)?).ok()?,
-        u32::try_from(value.get(column_key)?.as_u64()?.checked_sub(base)?).ok()?,
-    ))
-}
-
-/// LSP: `range.start` / `range.end`, zero-based `line` and `character`.
-fn lsp_range(diagnostic: &Value) -> Option<(LineCol, LineCol)> {
-    Some((
-        position(diagnostic.pointer("/range/start")?, "line", "character", 0)?,
-        position(diagnostic.pointer("/range/end")?, "line", "character", 0)?,
-    ))
-}
-
-/// tsserver: `start` / `end`, one-based `line` and `offset` (UTF-16 units).
-fn tsserver_range(diagnostic: &Value) -> Option<(LineCol, LineCol)> {
-    Some((
-        position(diagnostic.get("start")?, "line", "offset", 1)?,
-        position(diagnostic.get("end")?, "line", "offset", 1)?,
-    ))
 }
 
 /// Requests diagnostics from a server that cannot say which revision its pushes are for.
@@ -589,61 +512,11 @@ impl PullWorker {
     }
 }
 
-fn diagnostic_entry(
-    document_id: &str,
-    source: DiagnosticSource,
-    rope: &Rope,
-    diagnostic: &Value,
-    range_of: fn(&Value) -> Option<(LineCol, LineCol)>,
-) -> Option<DiagnosticEntry> {
-    let (start, end) = range_of(diagnostic)?;
-    let start = line_col_to_utf16_clamped(rope, start);
-    let end = line_col_to_utf16_clamped(rope, end).max(start);
-    // LSP numbers severities; tsserver names categories.
-    let severity = match diagnostic
-        .get("severity")
-        .or_else(|| diagnostic.get("category"))
-    {
-        Some(Value::Number(severity)) => match severity.as_u64() {
-            Some(1) => DiagnosticSeverity::Error,
-            Some(2) => DiagnosticSeverity::Warning,
-            _ => DiagnosticSeverity::Information,
-        },
-        Some(Value::String(category)) => match category.as_str() {
-            "error" => DiagnosticSeverity::Error,
-            "warning" => DiagnosticSeverity::Warning,
-            _ => DiagnosticSeverity::Information,
-        },
-        _ => DiagnosticSeverity::Error,
-    };
-    let code = match diagnostic.get("code") {
-        Some(Value::String(code)) => code.chars().take(MAX_CODE_CHARS).collect(),
-        Some(Value::Number(code)) => code.to_string(),
-        _ => String::new(),
-    };
-    let message = diagnostic
-        .get("message")
-        .or_else(|| diagnostic.get("text"))
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .chars()
-        .take(MAX_MESSAGE_CHARS)
-        .collect();
-    Some(DiagnosticEntry {
-        file_path: document_id.to_string(),
-        span_utf16: Utf16Span::new(start, end),
-        line_col: utf16_to_line_col(rope, start).ok()?,
-        source,
-        severity,
-        code,
-        message,
-    })
-}
-
 #[cfg(test)]
 mod tests {
+    use super::super::diagnostics::MAX_MESSAGE_CHARS;
     use super::*;
-    use crate::contracts::Utf16CodeUnitOffset;
+    use crate::contracts::{DiagnosticSeverity, Utf16CodeUnitOffset, Utf16Span};
 
     fn change(start: u32, end: u32, text: &str) -> TextChange {
         TextChange {

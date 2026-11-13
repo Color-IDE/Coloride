@@ -2,6 +2,7 @@
 //! synchronization from `ropey` buffers, and revision-tagged diagnostics.
 
 mod client;
+mod diagnostics;
 mod features;
 mod latest;
 mod services;
