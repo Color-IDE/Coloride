@@ -87,6 +87,11 @@
     width: 12px;
     height: 12px;
   }
+  /* The Codex mark is denser than the terminal glyph: a little larger to read */
+  .coloride-new-panel-icon svg.coloride-codex-icon {
+    width: 14px;
+    height: 14px;
+  }
   .coloride-new-panel-hint {
     font-size: 10.5px;
     color: var(--color-text-muted);

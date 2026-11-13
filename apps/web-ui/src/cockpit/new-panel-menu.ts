@@ -1,5 +1,5 @@
 import { UI_STRINGS } from "../ui-strings.js";
-import { TERMINAL_ICON } from "./panel-icons.js";
+import { CODEX_ICON, TERMINAL_ICON } from "./panel-icons.js";
 
 const CHEVRON_RIGHT =
   '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6l-6 6"/></svg>';
@@ -87,7 +87,7 @@ export class NewPanelMenu {
         this.item(UI_STRINGS.chat.newTerminal, actions.openTerminal, undefined, TERMINAL_ICON),
       );
     }
-    const agent = this.item(UI_STRINGS.chat.newAgent, null);
+    const agent = this.item(UI_STRINGS.chat.newAgent, null, undefined, CODEX_ICON);
     agent.disabled = false;
     agent.classList.add("has-submenu");
     agent.setAttribute("aria-haspopup", "menu");
