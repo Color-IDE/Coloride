@@ -28,6 +28,9 @@ import {
   SPLIT_RIGHT_ICON,
 } from "./panel-icons.js";
 
+/** A bar closer than this to another one of the same orientation is pulled onto it. */
+const SNAP_DISTANCE_PX = 8;
+
 interface ChatCellNodes {
   readonly el: HTMLElement;
   readonly header: HTMLElement;
@@ -333,6 +336,9 @@ export class ChatGrid {
 
     let drag: {
       start: number;
+      /** Where the bar is on the page when the drag starts, and where the other parallel bars are. */
+      center: number;
+      targets: readonly number[];
       measured: NonNullable<ReturnType<typeof measure>>;
       layout: LayoutNode | null;
     } | null = null;
@@ -341,17 +347,59 @@ export class ChatGrid {
       if (!measured) return;
       event.preventDefault();
       bar.setPointerCapture?.((event as PointerEvent).pointerId);
-      drag = { start: direction === "row" ? event.clientX : event.clientY, measured, layout: null };
+      // Where this bar and every other bar of the same orientation are on the page. The bars
+      // inside this split move with the drag, so they are no use as targets.
+      const centerOf = (el: Element) => {
+        const rect = el.getBoundingClientRect();
+        return direction === "row" ? rect.left + rect.width / 2 : rect.top + rect.height / 2;
+      };
+      const orientation = bar.getAttribute("aria-orientation");
+      const targets = Array.from(this.grid.querySelectorAll(".coloride-layout-handle"))
+        .filter(
+          (other) =>
+            other !== bar &&
+            other.getAttribute("aria-orientation") === orientation &&
+            !bar.parentElement?.contains(other),
+        )
+        .map(centerOf);
+      drag = {
+        start: direction === "row" ? event.clientX : event.clientY,
+        center: centerOf(bar),
+        targets,
+        measured,
+        layout: null,
+      };
       this.grid.dataset.resizing = direction;
     });
     bar.addEventListener("pointermove", (event) => {
       if (!drag || !this.layoutRoot) return;
       const position = direction === "row" ? event.clientX : event.clientY;
+      let movedPx = position - drag.start;
+      // Line up with the nearest other bar when close to it (Alt turns this off), so panels that
+      // sit side by side end up level instead of a few pixels apart.
+      let snapped = false;
+      if (!event.altKey) {
+        const proposed = drag.center + movedPx;
+        let nearest: number | null = null;
+        for (const target of drag.targets) {
+          const distance = Math.abs(target - proposed);
+          if (
+            distance <= SNAP_DISTANCE_PX &&
+            (nearest === null || distance < Math.abs(nearest - proposed))
+          )
+            nearest = target;
+        }
+        if (nearest !== null) {
+          movedPx = nearest - drag.center;
+          snapped = true;
+        }
+      }
+      bar.dataset.snapped = String(snapped);
       const next = resizeBoundary(
         drag.measured.layout,
         path,
         boundary,
-        (position - drag.start) / drag.measured.extent,
+        movedPx / drag.measured.extent,
         drag.measured.min,
       );
       drag.layout = next;
@@ -362,6 +410,7 @@ export class ChatGrid {
       if (!drag) return;
       const { layout, measured } = drag;
       drag = null;
+      delete bar.dataset.snapped;
       delete this.grid.dataset.resizing;
       if (layout && layout !== measured.layout) save(layout);
     };

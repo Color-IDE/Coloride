@@ -358,6 +358,11 @@
     top: 4px;
     height: 1px;
   }
+  /* Lined up with another bar: the line shows in colour while it holds. */
+  .coloride-layout-handle[data-snapped="true"]::after {
+    background: rgba(120, 170, 255, 0.9);
+    opacity: 1;
+  }
   .coloride-layout-handle:hover::after,
   .coloride-layout-handle:focus-visible::after,
   .coloride-zone-3-grid[data-resizing] .coloride-layout-handle:focus::after {

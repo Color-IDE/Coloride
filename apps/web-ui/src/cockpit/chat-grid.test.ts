@@ -7,7 +7,7 @@ import {
   createCockpitStoreBundle,
   resolveGroupLayout,
 } from "../index.js";
-import { panelIds } from "../layout-tree.js";
+import { type LayoutNode, panelIds } from "../layout-tree.js";
 
 describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
   it("keeps work groups separate when changing project folders", () => {
@@ -587,6 +587,95 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
       expect(shown()).toHaveLength(3);
       controller.destroy();
       root.remove();
+    });
+  });
+
+  describe("aligning separators while dragging", () => {
+    /** Two columns side by side, each split in two, with the horizontal bars 6px apart. */
+    function setup() {
+      const root = document.createElement("div");
+      document.body.appendChild(root);
+      const stores = createCockpitStoreBundle({
+        initialChats: ["a", "b", "c", "d"].map((chatId) => ({
+          chatId,
+          title: chatId,
+          modelName: "Codex",
+          validationState: "UnchangedBlue" as const,
+        })),
+      });
+      const editorView = new ColorideEditorView({
+        initialDocumentId: "src/main.ts",
+        initialContent: "const ready = true;",
+        ipcChannel: new InMemoryBinaryHostBridge(),
+      });
+      const controller = new CockpitDomController({ rootContainer: root, stores, editorView });
+      const column = (ids: [string, string], top: number): LayoutNode => ({
+        kind: "split",
+        direction: "column",
+        sizes: [top, 1 - top],
+        children: ids.map((id) => ({ kind: "panel", id })),
+      });
+      const group = stores.navigation.getState().groups[0] as WorkGroup;
+      stores.setWorkGroupLayout(group.id, {
+        kind: "split",
+        direction: "row",
+        sizes: [0.5, 0.5],
+        children: [column(["a", "b"], 0.5), column(["c", "d"], 0.51)],
+      });
+      for (const split of root.querySelectorAll<HTMLElement>(".coloride-layout-split")) {
+        split.getBoundingClientRect = () => ({ width: 1000, height: 600 }) as DOMRect;
+      }
+      // The horizontal bars sit at y = 300 and y = 306 (their centres).
+      const bars = Array.from(
+        root.querySelectorAll<HTMLElement>(
+          '.coloride-layout-handle[aria-orientation="horizontal"]',
+        ),
+      );
+      [300, 306].forEach((center, index) => {
+        (bars[index] as HTMLElement).getBoundingClientRect = () =>
+          ({ top: center - 4.5, height: 9, left: 0, width: 500 }) as DOMRect;
+      });
+      const secondColumn = () => {
+        const layout = resolveGroupLayout(stores.navigation.getState().groups[0] as WorkGroup);
+        const child = layout?.kind === "split" ? layout.children[1] : null;
+        return child?.kind === "split" ? child.sizes : [];
+      };
+      const drag = (to: number, init: MouseEventInit = {}) => {
+        const bar = bars[1] as HTMLElement;
+        const fire = (type: string, y: number) => {
+          const event = new MouseEvent(type, { clientY: y, bubbles: true, ...init });
+          Object.defineProperty(event, "pointerId", { value: 1 });
+          bar.dispatchEvent(event);
+        };
+        fire("pointerdown", 306);
+        fire("pointermove", to);
+        const snapped = bar.dataset.snapped;
+        fire("pointerup", to);
+        return snapped;
+      };
+      return { root, controller, secondColumn, drag };
+    }
+
+    it("snaps a bar to another one that is a few pixels away, so the panels line up", () => {
+      const { root, controller, secondColumn, drag } = setup();
+      expect(drag(301)).toBe("true"); // 1px from the other bar (y = 300)
+      expect(secondColumn()[0]).toBeCloseTo(0.5); // exactly the other column's split
+      controller.destroy();
+      root.remove();
+    });
+
+    it("does not snap when far from every other bar, or when Alt is held", () => {
+      const far = setup();
+      expect(far.drag(280)).toBe("false"); // 20px from y = 300
+      expect(far.secondColumn()[0]).toBeCloseTo(0.51 - 26 / 600);
+      far.controller.destroy();
+      far.root.remove();
+
+      const alt = setup();
+      alt.drag(301, { altKey: true });
+      expect(alt.secondColumn()[0]).toBeCloseTo(0.51 - 5 / 600);
+      alt.controller.destroy();
+      alt.root.remove();
     });
   });
 });
