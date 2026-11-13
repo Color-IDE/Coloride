@@ -99,24 +99,27 @@
     background: rgba(255, 255, 255, 0.12);
   }
   /* "+" right after the last tab. Once the tabs fill the strip it sticks to the right edge
-     instead of scrolling away; the shadow hides the tabs sliding under it. */
+     instead of scrolling away. */
   .coloride-header-tab-add {
     position: sticky;
     right: 8px;
     z-index: 15; /* above the header edge shadow (z-index 10) */
     display: inline-flex;
     flex: none;
-    background: var(--color-topbar);
-    box-shadow: -10px 0 8px var(--color-topbar);
     align-items: center;
     justify-content: center;
     width: 26px;
     height: 26px;
     border: 0;
     border-radius: 6px;
-    background: transparent;
+    /* Opaque: tabs slide under it once it sticks to the edge and must not show through. */
+    background: var(--color-topbar);
     color: var(--color-text-muted);
     cursor: pointer;
+  }
+  /* Fade only while tabs are actually hidden under it (more to scroll on the right). */
+  [data-scroll-right="true"] .coloride-header-tab-add {
+    box-shadow: -10px 0 8px var(--color-topbar);
   }
   .coloride-header-tab-add:hover:not(:disabled) {
     background: var(--color-selected);
