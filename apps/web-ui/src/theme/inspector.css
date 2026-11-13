@@ -18,7 +18,7 @@
 
   .coloride-zone-4-body {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) clamp(150px, 30%, 240px);
+    grid-template-columns: minmax(0, 1fr) clamp(170px, 34%, 280px);
     flex: 1;
     min-height: 0;
   }
@@ -64,7 +64,7 @@
     top: 0;
     right: 0;
     bottom: 0;
-    width: clamp(150px, 30%, 240px); /* the width it has when it is kept visible */
+    width: clamp(170px, 34%, 280px); /* the width it has when it is kept visible */
     background: var(--color-main);
     transform: translateX(100%);
     visibility: hidden;
