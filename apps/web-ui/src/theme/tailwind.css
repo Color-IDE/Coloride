@@ -4,6 +4,7 @@
 @import "./inspector.css";
 @import "./header-tabs.css";
 @import "./trust-banner.css";
+@import "./unsaved-dialog.css";
 @source "../**/*.ts";
 
 @theme {
