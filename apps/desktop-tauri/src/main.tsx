@@ -1,5 +1,5 @@
 import type { DocumentDiagnostics, LanguageFeatureResponse } from "@coloride/protocol-types";
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { StrictMode, useEffect, useRef } from "react";
@@ -14,6 +14,7 @@ import {
 } from "./index.js";
 import "./shell.css";
 import { TauriBinaryHostBridge } from "./tauri-binary-host-bridge.js";
+import { createTauriTerminalHost } from "./tauri-terminal-host.js";
 
 interface NativeWorkspaceNode {
   readonly path: string;
@@ -142,6 +143,8 @@ function ColorideDesktopApp() {
           onUnsavedCountChange: (count) => {
             void invoke("report_unsaved_buffers_command", { count });
           },
+          // Ctrl+`: shells in the trusted workspace, streamed over a binary channel.
+          terminalHost: createTauriTerminalHost(invoke, () => new Channel<ArrayBuffer>()),
           // The decision is taken in a native dialog owned by the Rust side (commands/trust.rs).
           workspaceTrust: {
             getTrust: () => invoke<WorkspaceTrustReport>("workspace_trust_command"),

@@ -63,6 +63,7 @@ pub(crate) fn revoke_workspace_trust(
         if let Some(services) = state.language_services() {
             services.stop();
         }
+        crate::commands::terminal::close_all_terminals(state);
         revoked.map_err(|error| error.to_string())?;
     }
     workspace_trust(state)

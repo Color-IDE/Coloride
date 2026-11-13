@@ -81,6 +81,7 @@ export interface LazyBootDesktopOptions {
   readonly readWorkspaceFile?: CockpitDomControllerOptions["readWorkspaceFile"];
   readonly onUnsavedCountChange?: CockpitDomControllerOptions["onUnsavedCountChange"];
   readonly workspaceTrust?: CockpitDomControllerOptions["workspaceTrust"];
+  readonly terminalHost?: CockpitDomControllerOptions["terminalHost"];
   readonly searchWorkspace?: CockpitDomControllerOptions["searchWorkspace"];
   readonly analyzeDocument?: CockpitDomControllerOptions["analyzeDocument"];
   readonly loadNativeMigrationReport?: () => Promise<NativeMigrationReport>;
@@ -196,6 +197,7 @@ export function lazyBootDesktopCockpit(
         ? { onUnsavedCountChange: options.onUnsavedCountChange }
         : {}),
       ...(options?.workspaceTrust ? { workspaceTrust: options.workspaceTrust } : {}),
+      ...(options?.terminalHost ? { terminalHost: options.terminalHost } : {}),
       ...(options?.searchWorkspace ? { searchWorkspace: options.searchWorkspace } : {}),
       ...(options?.analyzeDocument ? { analyzeDocument: options.analyzeDocument } : {}),
     });

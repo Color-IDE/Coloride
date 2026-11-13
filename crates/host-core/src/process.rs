@@ -26,41 +26,28 @@ pub enum SupervisionError {
     Unsupported,
 }
 
-/// A child process bound to the Host's lifetime. See the module documentation.
+/// Kills a process group if the Host dies abruptly (see the module documentation).
 #[derive(Debug)]
-pub struct SupervisedChild {
-    child: Child,
-    /// Killed once the child is gone, so it never signals a recycled process group id.
-    watchdog: Option<Child>,
+pub(crate) struct OrphanWatchdog {
+    process: Child,
     /// Held open for as long as the Host lives: its closing is what triggers the watchdog.
-    watchdog_trigger: Option<ChildStdin>,
-    reaped: bool,
+    _trigger: Option<ChildStdin>,
 }
 
-impl SupervisedChild {
+impl OrphanWatchdog {
+    /// Watches process group `group` (the pid of a child that leads its own group).
     #[cfg(unix)]
-    pub(crate) fn spawn(mut command: Command) -> Result<Self, SupervisionError> {
+    pub(crate) fn start(group: u32) -> Result<Self, SupervisionError> {
         use std::os::unix::process::CommandExt;
         use std::process::Stdio;
-
-        command.process_group(0);
-        let child = command.spawn().map_err(SupervisionError::Spawn)?;
-        let mut supervised = Self {
-            child,
-            watchdog: None,
-            watchdog_trigger: None,
-            reaped: false,
-        };
-        // `read` returns when the pipe is closed (it is never written to). The group id equals
-        // the child's pid because the child leads its group. If the watchdog cannot start,
-        // `supervised` is dropped here, which kills the child: never run unsupervised.
-        // Sanctioned launch: reachable only from `GatedCommand::spawn` (see `clippy.toml`).
+        // `read` returns when the pipe is closed (it is never written to).
+        // Sanctioned launch: only reachable from gated launches (see `clippy.toml`).
         #[allow(clippy::disallowed_methods)]
-        let mut watchdog = Command::new("/bin/sh")
+        let mut process = Command::new("/bin/sh")
             .arg("-c")
             .arg(r#"read _; kill -KILL -- "-$1" 2>/dev/null"#)
             .arg("coloride-watchdog")
-            .arg(supervised.child.id().to_string())
+            .arg(group.to_string())
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -68,8 +55,63 @@ impl SupervisedChild {
             .process_group(0)
             .spawn()
             .map_err(SupervisionError::Watchdog)?;
-        supervised.watchdog_trigger = watchdog.stdin.take();
-        supervised.watchdog = Some(watchdog);
+        let trigger = process.stdin.take();
+        Ok(Self {
+            process,
+            _trigger: trigger,
+        })
+    }
+
+    #[cfg(not(unix))]
+    pub(crate) fn start(_group: u32) -> Result<Self, SupervisionError> {
+        Err(SupervisionError::Unsupported)
+    }
+
+    /// The group is gone: stop watching before its id can be reused.
+    pub(crate) fn stop(mut self) {
+        let _ = self.process.kill();
+        let _ = self.process.wait();
+    }
+}
+
+/// Sends `SIGKILL` to process group `group`. Returns false if it could not be signalled.
+#[cfg(unix)]
+pub(crate) fn kill_process_group(group: u32) -> bool {
+    use rustix::process::{kill_process_group, Pid, Signal};
+    i32::try_from(group)
+        .ok()
+        .and_then(Pid::from_raw)
+        .is_some_and(|group| kill_process_group(group, Signal::KILL).is_ok())
+}
+
+#[cfg(not(unix))]
+pub(crate) fn kill_process_group(_group: u32) -> bool {
+    false
+}
+
+/// A child process bound to the Host's lifetime. See the module documentation.
+#[derive(Debug)]
+pub struct SupervisedChild {
+    child: Child,
+    /// Stopped once the child is gone, so it never signals a recycled process group id.
+    watchdog: Option<OrphanWatchdog>,
+    reaped: bool,
+}
+
+impl SupervisedChild {
+    #[cfg(unix)]
+    pub(crate) fn spawn(mut command: Command) -> Result<Self, SupervisionError> {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+        let child = command.spawn().map_err(SupervisionError::Spawn)?;
+        let mut supervised = Self {
+            child,
+            watchdog: None,
+            reaped: false,
+        };
+        // If the watchdog cannot start, `supervised` is dropped here, which kills the child:
+        // never run unsupervised.
+        supervised.watchdog = Some(OrphanWatchdog::start(supervised.child.id())?);
         Ok(supervised)
     }
 
@@ -117,35 +159,19 @@ impl SupervisedChild {
         if self.reaped {
             return;
         }
-        self.kill_group();
+        // Not reaped yet, so the pid (and group id) still belongs to our child.
+        if !kill_process_group(self.child.id()) {
+            let _ = self.child.kill();
+        }
         let _ = self.child.wait();
         self.finish();
     }
 
-    #[cfg(unix)]
-    fn kill_group(&mut self) {
-        use rustix::process::{kill_process_group, Pid, Signal};
-        // Not reaped yet, so the pid (and group id) still belongs to our child.
-        let group = i32::try_from(self.child.id()).ok().and_then(Pid::from_raw);
-        let signalled = group.is_some_and(|group| kill_process_group(group, Signal::KILL).is_ok());
-        if !signalled {
-            let _ = self.child.kill();
-        }
-    }
-
-    #[cfg(not(unix))]
-    fn kill_group(&mut self) {
-        let _ = self.child.kill();
-    }
-
-    /// The child is reaped: stop the watchdog before its target id can be reused.
     fn finish(&mut self) {
         self.reaped = true;
-        if let Some(mut watchdog) = self.watchdog.take() {
-            let _ = watchdog.kill();
-            let _ = watchdog.wait();
+        if let Some(watchdog) = self.watchdog.take() {
+            watchdog.stop();
         }
-        self.watchdog_trigger = None;
     }
 }
 

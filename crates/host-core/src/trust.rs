@@ -50,6 +50,9 @@ pub enum GatedCapability {
     DebugAdapter,
     /// Extensions activated for the workspace.
     ActiveExtension,
+    /// An interactive shell started in the workspace: shell hooks (direnv, version managers)
+    /// can run repository files as soon as it starts.
+    Terminal,
 }
 
 #[derive(Debug, Error)]
@@ -272,6 +275,12 @@ impl WorkspaceTrustGate {
             .is_ok_and(|canonical| canonical.starts_with(&self.inner.workspace_root))
     }
 
+    /// Counts a process launched outside [`GatedCommand`] (a terminal's shell), after
+    /// [`Self::authorize`] allowed it.
+    pub(crate) fn note_spawned(&self) {
+        self.inner.spawned.fetch_add(1, Ordering::SeqCst);
+    }
+
     /// Builds a command for `program`, or refuses if the workspace is not trusted. This is the
     /// only way to obtain a launchable command in `host-core`.
     pub fn command(
@@ -343,6 +352,7 @@ mod tests {
             GatedCapability::WorkspaceLanguageServer,
             GatedCapability::DebugAdapter,
             GatedCapability::ActiveExtension,
+            GatedCapability::Terminal,
         ] {
             assert!(matches!(
                 gate.authorize(capability),

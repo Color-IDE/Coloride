@@ -6,6 +6,7 @@ pub mod lsp;
 pub mod migration;
 pub mod offsets;
 pub mod process;
+pub mod terminal;
 pub mod trust;
 
 pub use contracts::*;
@@ -16,6 +17,7 @@ pub use lsp::*;
 pub use migration::*;
 pub use offsets::*;
 pub use process::*;
+pub use terminal::*;
 pub use trust::*;
 
 /// Re-exported so that crates handling document text use the same `Rope` type.

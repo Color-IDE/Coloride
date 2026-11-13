@@ -85,6 +85,14 @@ export const UI_STRINGS = {
     discard: "Don't save",
     cancel: "Cancel",
   },
+  terminal: {
+    panel: "Integrated terminal",
+    title: "Terminal",
+    kill: "Kill terminal",
+    hide: "Hide",
+    exited: "Process exited",
+    failed: "Unable to start a terminal",
+  },
   trust: {
     restrictedTitle: "Restricted mode",
     restrictedDetail:

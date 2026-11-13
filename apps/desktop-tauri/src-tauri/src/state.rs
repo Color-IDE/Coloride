@@ -1,5 +1,6 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use context_engine::SqliteWalContextEngine;
@@ -26,6 +27,9 @@ pub(crate) struct DesktopAppState {
     /// Each open document's diagnostics for its newest content, per tool: what the context
     /// MCP server publishes (`LocalMcpServer::publish_document_diagnostics`).
     pub(crate) latest_diagnostics: Arc<LatestDiagnostics>,
+    /// Open terminals by id. Dropping one kills its shell and jobs.
+    pub(crate) terminals: Mutex<HashMap<u32, Arc<host_core::TerminalSession>>>,
+    pub(crate) next_terminal_id: AtomicU32,
     pub(crate) app_data_dir: PathBuf,
     pub(crate) context_engine: Mutex<Option<SqliteWalContextEngine>>,
     /// Bumped (under the `context_engine` lock) each time a workspace is opened. An index built
@@ -60,6 +64,8 @@ impl DesktopAppState {
                 })
             },
             latest_diagnostics,
+            terminals: Mutex::new(HashMap::new()),
+            next_terminal_id: AtomicU32::new(1),
             app_data_dir,
             context_engine: Mutex::new(None),
             workspace_generation: AtomicU64::new(0),

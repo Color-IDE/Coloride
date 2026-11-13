@@ -7,6 +7,7 @@ pub mod migration;
 pub mod search;
 pub mod semantic;
 pub mod session_cache;
+pub mod terminal;
 pub mod trust;
 pub mod window;
 pub mod workspace;

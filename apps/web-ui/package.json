@@ -14,7 +14,9 @@
   },
   "dependencies": {
     "@coloride/editor-cm6": "workspace:*",
-    "@coloride/protocol-types": "workspace:*"
+    "@coloride/protocol-types": "workspace:*",
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.11",

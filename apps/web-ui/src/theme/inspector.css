@@ -201,6 +201,54 @@
   .filetree-color-muted {
     color: #8a8a8a;
   }
+  /* Integrated terminal, docked under the Zone 3 panels */
+  .coloride-terminal-drawer {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    height: clamp(160px, 34%, 420px);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    background: #181818;
+  }
+  .coloride-terminal-drawer[hidden] {
+    display: none;
+  }
+  .coloride-terminal-bar {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 8px;
+    height: 28px;
+    padding: 0 8px 0 12px;
+    color: var(--color-text-secondary);
+    font-size: 11px;
+  }
+  .coloride-terminal-status {
+    flex: 1;
+    color: #ffb450;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .coloride-terminal-bar button {
+    height: 22px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .coloride-terminal-bar button:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--color-text-primary);
+  }
+  .coloride-terminal-screen {
+    flex: 1;
+    min-height: 0;
+    padding: 4px 0 4px 12px;
+  }
   /* Restricted-mode notice of an untrusted folder: floats over the shell, moves no zone */
   .coloride-trust-banner {
     position: absolute;
