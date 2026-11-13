@@ -1,4 +1,4 @@
-import { type AreaSize, DEFAULT_LAYOUT_ASPECT, addPanel, fitsArea } from "../layout-tree.js";
+import { type AreaSize, DEFAULT_LAYOUT_ASPECT, addPanel, placePanel } from "../layout-tree.js";
 import { resolveGroupLayout } from "../workspace-navigation.js";
 import type { StoreContext } from "./context.js";
 import type { CockpitChatTab, CockpitStoreBundle, CreateChatOptions } from "./types.js";
@@ -27,15 +27,16 @@ export function createChatActions(ctx: StoreContext): ChatActions {
     );
     if (!group) return null;
     const current = resolveGroupLayout(group);
-    const layout = addPanel(current, chatId, {
+    const placement = {
       ...(options?.from ? { target: options.from } : {}),
       ...(options?.direction ? { direction: options.direction } : {}),
       ...(options?.position ? { position: options.position } : {}),
-      aspect: panelArea
-        ? panelArea.widthPx / Math.max(1, panelArea.heightPx)
-        : DEFAULT_LAYOUT_ASPECT,
-    });
-    if (panelArea && !fitsArea(layout, panelArea)) return null;
+    };
+    // Without a measured area (not laid out yet) any placement is accepted.
+    const layout = panelArea
+      ? placePanel(current, chatId, panelArea, placement)
+      : addPanel(current, chatId, { ...placement, aspect: DEFAULT_LAYOUT_ASPECT });
+    if (!layout) return null;
     return { group, layout };
   };
 

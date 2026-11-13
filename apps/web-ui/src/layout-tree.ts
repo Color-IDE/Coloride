@@ -220,17 +220,73 @@ export function addPanel(
  * Whether one more panel fits in `area` (placed where `addPanel` would put it, or at the given
  * target/direction). A panel being added is refused rather than squeezed below the minimum.
  */
+/** True when the panel `id` is at least `min` pixels wide and tall in `layout`. */
+function panelFits(
+  rects: ReadonlyMap<string, LayoutRect>,
+  id: string,
+  area: AreaSize,
+  min: { readonly width: number; readonly height: number },
+): boolean {
+  const rect = rects.get(id);
+  if (!rect) return false;
+  // Rects are in units where one unit is `heightPx` pixels tall.
+  return (
+    rect.width * area.heightPx >= min.width - 1e-6 &&
+    rect.height * area.heightPx >= min.height - 1e-6
+  );
+}
+
+/**
+ * Adds a panel where it fits in `area`, or returns null when nowhere does.
+ *
+ * It looks everywhere, not only at the largest panel: panels are tried from the largest to the
+ * smallest, each along its longer side first and then the other (an explicit `direction` is the
+ * only one tried). A split only changes its target and the new panel, so only those two are
+ * checked: a panel that was already too small (after the window shrank) never blocks a split
+ * somewhere else.
+ */
+export function placePanel(
+  root: LayoutNode | null,
+  id: string,
+  area: AreaSize,
+  options: AddPanelOptions = {},
+  min = MIN_PANEL_SIZE_PX,
+): LayoutNode | null {
+  if (area.widthPx <= 0 || area.heightPx <= 0) return null;
+  if (!root) return fitsArea(panel(id), area, min) ? panel(id) : null;
+  if (hasPanel(root, id)) return root;
+  const aspect = area.widthPx / area.heightPx;
+  const rects = computeRects(root, aspect);
+  const candidates =
+    options.target && rects.has(options.target)
+      ? [options.target]
+      : [...rects.entries()]
+          // Largest first; a stable sort keeps the earliest panel on ties.
+          .sort((a, b) => b[1].width * b[1].height - a[1].width * a[1].height)
+          .map(([panelId]) => panelId);
+  for (const target of candidates) {
+    const rect = rects.get(target);
+    if (!rect) continue;
+    const longer: SplitDirection = rect.width >= rect.height ? "row" : "column";
+    const directions: readonly SplitDirection[] = options.direction
+      ? [options.direction]
+      : [longer, longer === "row" ? "column" : "row"];
+    for (const direction of directions) {
+      const layout = splitIn(root, target, id, direction, options.position ?? "after");
+      const next = computeRects(layout, aspect);
+      if (panelFits(next, target, area, min) && panelFits(next, id, area, min)) return layout;
+    }
+  }
+  return null;
+}
+
 export function canAddPanel(
   root: LayoutNode | null,
   area: AreaSize,
   options: AddPanelOptions = {},
   min = MIN_PANEL_SIZE_PX,
 ): boolean {
-  const probe = addPanel(root, "\u0000candidate", {
-    ...options,
-    aspect: area.widthPx / Math.max(1, area.heightPx),
-  });
-  return fitsArea(probe, area, min);
+  return placePanel(root, "\u0000candidate", area, options, min) !== null;
 }
 
 function removeIn(node: LayoutNode, id: string): LayoutNode | null {
@@ -252,6 +308,7 @@ function removeIn(node: LayoutNode, id: string): LayoutNode | null {
 }
 
 /** Removes a panel; its neighbours grow into the space. Returns null when nothing is left. */
+
 export function removePanel(root: LayoutNode | null, id: string): LayoutNode | null {
   return root ? removeIn(root, id) : null;
 }
