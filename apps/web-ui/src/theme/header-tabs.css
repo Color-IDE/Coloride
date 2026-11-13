@@ -98,34 +98,55 @@
   .coloride-header-tab-close:hover {
     background: rgba(255, 255, 255, 0.12);
   }
-  /* No right padding where the "+" ends the strip: a sticky offset is measured inside the padding. */
+  /* Edge fades: the strip's own content fades where more tabs are hidden (state set on the header
+     by attachHeaderScroll). A mask, not an overlay, so nothing next to the strip is dimmed. */
+  [data-scrollable="true"] > .coloride-header-tab-track {
+    --fade-left: 0px;
+    --fade-right: 0px;
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent 0,
+      #000 var(--fade-left),
+      #000 calc(100% - var(--fade-right)),
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to right,
+      transparent 0,
+      #000 var(--fade-left),
+      #000 calc(100% - var(--fade-right)),
+      transparent 100%
+    );
+  }
+  [data-scroll-left="true"] > .coloride-header-tab-track {
+    --fade-left: 28px;
+  }
+  [data-scroll-right="true"] > .coloride-header-tab-track {
+    --fade-right: 28px;
+  }
+  /* Zone 3: the "+" sits outside the strip, right after it. The strip is as wide as its tabs and
+     shrinks (then scrolls) when they do not fit, so the "+" follows the last tab and, once the
+     tabs fill the header, stays at the right edge with nothing ever under it. */
+  .coloride-macos-titlebar .coloride-zone-3-header {
+    justify-content: flex-start;
+  }
   .coloride-zone-3-header .coloride-header-tab-track {
+    flex: 0 1 auto;
     padding-right: 0;
   }
-  /* "+" right after the last tab. Once the tabs fill the strip it sticks to the right edge
-     instead of scrolling away. */
   .coloride-header-tab-add {
-    position: sticky;
-    right: 4px; /* from the strip's edge: its right padding is removed below */
-    margin-right: 4px; /* same gap when the strip is scrolled to its end */
-    z-index: 15; /* above the header edge shadow (z-index 10) */
     display: inline-flex;
     flex: none;
     align-items: center;
     justify-content: center;
     width: 26px;
     height: 26px;
+    margin: 0 4px 0 2px;
     border: 0;
     border-radius: 6px;
     background: transparent;
     color: var(--color-text-muted);
     cursor: pointer;
-  }
-  /* Only while tabs are hidden under it (more to scroll on the right) it is opaque, so they
-     do not show through, and fades them out. Otherwise there is nothing to cover. */
-  [data-scroll-right="true"] .coloride-header-tab-add {
-    background: var(--color-topbar);
-    box-shadow: -10px 0 8px var(--color-topbar);
   }
   .coloride-header-tab-add:hover:not(:disabled) {
     background: var(--color-selected);

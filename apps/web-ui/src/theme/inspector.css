@@ -1,10 +1,6 @@
 @layer components {
   /* Zone 4: file tab in the header, editor on the left, project file tree on the right */
-  /* The shared header shadows and thin scrollbar stop where the panel toggle starts. */
-  /* Extra selector: tailwind.css declares the base rule after this file is imported. */
-  .coloride-macos-titlebar .coloride-zone-4-header::after {
-    inset: 0 38px 0 0;
-  }
+  /* The thin scrollbar stops where the panel toggle starts. */
   .coloride-zone-4-header .coloride-thin-scrollbar--x {
     right: 46px;
   }

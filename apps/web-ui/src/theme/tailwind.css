@@ -139,49 +139,6 @@
     z-index: 20;
   }
 
-  .coloride-zone-3-header::after,
-  .coloride-zone-4-header::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    z-index: 10;
-    background: none;
-  }
-
-  .coloride-zone-3-header[data-scroll-left="true"][data-scroll-right="false"]::after,
-  .coloride-zone-4-header[data-scroll-left="true"][data-scroll-right="false"]::after {
-    background: linear-gradient(
-      to right,
-      var(--color-topbar) 0px,
-      rgba(38, 38, 38, 0.85) 8px,
-      transparent 28px
-    );
-  }
-
-  .coloride-zone-3-header[data-scroll-left="false"][data-scroll-right="true"]::after,
-  .coloride-zone-4-header[data-scroll-left="false"][data-scroll-right="true"]::after {
-    background: linear-gradient(
-      to left,
-      var(--color-topbar) 0px,
-      rgba(38, 38, 38, 0.85) 8px,
-      transparent 28px
-    );
-  }
-
-  .coloride-zone-3-header[data-scroll-left="true"][data-scroll-right="true"]::after,
-  .coloride-zone-4-header[data-scroll-left="true"][data-scroll-right="true"]::after {
-    background: linear-gradient(
-      to right,
-      var(--color-topbar) 0px,
-      rgba(38, 38, 38, 0.85) 8px,
-      transparent 28px,
-      transparent calc(100% - 28px),
-      rgba(38, 38, 38, 0.85) calc(100% - 8px),
-      var(--color-topbar) 100%
-    );
-  }
-
   /* One thin overlay scrollbar for every scroller: header tabs, file tree, code editor. */
   .coloride-thin-scrollbar {
     position: absolute;

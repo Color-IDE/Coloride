@@ -317,18 +317,16 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     expect(tabs()).toHaveLength(2);
     cleanup();
   });
-  it("places the + right after the last tab, inside the strip (it sticks to the edge by CSS)", () => {
+  it("places the + right after the strip, outside the part that scrolls", () => {
     const { root, stores, cleanup } = mount();
-    const track = root.querySelector<HTMLElement>(
-      '.coloride-zone-3-header [role="tablist"]',
-    ) as HTMLElement;
-    const add = () => track.querySelector<HTMLElement>(".coloride-header-tab-add");
-    expect(track.lastElementChild).toBe(add());
-    expect(add()?.previousElementSibling?.getAttribute("role")).toBe("tab");
+    const header = root.querySelector<HTMLElement>(".coloride-zone-3-header") as HTMLElement;
+    const track = header.querySelector<HTMLElement>('[role="tablist"]') as HTMLElement;
+    const add = header.querySelector<HTMLElement>(".coloride-header-tab-add") as HTMLElement;
+    expect(track.nextElementSibling).toBe(add);
     for (let i = 0; i < 6; i += 1) stores.createChat();
     expect(track.querySelectorAll(".coloride-header-tab")).toHaveLength(8);
-    expect(track.lastElementChild).toBe(add());
-    expect(add()?.previousElementSibling).toBe(track.querySelectorAll(".coloride-header-tab")[7]);
+    expect(track.contains(add)).toBe(false);
+    expect(track.nextElementSibling).toBe(add);
     cleanup();
   });
 });

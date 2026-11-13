@@ -35,8 +35,8 @@ export interface HeaderTabsOptions {
   readonly onSelect: (key: string) => void;
   readonly onClose: (key: string) => void;
   /**
-   * Controls placed right after the last tab, inside the scrolling strip (e.g. a "+" button). The
-   * stylesheet makes them stick to the right edge once the tabs overflow.
+   * Controls placed right after the strip (e.g. a "+" button). They sit outside the scrolling
+   * area, so tabs never slide under them; the stylesheet keeps them next to the last tab.
    */
   readonly trailing?: readonly HTMLElement[];
 }
@@ -68,9 +68,8 @@ export class HeaderTabs {
     this.track.className = "coloride-header-tab-track";
     this.track.setAttribute("role", "tablist");
     this.track.setAttribute("aria-label", options.ariaLabel);
-    header.replaceChildren(this.track);
+    header.replaceChildren(this.track, ...(options.trailing ?? []));
     this.releaseHeaderScroll = attachHeaderScroll(header, this.track);
-    if (options.trailing) this.track.append(...options.trailing);
   }
 
   update(specs: readonly HeaderTabSpec[]): void {
@@ -87,7 +86,7 @@ export class HeaderTabs {
       if (spec.selected) selectedTab = tab.el;
       return tab.el;
     });
-    reconcile(this.track, [...ordered, ...(this.options.trailing ?? [])]);
+    reconcile(this.track, ordered);
     (selectedTab as HTMLElement | null)?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
   }
 
