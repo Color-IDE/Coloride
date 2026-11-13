@@ -117,13 +117,14 @@
     height: 26px;
     border: 0;
     border-radius: 6px;
-    /* Opaque: tabs slide under it once it sticks to the edge and must not show through. */
-    background: var(--color-topbar);
+    background: transparent;
     color: var(--color-text-muted);
     cursor: pointer;
   }
-  /* Fade only while tabs are actually hidden under it (more to scroll on the right). */
+  /* Only while tabs are hidden under it (more to scroll on the right) it is opaque, so they
+     do not show through, and fades them out. Otherwise there is nothing to cover. */
   [data-scroll-right="true"] .coloride-header-tab-add {
+    background: var(--color-topbar);
     box-shadow: -10px 0 8px var(--color-topbar);
   }
   .coloride-header-tab-add:hover:not(:disabled) {
