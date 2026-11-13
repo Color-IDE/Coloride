@@ -78,8 +78,10 @@
     left: 120px;
   }
 
+  /* The panel toggle (26px + 8px from the edge) sits over the header: the strip ends 34px in, so
+     the "+" (4px margin) is 4px from the toggle, like it is 4px from the divider when open. */
   .coloride-macos-titlebar[data-inspector-open="false"] .coloride-zone-3-header {
-    padding-right: 42px;
+    padding-right: 34px;
   }
 
   .coloride-history-btn {
