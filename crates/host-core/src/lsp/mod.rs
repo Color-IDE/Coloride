@@ -3,12 +3,14 @@
 
 mod client;
 mod features;
+mod latest;
 mod services;
 mod session;
 mod transport;
 mod uri;
 
 pub use client::{LspClient, LspError, NotificationHandler, PendingRequest};
+pub use latest::LatestDiagnostics;
 pub use services::{
     biome_server_spec, language_id_for_path, resolve_workspace_tool, tsgo_server_spec,
     vtsls_server_spec, LanguageServerSpec, LanguageServices,

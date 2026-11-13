@@ -143,6 +143,7 @@ impl SqliteWalContextEngine {
                 .parse_with(file_row.language, &provider, None);
             next_analyzer.index_file(&file_row.file_path, &rope, &tree);
         }
+        next_analyzer.carry_semantic_confirmations(&self.impact_analyzer);
         self.impact_analyzer = next_analyzer;
         self.sync_symbol_edges_from_impact_analyzer();
     }

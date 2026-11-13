@@ -346,6 +346,21 @@ impl SqliteWalContextEngine {
         &self.impact_analyzer
     }
 
+    /// Marks `importer → target` as confirmed by a language server (`LOT-010`): the edge
+    /// becomes `ExactSemantic`. Returns false when the index has no such edge. Kept in memory
+    /// only; the next analysis after a restart confirms it again.
+    pub fn confirm_semantic_edge(&mut self, importer_file: &str, target_file: &str) -> bool {
+        let confirmed = self.impact_analyzer.upgrade_edge_confidence(
+            importer_file,
+            target_file,
+            GraphEdgeConfidence::ExactSemantic,
+        );
+        if confirmed {
+            self.sync_symbol_edges_from_impact_analyzer();
+        }
+        confirmed
+    }
+
     #[must_use]
     pub const fn files_table(&self) -> &BTreeMap<String, SqliteFileRow> {
         &self.files

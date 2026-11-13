@@ -116,6 +116,7 @@ pub(crate) fn load_workspace(
     if let Some(previous) = language_services.take() {
         previous.stop();
     }
+    state.latest_diagnostics.clear();
     *language_services = trust_gate.as_ref().map(|gate| {
         std::sync::Arc::new(host_core::LanguageServices::new(
             gate.clone(),

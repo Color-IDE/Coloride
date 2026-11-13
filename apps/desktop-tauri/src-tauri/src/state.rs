@@ -4,7 +4,8 @@ use std::sync::{Arc, Mutex};
 
 use context_engine::SqliteWalContextEngine;
 use host_core::{
-    DiagnosticsSink, LanguageServices, WorkspaceTrustGate, WORKSPACE_TRUST_STORE_FILENAME,
+    DiagnosticsSink, LanguageServices, LatestDiagnostics, WorkspaceTrustGate,
+    WORKSPACE_TRUST_STORE_FILENAME,
 };
 
 use crate::bridge::DesktopBinaryEditorBridge;
@@ -19,8 +20,12 @@ pub(crate) struct DesktopAppState {
     /// Language servers of the open workspace. They exist only for a workspace with a gate and
     /// run only once it is trusted; replacing or dropping them kills their processes.
     pub(crate) language_services: Mutex<Option<Arc<LanguageServices>>>,
-    /// Where revision-tagged diagnostics go (the UI, through a Tauri event).
+    /// Where revision-tagged diagnostics go: recorded in `latest_diagnostics`, then sent to
+    /// the UI (a Tauri event).
     pub(crate) diagnostics_sink: DiagnosticsSink,
+    /// Each open document's diagnostics for its newest content, per tool: what the context
+    /// MCP server publishes (`LocalMcpServer::publish_document_diagnostics`).
+    pub(crate) latest_diagnostics: Arc<LatestDiagnostics>,
     pub(crate) app_data_dir: PathBuf,
     pub(crate) context_engine: Mutex<Option<SqliteWalContextEngine>>,
     /// Bumped (under the `context_engine` lock) each time a workspace is opened. An index built
@@ -41,12 +46,20 @@ impl DesktopAppState {
         app_data_dir: PathBuf,
         diagnostics_sink: DiagnosticsSink,
     ) -> Self {
+        let latest_diagnostics = Arc::new(LatestDiagnostics::new());
         Self {
             bridge: Mutex::new(bridge),
             workspace_root: Mutex::new(None),
             trust_gate: Mutex::new(None),
             language_services: Mutex::new(None),
-            diagnostics_sink,
+            diagnostics_sink: {
+                let latest = Arc::clone(&latest_diagnostics);
+                Arc::new(move |batch| {
+                    latest.record(batch.clone());
+                    diagnostics_sink(batch);
+                })
+            },
+            latest_diagnostics,
             app_data_dir,
             context_engine: Mutex::new(None),
             workspace_generation: AtomicU64::new(0),

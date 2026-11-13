@@ -5,6 +5,7 @@ pub mod documents;
 pub mod language;
 pub mod migration;
 pub mod search;
+pub mod semantic;
 pub mod session_cache;
 pub mod trust;
 pub mod window;

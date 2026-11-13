@@ -253,6 +253,82 @@ mod tests {
         let _ = revoke_workspace_trust(&state);
     }
 
+    /// LOT-010 semantic graph enrichment with the real vtsls: the import edge `a.ts → b.ts`
+    /// found by the AST index becomes `ExactSemantic` once vtsls resolves `"./b"` to b.ts.
+    #[cfg(unix)]
+    #[test]
+    fn vtsls_confirms_import_edges_as_exact_semantic() {
+        use crate::commands::documents::open_document;
+        use crate::commands::semantic::enrich_import_edges;
+        use crate::commands::trust::apply_trust_decision;
+        use context_engine::GraphEdgeConfidence;
+
+        let data = tempfile::tempdir().unwrap();
+        let workspace = tempfile::tempdir().unwrap();
+        let bin = workspace.path().join("node_modules/.bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let real_vtsls = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../node_modules/.bin/vtsls")
+            .canonicalize()
+            .expect("the real vtsls is required: run `pnpm install`");
+        // pnpm's `.bin` scripts locate their package from their own path: wrap, do not link.
+        std::fs::write(
+            bin.join("vtsls"),
+            format!("#!/bin/sh\nexec '{}' \"$@\"\n", real_vtsls.display()),
+        )
+        .unwrap();
+        std::fs::set_permissions(
+            bin.join("vtsls"),
+            std::os::unix::fs::PermissionsExt::from_mode(0o755),
+        )
+        .unwrap();
+        std::fs::create_dir_all(workspace.path().join("src")).unwrap();
+        std::fs::write(
+            workspace.path().join("tsconfig.json"),
+            r#"{"include":["src"]}"#,
+        )
+        .unwrap();
+        std::fs::write(workspace.path().join("src/b.ts"), "export const b = 1;\n").unwrap();
+        let a = "import { b } from \"./b\";\nexport const a = b;\n";
+        std::fs::write(workspace.path().join("src/a.ts"), a).unwrap();
+
+        let state = test_state(data.path());
+        load_workspace(&state, workspace.path().to_str().unwrap()).unwrap();
+        assert!(ensure_context_engine(&state));
+        open_document(&state, "src/a.ts".into(), 1, a).unwrap();
+        let edge = |state: &DesktopAppState| {
+            state
+                .context_engine
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .symbol_edges_table()
+                .iter()
+                .find(|edge| edge.importer_file == "src/a.ts" && edge.target_file == "src/b.ts")
+                .map(|edge| edge.confidence)
+        };
+        assert_eq!(edge(&state), Some(GraphEdgeConfidence::SyntacticAst));
+
+        // Untrusted: no server, nothing confirmed.
+        assert_eq!(enrich_import_edges(&state, "src/a.ts", 1), 0);
+
+        let gate = state.trust_gate.lock().unwrap().clone().unwrap();
+        apply_trust_decision(&gate, true).unwrap();
+        assert!(start_language_servers(&state).vtsls);
+        // Until its project is loaded vtsls may not resolve the module: asked again, as the
+        // next analysis would.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        while enrich_import_edges(&state, "src/a.ts", 1) == 0 {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "vtsls never confirmed the edge"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        assert_eq!(edge(&state), Some(GraphEdgeConfidence::ExactSemantic));
+    }
+
     #[test]
     fn an_index_built_for_a_previous_workspace_is_discarded() {
         let data = tempfile::tempdir().unwrap();
