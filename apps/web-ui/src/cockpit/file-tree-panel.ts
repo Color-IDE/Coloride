@@ -17,6 +17,10 @@ export interface FileTreePanelOptions {
   readonly onOpenFile: (node: CockpitFileTreeNode) => void;
   /** Replaces the "No project open" message, e.g. with an "Open folder" button. */
   readonly emptyAction?: { readonly label: string; readonly run: () => Promise<void> };
+  /** A button next to the filter (hiding the tree, for instance); `update` refreshes its look. */
+  readonly headerAction?: {
+    readonly run: () => void;
+  };
   /** Called (at most once per frame) after the user scrolls the tree. */
   readonly onScroll?: (scrollTopPx: number, viewportHeightPx: number) => void;
 }
@@ -47,6 +51,8 @@ export function filterFileTree(
 export class FileTreePanel {
   readonly element: HTMLElement;
   private readonly filterEl: HTMLInputElement | null = null;
+  /** The button of `headerAction`, so its owner can set its icon and label. */
+  actionButton: HTMLButtonElement | null = null;
   private readonly scrollEl: HTMLElement;
   private readonly treeEl: HTMLElement;
   private readonly stickyEl: HTMLElement;
@@ -91,7 +97,19 @@ export class FileTreePanel {
         filterEl.dispatchEvent(new Event("input"));
       });
       this.filterEl = filterEl;
-      this.element.append(filterEl);
+      if (options.headerAction) {
+        const row = doc.createElement("div");
+        row.className = "coloride-file-tree-header";
+        const action = doc.createElement("button");
+        action.type = "button";
+        action.className = "coloride-file-tree-action";
+        action.addEventListener("click", options.headerAction.run);
+        this.actionButton = action;
+        row.append(filterEl, action);
+        this.element.append(row);
+      } else {
+        this.element.append(filterEl);
+      }
     }
 
     const viewport = doc.createElement("div");

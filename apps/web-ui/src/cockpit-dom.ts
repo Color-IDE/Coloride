@@ -565,6 +565,12 @@ export class CockpitDomController {
       this.openTerminal();
       return;
     }
+    // Ctrl/Cmd+Shift+E: hide or show the file tree.
+    if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "e") {
+      event.preventDefault();
+      this.inspector.toggleTree();
+      return;
+    }
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
       event.preventDefault();
       void this.saveActiveDocument().catch((error: unknown) => {

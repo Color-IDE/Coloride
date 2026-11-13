@@ -5,6 +5,7 @@ import { type ThinScrollbar, attachThinScrollbar } from "../thin-scrollbar.js";
 import { UI_STRINGS, uiText } from "../ui-strings.js";
 import { FileTreePanel } from "./file-tree-panel.js";
 import { type HeaderTabSpec, HeaderTabs } from "./header-tabs.js";
+import { TREE_HIDE_ICON, TREE_SHOW_ICON } from "./panel-icons.js";
 import { askUnsavedChoice } from "./unsaved-dialog.js";
 
 export interface InspectorOptions {
@@ -28,6 +29,8 @@ export interface InspectorOptions {
  * The CodeMirror 6 view is mounted once and only ever hidden, never unmounted.
  * Open tabs belong to a work group (a Zone 3 tab); each project and group remembers its own.
  */
+const TREE_HIDDEN_KEY = "coloride.treeHidden";
+
 export class Inspector {
   readonly element: HTMLElement;
   readonly editorHost: HTMLElement;
@@ -36,6 +39,13 @@ export class Inspector {
   private readonly empty: HTMLElement;
   private readonly tabs: HeaderTabs;
   private editorScrollbar: ThinScrollbar | null = null;
+  /**
+   * The file tree can be hidden: the editor then takes the whole panel and the tree slides in
+   * over it while the pointer is on its edge, with a button to keep it visible again.
+   */
+  private treeHidden = false;
+  private readonly body: HTMLElement;
+  private readonly treeEdge: HTMLButtonElement;
   /** Files opened in this group, in opening order. They accumulate until closed. */
   private openTabs: string[] = [];
   /** Set when no file is shown; cleared as soon as another file is opened. */
@@ -105,12 +115,25 @@ export class Inspector {
       onOpenFile: (node) =>
         void this.openFile(node.path, (message) => this.tree.reportError(message)),
       onScroll: options.onTreeScroll,
+      headerAction: { run: () => this.toggleTree() },
     });
 
-    const body = doc.createElement("div");
-    body.className = "coloride-zone-4-body";
-    body.append(editorColumn, this.tree.element);
-    this.element.append(body);
+    // The edge strip that brings a hidden tree back: hovering it slides the tree in, clicking
+    // it keeps the tree visible.
+    this.treeEdge = doc.createElement("button");
+    this.treeEdge.type = "button";
+    this.treeEdge.className = "coloride-zone-4-tree-edge";
+    this.treeEdge.innerHTML = TREE_SHOW_ICON;
+    this.treeEdge.setAttribute("aria-label", UI_STRINGS.files.showTree);
+    this.treeEdge.title = UI_STRINGS.files.showTree;
+    this.treeEdge.addEventListener("click", () => this.setTreeHidden(false));
+
+    this.body = doc.createElement("div");
+    this.body.className = "coloride-zone-4-body";
+    this.body.append(editorColumn, this.treeEdge, this.tree.element);
+    this.element.append(this.body);
+    this.treeHidden = Inspector.readTreeHidden(doc);
+    this.applyTreeHidden();
 
     this.tabs = new HeaderTabs(doc, options.header, {
       ariaLabel: UI_STRINGS.shell.openFiles,
@@ -120,6 +143,45 @@ export class Inspector {
       onSelect: (path) => void this.openFile(path),
       onClose: (path) => this.requestCloseTab(path),
     });
+  }
+
+  isTreeHidden(): boolean {
+    return this.treeHidden;
+  }
+
+  toggleTree(): void {
+    this.setTreeHidden(!this.treeHidden);
+  }
+
+  setTreeHidden(hidden: boolean): void {
+    if (this.treeHidden === hidden) return;
+    this.treeHidden = hidden;
+    this.applyTreeHidden();
+    try {
+      this.element.ownerDocument.defaultView?.localStorage.setItem(TREE_HIDDEN_KEY, String(hidden));
+    } catch {
+      // Not remembering the choice is fine.
+    }
+  }
+
+  private static readTreeHidden(doc: Document): boolean {
+    try {
+      return doc.defaultView?.localStorage.getItem(TREE_HIDDEN_KEY) === "true";
+    } catch {
+      return false;
+    }
+  }
+
+  private applyTreeHidden(): void {
+    this.body.dataset.treeHidden = String(this.treeHidden);
+    const action = this.tree.actionButton;
+    if (action) {
+      const label = this.treeHidden ? UI_STRINGS.files.pinTree : UI_STRINGS.files.hideTree;
+      action.innerHTML = this.treeHidden ? TREE_SHOW_ICON : TREE_HIDE_ICON;
+      action.setAttribute("aria-label", label);
+      action.title = label;
+    }
+    this.treeEdge.hidden = !this.treeHidden;
   }
 
   /** Mounts the singleton CodeMirror 6 view into its permanent container. */

@@ -9,6 +9,14 @@ export const SPLIT_RIGHT_ICON = svg(
 export const SPLIT_DOWN_ICON = svg(
   '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 12h18"/>',
 );
+/** A panel with a column on the right and an arrow pushing it out: hide the file tree. */
+export const TREE_HIDE_ICON = svg(
+  '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/><path d="M7 12h5m-2-2l2 2l-2 2"/>',
+);
+/** The same panel with the arrow pulling the column back in: show the file tree. */
+export const TREE_SHOW_ICON = svg(
+  '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/><path d="M12 12H7m2-2l-2 2l2 2"/>',
+);
 /** A rectangle growing to its corners: show this panel alone. */
 export const MAXIMIZE_ICON = svg(
   '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><rect x="8" y="8" width="8" height="8" rx="1"/>',

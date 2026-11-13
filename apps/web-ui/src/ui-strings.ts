@@ -74,6 +74,9 @@ export const UI_STRINGS = {
   },
   files: {
     tree: "Project files",
+    hideTree: "Hide file tree",
+    pinTree: "Keep file tree visible",
+    showTree: "Show file tree",
     filter: "Filter files…",
     filterLabel: "Filter project files",
     noProject: "No project open",
