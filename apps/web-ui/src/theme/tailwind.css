@@ -2,6 +2,7 @@
 @import "@xterm/xterm/css/xterm.css";
 @import "./sidebar.css";
 @import "./inspector.css";
+@import "./selection.css";
 @import "./header-tabs.css";
 @import "./terminal.css";
 @import "./trust-banner.css";
