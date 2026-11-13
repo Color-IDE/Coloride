@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { panelIds } from "./layout-tree.js";
-import { createCockpitStoreBundle, resolveGroupLayout } from "./stores.js";
+import { createCockpitStoreBundle, resolveGroupLayout } from "./stores/index.js";
 
 const chat = (chatId: string, modelName = "Codex") => ({
   chatId,

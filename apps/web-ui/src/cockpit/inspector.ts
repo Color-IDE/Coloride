@@ -1,5 +1,5 @@
 import type { ColorideEditorView } from "@coloride/editor-cm6";
-import type { CockpitStoreBundle } from "../stores.js";
+import type { CockpitStoreBundle } from "../stores/index.js";
 import { fileTreeIconColor, fileTreeIconSvg } from "../theme/file-tree-icons.js";
 import { type ThinScrollbar, attachThinScrollbar } from "../thin-scrollbar.js";
 import { UI_STRINGS, uiText } from "../ui-strings.js";

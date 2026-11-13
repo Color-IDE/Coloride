@@ -13,7 +13,7 @@ import type {
   CockpitStoreBundle,
   Zone1ActivityState,
   Zone4InspectorState,
-} from "./stores.js";
+} from "./stores/index.js";
 import { UI_STRINGS } from "./ui-strings.js";
 
 export interface CockpitDomControllerOptions {

@@ -1,5 +1,5 @@
 import { attribute, button, reconcile, visibility } from "../dom-utils.js";
-import type { CockpitChatTab, CockpitFileTreeNode, CockpitStoreBundle } from "../stores.js";
+import type { CockpitChatTab, CockpitFileTreeNode, CockpitStoreBundle } from "../stores/index.js";
 import { UI_STRINGS } from "../ui-strings.js";
 import { type WorkGroup, listProjects } from "../workspace-navigation.js";
 import { FOLDER_ICON, GROUP_ICON } from "./icons.js";

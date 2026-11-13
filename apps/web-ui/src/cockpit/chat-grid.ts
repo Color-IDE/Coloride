@@ -6,7 +6,7 @@ import {
   type CockpitChatTab,
   type CockpitStoreBundle,
   resolveGroupLayout,
-} from "../stores.js";
+} from "../stores/index.js";
 import { UI_STRINGS, uiText } from "../ui-strings.js";
 import { VirtualChatMessageListRenderer } from "../virtualizer.js";
 import { type HeaderTabSpec, HeaderTabs } from "./header-tabs.js";

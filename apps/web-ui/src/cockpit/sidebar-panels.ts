@@ -6,7 +6,7 @@ import type {
   CockpitImpactedTestItem,
   CockpitSearchResultItem,
   CockpitStoreBundle,
-} from "../stores.js";
+} from "../stores/index.js";
 import { UI_STRINGS, uiText } from "../ui-strings.js";
 import { FileTreePanel } from "./file-tree-panel.js";
 

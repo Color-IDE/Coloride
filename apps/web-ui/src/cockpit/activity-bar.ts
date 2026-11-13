@@ -3,7 +3,7 @@ import type {
   CockpitPersonaMode,
   CockpitStoreBundle,
   Zone1ActivityState,
-} from "../stores.js";
+} from "../stores/index.js";
 import { ACTIVITY_BAR_SVG_ICONS, type StatefulActivityIcon } from "../theme/index.js";
 import { UI_STRINGS, uiText } from "../ui-strings.js";
 
