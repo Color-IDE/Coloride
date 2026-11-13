@@ -22,6 +22,12 @@ export function splitSessionNumber(title: string): { number: string | null; name
     : { number: null, name: title };
 }
 
+/** How a session's title reads on screen: "#16 New session" becomes "New session #16". */
+export function sessionDisplayTitle(title: string): string {
+  const { number, name } = splitSessionNumber(title);
+  return number ? `${name} ${number}` : title;
+}
+
 /** All row controls are siblings: options never activate selection or expansion. */
 export class SidebarRow {
   readonly el: HTMLDivElement;
@@ -30,8 +36,7 @@ export class SidebarRow {
   readonly add: HTMLButtonElement | undefined;
   readonly toggle: HTMLButtonElement | undefined;
   private readonly title: HTMLSpanElement;
-  /** The session number, on the right of the row (session rows only). */
-  private readonly badge: HTMLSpanElement | undefined;
+  private readonly kind: SidebarRowOptions["kind"];
   private readonly arrow: HTMLSpanElement;
   private renameInput: HTMLInputElement | undefined;
   private readonly addLabel: { readonly aria: string; readonly title: string };
@@ -41,18 +46,13 @@ export class SidebarRow {
       aria: UI_STRINGS.chat.newSessionIn,
       title: UI_STRINGS.chat.newSession,
     };
+    this.kind = options.kind;
     this.el = doc.createElement("div");
     this.el.className = `sidebar-row sidebar-row--${options.kind}`;
     this.select = button(doc, "sidebar-row-select");
     this.title = doc.createElement("span");
     this.title.className = "sidebar-row-title";
     this.select.appendChild(this.title);
-    if (options.kind === "session") {
-      this.badge = doc.createElement("span");
-      this.badge.className = "sidebar-row-badge";
-      this.badge.setAttribute("aria-hidden", "true");
-      this.select.appendChild(this.badge);
-    }
     this.select.addEventListener("click", options.onSelect);
     this.arrow = doc.createElement("span");
     this.arrow.className = "sidebar-chevron";
@@ -107,13 +107,8 @@ export class SidebarRow {
   }
 
   update(title: string, selected: boolean, expanded?: boolean): void {
-    // A session titled "#16 New session" shows its name, with the number on the right.
-    const shown = this.badge ? splitSessionNumber(title) : { number: null, name: title };
-    label(this.title, shown.name);
-    if (this.badge) {
-      label(this.badge, shown.number ?? "");
-      this.badge.hidden = shown.number === null;
-    }
+    // A session titled "#16 New session" reads "New session #16", all in the same text.
+    label(this.title, this.kind === "session" ? sessionDisplayTitle(title) : title);
     attribute(this.select, "title", title);
     attribute(this.more, "aria-label", `Options for ${title}`);
     if (this.add) {

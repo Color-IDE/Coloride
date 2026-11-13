@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
-import { SidebarRow, splitSessionNumber } from "./sidebar-row.js";
+import { SidebarRow, sessionDisplayTitle, splitSessionNumber } from "./sidebar-row.js";
 
-describe("session number on the right of a sidebar row", () => {
+describe("session number written after the name", () => {
   it("splits '#16 New session' into its number and name", () => {
     expect(splitSessionNumber("#16 New session")).toEqual({ number: "#16", name: "New session" });
     expect(splitSessionNumber("#4 Fix login")).toEqual({ number: "#4", name: "Fix login" });
@@ -11,23 +11,19 @@ describe("session number on the right of a sidebar row", () => {
     expect(splitSessionNumber("#16")).toEqual({ number: null, name: "#16" });
   });
 
-  it("shows the name as the title and the number in a badge; other rows have none", () => {
+  it("reads '#16 New session' as 'New session #16', in a single text", () => {
+    expect(sessionDisplayTitle("#16 New session")).toBe("New session #16");
+    expect(sessionDisplayTitle("Renamed")).toBe("Renamed");
+
     const row = new SidebarRow(document, { kind: "session", onSelect: () => {}, onMore: () => {} });
     row.update("#16 New session", false);
-    expect(row.el.querySelector(".sidebar-row-title")?.textContent).toBe("New session");
-    const badge = row.el.querySelector<HTMLElement>(".sidebar-row-badge");
-    expect(badge?.textContent).toBe("#16");
-    expect(badge?.hidden).toBe(false);
-    // The full title stays available as the tooltip.
+    expect(row.el.querySelector(".sidebar-row-title")?.textContent).toBe("New session #16");
+    // The stored title stays as the tooltip, and nothing else carries the number.
     expect(row.select.getAttribute("title")).toBe("#16 New session");
-
-    row.update("Renamed", false);
-    expect(row.el.querySelector(".sidebar-row-title")?.textContent).toBe("Renamed");
-    expect(badge?.hidden).toBe(true);
+    expect(row.el.querySelector(".sidebar-row-badge")).toBeNull();
 
     const group = new SidebarRow(document, { kind: "group", onSelect: () => {}, onMore: () => {} });
     group.update("#1 Workspace", false, true);
-    expect(group.el.querySelector(".sidebar-row-badge")).toBeNull();
     expect(group.el.querySelector(".sidebar-row-title")?.textContent).toBe("#1 Workspace");
   });
 });

@@ -35,12 +35,13 @@ describe("Codex mark and session number across the interface", () => {
 
     const tab = (id: string) =>
       root.querySelector<HTMLElement>(`.coloride-zone-3-header [data-chat-id="${id}"]`);
-    // Header tab: mark as its icon, the name as its label and the number as a badge.
+    // Header tab: the mark as its icon, and the number written after the name, in the same text.
     expect(
       tab("a")?.querySelector(".coloride-header-tab-icon .coloride-codex-icon"),
     ).not.toBeNull();
-    expect(tab("a")?.querySelector(".coloride-header-tab-label")?.textContent).toBe("New session");
-    expect(tab("a")?.querySelector(".coloride-header-tab-badge")?.textContent).toBe("#16");
+    expect(tab("a")?.querySelector(".coloride-header-tab-label")?.textContent).toBe(
+      "New session #16",
+    );
     // Another model keeps its state glyph.
     expect(tab("b")?.querySelector(".coloride-codex-icon")).toBeNull();
 

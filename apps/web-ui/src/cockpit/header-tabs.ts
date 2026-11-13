@@ -16,8 +16,6 @@ export interface HeaderTabIcon {
 export interface HeaderTabSpec {
   readonly key: string;
   readonly label: string;
-  /** A short muted label right after the name (a session's number, for instance). */
-  readonly badge?: string;
   readonly title?: string;
   readonly icon?: HeaderTabIcon;
   readonly selected: boolean;
@@ -47,7 +45,6 @@ interface TabNodes {
   readonly el: HTMLElement;
   readonly icon: HTMLElement;
   readonly label: HTMLElement;
-  readonly badge: HTMLElement;
   readonly dot: HTMLElement;
   readonly close: HTMLButtonElement;
   iconKey: string;
@@ -108,9 +105,7 @@ export class HeaderTabs {
     for (const [name, value] of Object.entries(spec.data ?? {})) el.dataset[name] = value;
 
     if (tab.label.textContent !== spec.label) tab.label.textContent = spec.label;
-    const badge = spec.badge ?? "";
-    if (tab.badge.textContent !== badge) tab.badge.textContent = badge;
-    tab.badge.hidden = badge === "";
+
     tab.close.setAttribute("aria-label", this.options.closeLabel(spec.label));
     tab.close.disabled = spec.closable === false;
 
@@ -140,10 +135,6 @@ export class HeaderTabs {
     icon.setAttribute("aria-hidden", "true");
     const label = doc.createElement("span");
     label.className = "coloride-header-tab-label";
-    const badge = doc.createElement("span");
-    badge.className = "coloride-header-tab-badge";
-    badge.setAttribute("aria-hidden", "true");
-    badge.hidden = true;
     const dot = doc.createElement("span");
     dot.className = "coloride-header-tab-dot";
     dot.setAttribute("role", "img");
@@ -157,7 +148,7 @@ export class HeaderTabs {
       event.stopPropagation();
       if (!close.disabled) onClose(key);
     });
-    el.append(icon, label, badge, dot, close);
+    el.append(icon, label, dot, close);
 
     el.addEventListener("click", () => onSelect(key));
     el.addEventListener("keydown", (event: KeyboardEvent) => {
@@ -173,6 +164,6 @@ export class HeaderTabs {
       event.preventDefault();
       if (!close.disabled) onClose(key);
     });
-    return { el, icon, label, badge, dot, close, iconKey: "\u0000" };
+    return { el, icon, label, dot, close, iconKey: "\u0000" };
   }
 }

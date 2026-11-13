@@ -1,7 +1,7 @@
 import { reconcile } from "../dom-utils.js";
 import { type LayoutNode, panel, panelIds, reconcileLayout } from "../layout-tree.js";
 import { PLUS_ICON } from "../sidebar/icons.js";
-import { splitSessionNumber } from "../sidebar/sidebar-row.js";
+import { sessionDisplayTitle } from "../sidebar/sidebar-row.js";
 import {
   COLORIDE_DESIGN_TOKENS,
   type CockpitChatTab,
@@ -260,14 +260,11 @@ export class ChatGrid {
     this.tabs.update(
       chats.map((chat): HeaderTabSpec => {
         const token = COLORIDE_DESIGN_TOKENS[chat.validationState];
-        // "#16 New session": the name, with its number as a muted label after it.
-        const numbered = splitSessionNumber(chat.title);
         return {
           key: chat.chatId,
-          label: numbered.name,
+          label: sessionDisplayTitle(chat.title),
           title: chat.kind === "terminal" ? chat.title : `${chat.title} · ${chat.modelName}`,
           icon: tabIcon(chat, token.icon),
-          ...(numbered.number ? { badge: numbered.number } : {}),
           selected: chat.chatId === z3.activeChatId,
           closable: this.canCloseSession(chat.chatId),
           data: { validationState: chat.validationState },
