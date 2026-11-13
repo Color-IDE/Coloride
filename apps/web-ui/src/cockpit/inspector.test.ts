@@ -316,4 +316,65 @@ describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () =
     expect(stores.getDocumentContent("src/a.ts")).toBe("edited");
     expect(stores.isDocumentUnsaved("src/a.ts")).toBe(true);
   });
+
+  it("empties the right side when an empty group is selected from the sidebar, in any project", () => {
+    const { stores, root } = setup();
+    const z4Tabs = () =>
+      Array.from(
+        root.querySelectorAll<HTMLElement>(".coloride-zone-4-header .coloride-header-tab"),
+      ).map((el) => el.dataset.path);
+    const empty = () => root.querySelector<HTMLElement>(".coloride-zone-4-empty")?.hidden === false;
+    const editorShown = () =>
+      root.querySelector<HTMLElement>(".coloride-zone-4-editor-host")?.style.display !== "none";
+    const clickGroup = (id: string) =>
+      root.querySelector<HTMLButtonElement>(`.sidebar-row-select[data-group-id="${id}"]`)?.click();
+
+    stores.setProjectPath("/projects/a");
+    stores.selectFileFromTree("a1.ts", "one");
+    stores.createWorkGroup("Empty");
+    const emptyId = stores.navigation.getState().groups[1]?.id as string;
+    expect(z4Tabs()).toEqual([]);
+
+    clickGroup("initial-group");
+    expect(z4Tabs()).toContain("a1.ts");
+    expect(editorShown()).toBe(true);
+
+    stores.setFileTree([
+      {
+        path: "a1.ts",
+        name: "a1.ts",
+        depth: 0,
+        isDirectory: false,
+        validationState: "UnchangedBlue",
+      },
+    ]);
+    const z4Element = root.querySelector<HTMLElement>(".coloride-zone-4-inspector") as HTMLElement;
+    const selectedRows = () =>
+      root.querySelectorAll(
+        '.coloride-zone-4-tree-column .cm-coloride-virtual-tree-row[aria-selected="true"]',
+      ).length;
+    clickGroup("initial-group");
+    stores.selectFileFromTree("a1.ts");
+    expect(selectedRows()).toBe(1);
+    expect(z4Element.dataset.activeDocumentId).toBe("a1.ts");
+
+    clickGroup(emptyId);
+    expect(stores.navigation.getState().activeGroupId).toBe(emptyId);
+    expect(z4Tabs()).toEqual([]);
+    expect(empty()).toBe(true);
+    expect(editorShown()).toBe(false);
+    // Nothing of the previous group's file lingers: no selected tree row, no active document.
+    expect(selectedRows()).toBe(0);
+    expect(z4Element.dataset.activeDocumentId).toBe("");
+    expect(z4Element.dataset.unsavedChanges).toBe("false");
+
+    // Another project whose only group is empty, then back.
+    stores.setProjectPath("/projects/b");
+    expect(z4Tabs()).toEqual([]);
+    expect(empty()).toBe(true);
+    stores.setProjectPath("/projects/a");
+    expect(stores.navigation.getState().activeGroupId).toBe(emptyId);
+    expect(z4Tabs()).toEqual([]);
+    expect(empty()).toBe(true);
+  });
 });

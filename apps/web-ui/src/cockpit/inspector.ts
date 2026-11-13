@@ -123,12 +123,6 @@ export class Inspector {
   /** Syncs tabs and visibility with Zone 4 state. */
   update(): void {
     const z4 = this.options.stores.zone4.getState();
-    this.element.dataset.syncedChatId = z4.syncedChatId;
-    this.element.dataset.activeDocumentId = z4.activeDocumentId;
-    this.element.dataset.activeInspectorTab = z4.activeInspectorTab;
-    this.element.dataset.unsavedChanges = String(z4.hasUnsavedChanges);
-    this.element.dataset.recoveredFromWal = String(z4.recoveredFromWal);
-
     if (z4.activeDocumentId !== this.closedDocId) {
       this.closedDocId = null;
       this.loadedPaths.add(z4.activeDocumentId);
@@ -137,6 +131,12 @@ export class Inspector {
       }
     }
     const noFile = this.closedDocId !== null;
+    // With no file shown (empty group, last tab closed) nothing of the previous file may linger.
+    this.element.dataset.syncedChatId = z4.syncedChatId;
+    this.element.dataset.activeDocumentId = noFile ? "" : z4.activeDocumentId;
+    this.element.dataset.activeInspectorTab = z4.activeInspectorTab;
+    this.element.dataset.unsavedChanges = String(!noFile && z4.hasUnsavedChanges);
+    this.element.dataset.recoveredFromWal = String(z4.recoveredFromWal);
     this.renderTabs(noFile ? null : z4.activeDocumentId);
 
     const wasHidden = this.editorHost.style.display === "none";
@@ -149,12 +149,14 @@ export class Inspector {
 
   updateTree(): void {
     const { stores } = this.options;
-    this.tree.update(stores.zone2.getState().fileTree, stores.zone4.getState().activeDocumentId);
+    // No selected row while no file is shown.
+    const active = this.closedDocId === null ? stores.zone4.getState().activeDocumentId : "";
+    this.tree.update(stores.zone2.getState().fileTree, active);
   }
 
   /** Called after every edit/save: refreshes the unsaved dot of the tabs. */
   setUnsaved(hasUnsavedChanges: boolean): void {
-    this.element.dataset.unsavedChanges = String(hasUnsavedChanges);
+    this.element.dataset.unsavedChanges = String(hasUnsavedChanges && this.closedDocId === null);
     this.renderTabs(
       this.closedDocId !== null ? null : this.options.stores.zone4.getState().activeDocumentId,
     );
