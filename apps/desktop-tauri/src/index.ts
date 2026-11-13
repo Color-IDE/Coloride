@@ -25,13 +25,6 @@ import {
 
 export const WORKSPACE_SESSION_CACHE_FILENAME = "workspace_session_cache.bin";
 
-/**
- * Legacy field of the session cache format, still required by the Rust side (1 | 2 | 4 | 8).
- * The UI no longer has a grid mode (panels follow each tab's layout), so it is always written as
- * 1 and ignored on restore until the cache format carries the layouts.
- */
-export type SessionCacheGridMode = 1 | 2 | 4 | 8;
-
 export interface WorkspaceSessionCacheSnapshot {
   readonly navigation?: WorkspaceNavigationState;
   readonly chats?: readonly CockpitChatTab[];
@@ -39,7 +32,6 @@ export interface WorkspaceSessionCacheSnapshot {
   readonly workspaceRoot: string;
   readonly activePersona: CockpitPersonaMode;
   readonly activeActivityPanel: ActivityBarSection;
-  readonly gridMode: SessionCacheGridMode;
   readonly activeInspectorTab: InspectorTab;
   readonly activeChatId: string;
   readonly activeDocumentId: string;
@@ -130,7 +122,6 @@ export function lazyBootDesktopCockpit(
     workspaceRoot: "/workspace/coloride",
     activePersona: "Develop",
     activeActivityPanel: "sessions",
-    gridMode: 1,
     activeInspectorTab: "code-diff",
     activeChatId: "chat-1",
     activeDocumentId: "src/auth/login.tsx",
@@ -260,7 +251,6 @@ export function lazyBootDesktopCockpit(
         workspaceRoot,
         activePersona: z1.activePersona,
         activeActivityPanel: z1.activeSection,
-        gridMode: 1,
         activeInspectorTab: z4.activeInspectorTab,
         activeChatId: z3.activeChatId,
         activeDocumentId: z4.activeDocumentId,

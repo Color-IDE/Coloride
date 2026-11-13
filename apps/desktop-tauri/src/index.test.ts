@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { CONTRACT_SCHEMA_VERSION } from "@coloride/protocol-types";
+import { resolveGroupLayout } from "@coloride/web-ui";
 import { describe, expect, it } from "vitest";
 import {
   bootstrapDesktopShell,
@@ -18,6 +19,46 @@ describe("@coloride/desktop-tauri — LOT-005 Lazy Boot & Inspector Sync", () =>
     const previousId = restored.stores.navigation.getState().activeGroupId;
     restored.stores.createWorkGroup("Sidebar");
     expect(restored.stores.navigation.getState().activeGroupId).not.toBe(previousId);
+    restored.destroy();
+  });
+
+  it("restores a tab's panel layout with its sizes after a restart", () => {
+    const first = lazyBootDesktopCockpit();
+    // Any number of panels, split both ways, then resized by hand (sizes are not the automatic ones).
+    first.stores.setPanelArea({ widthPx: 1600, heightPx: 900 });
+    const base = first.stores.zone3.getState().activeChatId;
+    const right = first.stores.createChat({ from: base, direction: "row" }) as string;
+    const below = first.stores.createChat({ from: right, direction: "column" }) as string;
+    const group = first.stores.navigation.getState().groups[0];
+    if (!group) throw new Error("Missing group");
+    const layout = resolveGroupLayout(group);
+    if (layout?.kind !== "split") throw new Error("Expected a split layout");
+    first.stores.setWorkGroupLayout(group.id, { ...layout, sizes: [0.3, 0.7] });
+    const saved = first.stores.navigation.getState().groups[0];
+    if (!saved) throw new Error("Missing group");
+    const expected = resolveGroupLayout(saved);
+    const bytes = first.exportSessionCacheBinary();
+    first.destroy();
+
+    const restored = lazyBootDesktopCockpit({ cachedSessionBytes: bytes });
+    const restoredGroup = restored.stores.navigation.getState().groups[0];
+    if (!restoredGroup) throw new Error("Missing restored group");
+    expect(restoredGroup.chatIds).toEqual([base, right, below]);
+    expect(resolveGroupLayout(restoredGroup)).toEqual(expected);
+    expect(resolveGroupLayout(restoredGroup)).toMatchObject({ kind: "split", sizes: [0.3, 0.7] });
+    restored.destroy();
+  });
+
+  it("still restores a cache written before the grid mode was removed", () => {
+    const first = lazyBootDesktopCockpit();
+    first.stores.createWorkGroup("Legacy");
+    const legacy = JSON.parse(new TextDecoder().decode(first.exportSessionCacheBinary()));
+    legacy.gridMode = 4; // the field older versions wrote
+    first.destroy();
+    const restored = lazyBootDesktopCockpit({
+      cachedSessionBytes: new TextEncoder().encode(JSON.stringify(legacy)),
+    });
+    expect(restored.stores.navigation.getState().groups.at(-1)?.title).toBe("Legacy");
     restored.destroy();
   });
 
@@ -92,7 +133,6 @@ describe("@coloride/desktop-tauri — LOT-005 Lazy Boot & Inspector Sync", () =>
       workspaceRoot: "/workspace/coloride",
       activePersona: "Develop",
       activeActivityPanel: "search",
-      gridMode: 4,
       activeInspectorTab: "code-diff",
       activeChatId: "chat-1",
       activeDocumentId: "src/restored.ts",
