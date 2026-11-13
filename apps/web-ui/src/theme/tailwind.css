@@ -291,6 +291,7 @@
     height: 100%;
   }
   .coloride-layout-split {
+    position: relative;
     display: flex;
   }
   .coloride-layout-split > * {
@@ -304,11 +305,73 @@
     flex-direction: column;
   }
   /* Hairline between neighbours (an inset shadow: cell borders are reset elsewhere). */
-  .coloride-layout-split[data-direction="row"] > * + * {
+  .coloride-layout-split[data-direction="row"]
+    > :not(.coloride-layout-handle)
+    + :not(.coloride-layout-handle) {
     box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.08);
   }
-  .coloride-layout-split[data-direction="column"] > * + * {
+  .coloride-layout-split[data-direction="column"]
+    > :not(.coloride-layout-handle)
+    + :not(.coloride-layout-handle) {
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  /* Draggable bar over each boundary: a 9px grab area centred on the hairline, which takes no
+     room. Its position is set from the sizes; the line only shows on hover, focus and drag. */
+  .coloride-layout-handle {
+    position: absolute;
+    z-index: 6;
+    touch-action: none;
+    outline: none;
+    -webkit-app-region: no-drag;
+  }
+  .coloride-layout-split[data-direction="row"] > .coloride-layout-handle {
+    top: 0;
+    bottom: 0;
+    width: 9px;
+    margin-left: -4.5px;
+    cursor: col-resize;
+  }
+  .coloride-layout-split[data-direction="column"] > .coloride-layout-handle {
+    left: 0;
+    right: 0;
+    height: 9px;
+    margin-top: -4.5px;
+    cursor: row-resize;
+  }
+  .coloride-layout-handle::after {
+    content: "";
+    position: absolute;
+    background: rgba(255, 255, 255, 0.4);
+    opacity: 0;
+    transition: opacity 120ms ease;
+  }
+  .coloride-layout-split[data-direction="row"] > .coloride-layout-handle::after {
+    top: 0;
+    bottom: 0;
+    left: 4px;
+    width: 1px;
+  }
+  .coloride-layout-split[data-direction="column"] > .coloride-layout-handle::after {
+    left: 0;
+    right: 0;
+    top: 4px;
+    height: 1px;
+  }
+  .coloride-layout-handle:hover::after,
+  .coloride-layout-handle:focus-visible::after,
+  .coloride-zone-3-grid[data-resizing] .coloride-layout-handle:focus::after {
+    opacity: 1;
+  }
+  /* No text selection, and the resize cursor everywhere, while dragging. */
+  .coloride-zone-3-grid[data-resizing] {
+    user-select: none;
+  }
+  .coloride-zone-3-grid[data-resizing="row"] {
+    cursor: col-resize;
+  }
+  .coloride-zone-3-grid[data-resizing="column"] {
+    cursor: row-resize;
   }
 
   .coloride-chat-cell {

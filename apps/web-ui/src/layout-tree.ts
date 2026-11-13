@@ -326,7 +326,8 @@ export function movePanel(
   return splitPanel(without, targetId, id, direction, position);
 }
 
-function nodeAt(root: LayoutNode, path: LayoutPath): SplitNode | null {
+/** The split at `path` (child indices from the root); null when there is none (e.g. a panel). */
+export function nodeAt(root: LayoutNode, path: LayoutPath): SplitNode | null {
   let current: LayoutNode = root;
   for (const index of path) {
     if (current.kind !== "split") return null;
@@ -335,6 +336,22 @@ function nodeAt(root: LayoutNode, path: LayoutPath): SplitNode | null {
     current = next;
   }
   return current.kind === "split" ? current : null;
+}
+
+/**
+ * The room `node` needs along `axis` so that none of its panels is under the minimum size:
+ * panels side by side add up, panels stacked need the room of the widest.
+ */
+export function minExtentPx(
+  node: LayoutNode,
+  axis: SplitDirection,
+  min: { readonly width: number; readonly height: number } = MIN_PANEL_SIZE_PX,
+): number {
+  if (node.kind === "panel") return axis === "row" ? min.width : min.height;
+  const extents = node.children.map((child) => minExtentPx(child, axis, min));
+  return node.direction === axis
+    ? extents.reduce((sum, extent) => sum + extent, 0)
+    : Math.max(...extents);
 }
 
 function replaceAt(root: LayoutNode, path: LayoutPath, replacement: LayoutNode): LayoutNode {
@@ -350,21 +367,27 @@ function replaceAt(root: LayoutNode, path: LayoutPath, replacement: LayoutNode):
 
 /**
  * Drags the boundary between child `boundary` and `boundary + 1` of the split at `path` by
- * `delta` (a fraction of that split). Neither side goes below `minFraction`.
+ * `delta` (a fraction of that split). `minFraction` is what each side must keep (one number
+ * for both, or one per side). A side already under its minimum is never pushed further down, but
+ * is not forced to grow either: the drag only moves in the directions that do not make it worse.
  */
 export function resizeBoundary(
   root: LayoutNode | null,
   path: LayoutPath,
   boundary: number,
   delta: number,
-  minFraction = MIN_PANEL_FRACTION,
+  minFraction: number | { readonly before: number; readonly after: number } = MIN_PANEL_FRACTION,
 ): LayoutNode | null {
   if (!root) return root;
   const split = nodeAt(root, path);
   const before = split?.sizes[boundary];
   const after = split?.sizes[boundary + 1];
   if (!split || before === undefined || after === undefined) return root;
-  const applied = Math.min(Math.max(delta, minFraction - before), after - minFraction);
+  const min =
+    typeof minFraction === "number" ? { before: minFraction, after: minFraction } : minFraction;
+  const lowest = Math.min(min.before - before, 0);
+  const highest = Math.max(after - min.after, 0);
+  const applied = Math.min(Math.max(delta, lowest), highest);
   if (applied === 0 || Number.isNaN(applied)) return root;
   const sizes = [...split.sizes];
   sizes[boundary] = before + applied;

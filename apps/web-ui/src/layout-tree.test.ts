@@ -7,7 +7,9 @@ import {
   fitsArea,
   hasPanel,
   layoutFromPanels,
+  minExtentPx,
   movePanel,
+  nodeAt,
   panel,
   panelIds,
   parseLayout,
@@ -330,5 +332,67 @@ describe("layout-tree", () => {
         }
       }
     }
+  });
+
+  it("needs, along an axis, the room of every panel in a row and of the widest side in a column", () => {
+    const row: LayoutNode = {
+      kind: "split",
+      direction: "row",
+      sizes: [0.5, 0.5],
+      children: [
+        panel("a"),
+        {
+          kind: "split",
+          direction: "column",
+          sizes: [0.5, 0.5],
+          children: [panel("b"), panel("c")],
+        },
+      ],
+    };
+    // Widths: a + (b over c) -> 220 + 220. Heights: the taller of a, and b + c stacked.
+    expect(minExtentPx(row, "row")).toBe(440);
+    expect(minExtentPx(row, "column")).toBe(280);
+    expect(minExtentPx(panel("a"), "row")).toBe(220);
+    expect(minExtentPx(panel("a"), "column")).toBe(140);
+  });
+
+  it("looks a split up by its path of child indices", () => {
+    const layout = layoutFromPanels(["a", "b", "c", "d"]);
+    expect(nodeAt(layout as LayoutNode, [])?.kind).toBe("split");
+    expect(nodeAt(layout as LayoutNode, [0])?.kind).toBe("split");
+    expect(nodeAt(layout as LayoutNode, [0, 0])).toBeNull(); // a panel is not a split
+    expect(nodeAt(layout as LayoutNode, [9])).toBeNull();
+  });
+
+  it("applies a different minimum to each side of a dragged boundary", () => {
+    const layout: LayoutNode = {
+      kind: "split",
+      direction: "row",
+      sizes: [0.9, 0.1],
+      children: [panel("a"), panel("b")],
+    };
+    // The left side needs 70% of the split, the right one 10%.
+    const left = resizeBoundary(layout, [], 0, -0.5, { before: 0.7, after: 0.1 });
+    expect(left?.kind === "split" && left.sizes[0]).toBeCloseTo(0.7);
+    const even = layoutFromPanels(["a", "b"]);
+    const right = resizeBoundary(even, [], 0, 0.9, { before: 0.2, after: 0.1 });
+    expect(right?.kind === "split" && right.sizes[1]).toBeCloseTo(0.1);
+  });
+
+  it("never forces a side that is already under its minimum to grow", () => {
+    // After the window shrank, the right panel is below its minimum. Dragging the boundary the
+    // other way must not snap anything; dragging it back is free.
+    const layout: LayoutNode = {
+      kind: "split",
+      direction: "row",
+      sizes: [0.95, 0.05],
+      children: [panel("a"), panel("b")],
+    };
+    const min = { before: 0.1, after: 0.2 };
+    expect(resizeBoundary(layout, [], 0, 0.02, min)).toBe(layout); // would squeeze b further
+    const back = resizeBoundary(layout, [], 0, -0.3, min);
+    expect(back?.kind === "split" && back.sizes[1]).toBeCloseTo(0.35);
+    // Impossible minimums (both sides together need more than the split has): refuse.
+    expect(resizeBoundary(layout, [], 0, 0.1, { before: 0.7, after: 0.7 })).toBe(layout);
   });
 });

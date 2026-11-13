@@ -1,5 +1,13 @@
 import { reconcile } from "../dom-utils.js";
-import { type LayoutNode, panelIds, reconcileLayout } from "../layout-tree.js";
+import {
+  type LayoutNode,
+  MIN_PANEL_SIZE_PX,
+  minExtentPx,
+  nodeAt,
+  panelIds,
+  reconcileLayout,
+  resizeBoundary,
+} from "../layout-tree.js";
 import { PLUS_ICON } from "../sidebar/icons.js";
 import {
   COLORIDE_DESIGN_TOKENS,
@@ -39,6 +47,9 @@ export class ChatGrid {
   private readonly emptyAdd: HTMLButtonElement;
   private layoutRoot: HTMLElement | null = null;
   private layoutShape = "";
+  /** The layout on screen and the group it belongs to (what a drag starts from and saves into). */
+  private shownLayout: LayoutNode | null = null;
+  private shownGroupId: string | null = null;
   /** What the enabled/disabled state of the creation buttons was computed for. */
   private actionsKey = "";
   private readonly resizeObserver: ResizeObserver | null;
@@ -196,6 +207,8 @@ export class ChatGrid {
       );
     }
 
+    this.shownLayout = layout;
+    this.shownGroupId = activeGroup?.id ?? null;
     const shownIds = new Set(panelIds(layout));
     for (const id of this.cells.keys()) if (!shownIds.has(id)) this.cells.delete(id);
     if (!layout) {
@@ -217,13 +230,14 @@ export class ChatGrid {
     // Moving a cell in the DOM resets its scroll position: put it back after the rebuild.
     const scrolls = new Map<string, number>();
     for (const [id, cell] of this.cells) scrolls.set(id, cell.messages.scrollTop);
-    this.layoutRoot = this.buildLayout(layout, true);
+    this.layoutRoot = this.buildLayout(layout, true, []);
     this.layoutShape = shape;
     reconcile(this.grid, [this.layoutRoot]);
     for (const [id, cell] of this.cells) cell.messages.scrollTop = scrolls.get(id) ?? 0;
   }
 
-  private buildLayout(node: LayoutNode, isRoot: boolean): HTMLElement {
+  /** `path` is the child indices from the root to `node`; separators remember it. */
+  private buildLayout(node: LayoutNode, isRoot: boolean, path: readonly number[]): HTMLElement {
     let el: HTMLElement;
     if (node.kind === "panel") {
       el = (this.cells.get(node.id) as ChatCellNodes).el;
@@ -231,11 +245,126 @@ export class ChatGrid {
       el = this.grid.ownerDocument.createElement("div");
       el.className = "coloride-layout-split";
       el.dataset.direction = node.direction;
-      el.append(...node.children.map((child) => this.buildLayout(child, false)));
+      el.append(
+        ...node.children.map((child, index) => this.buildLayout(child, false, [...path, index])),
+      );
+      // After the children, so `children[i]` stays the i-th child; they are positioned by sizes.
+      for (let boundary = 0; boundary < node.children.length - 1; boundary += 1) {
+        el.append(this.createSeparator(node.direction, path, boundary));
+      }
     }
     el.classList.toggle("coloride-layout-root", isRoot);
     applySizes(node, el, isRoot);
     return el;
+  }
+
+  /**
+   * The draggable bar between child `boundary` and the next one of the split at `path`. It is
+   * absolutely positioned over the boundary (see `applySizes`), so it takes no room.
+   */
+  private createSeparator(
+    direction: "row" | "column",
+    path: readonly number[],
+    boundary: number,
+  ): HTMLElement {
+    const doc = this.grid.ownerDocument;
+    const bar = doc.createElement("div");
+    bar.className = "coloride-layout-handle";
+    bar.setAttribute("role", "separator");
+    // A row of panels is split by vertical bars, and the other way round.
+    bar.setAttribute("aria-orientation", direction === "row" ? "vertical" : "horizontal");
+    bar.setAttribute("aria-label", UI_STRINGS.chat.resizePanels);
+    bar.tabIndex = 0;
+
+    /** What the drag works with, measured when it starts. */
+    const measure = () => {
+      const layout = this.shownLayout;
+      const split = layout ? nodeAt(layout, path) : null;
+      const container = bar.parentElement;
+      if (!layout || !split || !container) return null;
+      const rect = container.getBoundingClientRect();
+      const extent = direction === "row" ? rect.width : rect.height;
+      if (!(extent > 0)) return null;
+      const side = (index: number) => {
+        const child = split.children[index];
+        return child ? minExtentPx(child, direction, MIN_PANEL_SIZE_PX) / extent : 0;
+      };
+      return {
+        layout,
+        extent,
+        min: { before: side(boundary), after: side(boundary + 1) },
+        sizes: split.sizes,
+      };
+    };
+    const save = (layout: LayoutNode | null) => {
+      if (layout && this.shownGroupId) this.stores.setWorkGroupLayout(this.shownGroupId, layout);
+    };
+
+    let drag: {
+      start: number;
+      measured: NonNullable<ReturnType<typeof measure>>;
+      layout: LayoutNode | null;
+    } | null = null;
+    bar.addEventListener("pointerdown", (event) => {
+      const measured = measure();
+      if (!measured) return;
+      event.preventDefault();
+      bar.setPointerCapture?.((event as PointerEvent).pointerId);
+      drag = { start: direction === "row" ? event.clientX : event.clientY, measured, layout: null };
+      this.grid.dataset.resizing = direction;
+    });
+    bar.addEventListener("pointermove", (event) => {
+      if (!drag || !this.layoutRoot) return;
+      const position = direction === "row" ? event.clientX : event.clientY;
+      const next = resizeBoundary(
+        drag.measured.layout,
+        path,
+        boundary,
+        (position - drag.start) / drag.measured.extent,
+        drag.measured.min,
+      );
+      drag.layout = next;
+      // Live, straight on the DOM: the store is only written when the drag ends.
+      if (next) applySizes(next, this.layoutRoot, true);
+    });
+    const finish = () => {
+      if (!drag) return;
+      const { layout, measured } = drag;
+      drag = null;
+      delete this.grid.dataset.resizing;
+      if (layout && layout !== measured.layout) save(layout);
+    };
+    bar.addEventListener("pointerup", finish);
+    bar.addEventListener("pointercancel", finish);
+
+    // Keyboard: arrows move the bar (Shift for larger steps); a double click evens out the
+    // two neighbours.
+    bar.addEventListener("keydown", (event) => {
+      const forward = direction === "row" ? "ArrowRight" : "ArrowDown";
+      const backward = direction === "row" ? "ArrowLeft" : "ArrowUp";
+      if (event.key !== forward && event.key !== backward) return;
+      const measured = measure();
+      if (!measured) return;
+      event.preventDefault();
+      const step = event.shiftKey ? 0.1 : 0.02;
+      save(
+        resizeBoundary(
+          measured.layout,
+          path,
+          boundary,
+          event.key === forward ? step : -step,
+          measured.min,
+        ),
+      );
+    });
+    bar.addEventListener("dblclick", () => {
+      const measured = measure();
+      const before = measured?.sizes[boundary];
+      const after = measured?.sizes[boundary + 1];
+      if (!measured || before === undefined || after === undefined) return;
+      save(resizeBoundary(measured.layout, path, boundary, (after - before) / 2, measured.min));
+    });
+    return bar;
   }
 
   private updateCell(chat: CockpitChatTab, active: boolean): HTMLElement {
@@ -321,15 +450,25 @@ function layoutShape(node: LayoutNode): string {
     : `${node.direction === "row" ? "r" : "c"}(${node.children.map(layoutShape).join(",")})`;
 }
 
-/** Sizes every child of a split with `flex-grow` proportional to its share; recurses. */
+/**
+ * Sizes every child of a split with `flex-grow` proportional to its share, and puts each
+ * separator over the boundary it moves (the separators are the elements after the children).
+ */
 function applySizes(node: LayoutNode, el: HTMLElement, isRoot: boolean): void {
   if (isRoot) el.style.flex = "";
   if (node.kind === "panel") return;
   el.dataset.direction = node.direction;
+  const edge = node.direction === "row" ? "left" : "top";
+  let offset = 0;
   node.children.forEach((child, index) => {
+    const size = node.sizes[index] ?? 0;
     const childEl = el.children[index] as HTMLElement | undefined;
-    if (!childEl) return;
-    childEl.style.flex = `${node.sizes[index] ?? 0} 1 0px`;
-    applySizes(child, childEl, false);
+    if (childEl) {
+      childEl.style.flex = `${size} 1 0px`;
+      applySizes(child, childEl, false);
+    }
+    offset += size;
+    const bar = el.children[node.children.length + index] as HTMLElement | undefined;
+    if (bar?.classList.contains("coloride-layout-handle")) bar.style[edge] = `${offset * 100}%`;
   });
 }

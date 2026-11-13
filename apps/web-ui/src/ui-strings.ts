@@ -39,6 +39,7 @@ export const UI_STRINGS = {
     emptyGroup: "This group is empty. Agent and terminal panels will appear here.",
     newSession: "New session",
     newSessionIn: "New session in",
+    resizePanels: "Resize panels",
     splitRight: "Split right",
     splitDown: "Split down",
     closePanel: "Close session",

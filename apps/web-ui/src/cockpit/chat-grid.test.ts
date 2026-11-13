@@ -142,10 +142,10 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
 
     // Every split distributes the whole space.
     for (const split of root.querySelectorAll<HTMLElement>(".coloride-layout-split")) {
-      const total = Array.from(split.children).reduce(
-        (sum, child) => sum + Number.parseFloat((child as HTMLElement).style.flex),
-        0,
-      );
+      // The separators over the boundaries take no room and have no size of their own.
+      const total = Array.from(split.children)
+        .filter((child) => !child.classList.contains("coloride-layout-handle"))
+        .reduce((sum, child) => sum + Number.parseFloat((child as HTMLElement).style.flex), 0);
       expect(total).toBeCloseTo(1);
     }
     expect(editorView.getStoreSnapshot().mountCount).toBe(1);
@@ -353,5 +353,115 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     expect(cells().map((c) => c.dataset.chatId)).toEqual(["a", "b"]);
     expect(headerTabs()).toHaveLength(2);
     cleanup();
+  });
+
+  describe("separators between panels", () => {
+    function setup(ids: readonly string[] = ["a", "b"]) {
+      const root = document.createElement("div");
+      document.body.appendChild(root);
+      const stores = createCockpitStoreBundle({
+        initialChats: ids.map((chatId) => ({
+          chatId,
+          title: chatId,
+          modelName: "Codex",
+          validationState: "UnchangedBlue" as const,
+        })),
+      });
+      const editorView = new ColorideEditorView({
+        initialDocumentId: "src/main.ts",
+        initialContent: "const ready = true;",
+        ipcChannel: new InMemoryBinaryHostBridge(),
+      });
+      const controller = new CockpitDomController({ rootContainer: root, stores, editorView });
+      const handles = () =>
+        Array.from(root.querySelectorAll<HTMLElement>(".coloride-layout-handle"));
+      // The layout has no size in a test DOM: give every split one (1000 x 600).
+      for (const split of root.querySelectorAll<HTMLElement>(".coloride-layout-split")) {
+        split.getBoundingClientRect = () => ({ width: 1000, height: 600 }) as DOMRect;
+      }
+      const sizes = () => {
+        const group = stores.navigation.getState().groups[0] as WorkGroup;
+        const layout = resolveGroupLayout(group);
+        return layout?.kind === "split" ? layout.sizes : [];
+      };
+      const pointer = (target: HTMLElement, type: string, x: number, y = 0) => {
+        const event = new MouseEvent(type, { clientX: x, clientY: y, bubbles: true });
+        Object.defineProperty(event, "pointerId", { value: 1 });
+        target.dispatchEvent(event);
+      };
+      return { root, stores, controller, handles, sizes, pointer };
+    }
+
+    it("has one separator per boundary, labelled for assistive technology", () => {
+      const { root, handles, controller } = setup();
+      // Two panels side by side: one boundary, a vertical bar.
+      expect(handles()).toHaveLength(1);
+      expect(handles()[0]?.getAttribute("role")).toBe("separator");
+      expect(handles()[0]?.getAttribute("aria-orientation")).toBe("vertical");
+      expect(handles()[0]?.tabIndex).toBe(0);
+      controller.destroy();
+      root.remove();
+      // Three panels need two boundaries, whatever way they are split.
+      const three = setup(["a", "b", "c"]);
+      expect(three.handles()).toHaveLength(2);
+      three.controller.destroy();
+      three.root.remove();
+    });
+
+    it("moves the boundary while dragging and saves the new sizes when released", () => {
+      const { root, stores, controller, handles, sizes, pointer } = setup();
+      const before = sizes();
+      const handle = handles()[0] as HTMLElement;
+      pointer(handle, "pointerdown", 333);
+      pointer(handle, "pointermove", 433); // 100 px of 1000 = 10%
+      const grown = root.querySelectorAll<HTMLElement>(".coloride-chat-cell");
+      expect(Number.parseFloat((grown[0] as HTMLElement).style.flex)).toBeCloseTo(
+        (before[0] as number) + 0.1,
+      );
+      // Nothing is stored (and nothing re-rendered) until the pointer is released.
+      expect(sizes()).toEqual(before);
+      pointer(handle, "pointerup", 433);
+      expect(sizes()[0]).toBeCloseTo((before[0] as number) + 0.1);
+      expect(sizes()[1]).toBeCloseTo((before[1] as number) - 0.1);
+      expect(sizes().reduce((sum, size) => sum + size, 0)).toBeCloseTo(1);
+      // A tab keeps its own sizes: the layout lives in the group, so it is also what is saved.
+      expect(stores.navigation.getState().groups[0]?.layout).not.toBeNull();
+      controller.destroy();
+      root.remove();
+    });
+
+    it("never lets a panel shrink under the minimum size", () => {
+      const { root, controller, handles, sizes, pointer } = setup();
+      const handle = handles()[0] as HTMLElement;
+      pointer(handle, "pointerdown", 333);
+      pointer(handle, "pointermove", 5000); // far past the right edge
+      pointer(handle, "pointerup", 5000);
+      // b needs 220 px of 1000; c is untouched.
+      expect(sizes()[1]).toBeGreaterThanOrEqual(0.22 - 1e-9);
+      pointer(handle, "pointerdown", 600);
+      pointer(handle, "pointermove", -4000);
+      pointer(handle, "pointerup", -4000);
+      expect(sizes()[0]).toBeGreaterThanOrEqual(0.22 - 1e-9);
+      controller.destroy();
+      root.remove();
+    });
+
+    it("moves with the arrow keys and resets the two neighbours with a double click", () => {
+      const { root, controller, handles, sizes } = setup();
+      const handle = handles()[0] as HTMLElement;
+      const before = sizes();
+      handle.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+      expect(sizes()[0]).toBeCloseTo((before[0] as number) + 0.02);
+      handle.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowLeft", shiftKey: true, bubbles: true }),
+      );
+      expect(sizes()[0]).toBeCloseTo((before[0] as number) + 0.02 - 0.1);
+      handle.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+      const even = ((before[0] as number) + (before[1] as number)) / 2;
+      expect(sizes()[0]).toBeCloseTo(even);
+      expect(sizes()[1]).toBeCloseTo(even);
+      controller.destroy();
+      root.remove();
+    });
   });
 });
