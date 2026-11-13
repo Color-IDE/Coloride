@@ -308,3 +308,15 @@ export interface HostDecorationsPushMessage {
     readonly snapshotHash: string;
   }[];
 }
+
+/** Transport between the CodeMirror view and the Rust host (`host-core::DocumentService`). */
+export interface BinaryIpcChannel {
+  openDocument(
+    documentId: string,
+    sessionGeneration: number,
+    initialContent: string,
+  ): void | Promise<void>;
+  sendBinaryTransaction(payload: Uint8Array): void | Promise<void>;
+  requestAtomicSave(documentId: string, sessionGeneration: number): Promise<Uint8Array>;
+  onBinarySnapshot(listener: (payload: Uint8Array) => void): () => void;
+}
