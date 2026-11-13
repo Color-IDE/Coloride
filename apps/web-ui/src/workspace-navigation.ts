@@ -1,4 +1,5 @@
 import { AtomicStore } from "./atomic-store.js";
+import { type LayoutNode, parseLayout, reconcileLayout } from "./layout-tree.js";
 
 /** Persisted UI navigation only. Document text remains owned by host-core. */
 export interface WorkGroup {
@@ -7,6 +8,25 @@ export interface WorkGroup {
   readonly chatIds: readonly string[];
   readonly lastActiveChatId?: string | undefined;
   readonly expanded?: boolean;
+  /**
+   * How the panels of this tab are arranged. Optional: absent (or out of date with `chatIds`)
+   * it is rebuilt automatically, see `resolveGroupLayout`.
+   */
+  readonly layout?: LayoutNode | null | undefined;
+}
+
+const resolvedLayouts = new WeakMap<WorkGroup, LayoutNode | null>();
+
+/**
+ * The layout of a tab, always holding exactly its `chatIds`: panels that no longer exist are
+ * dropped and new ones are placed automatically. Cached per (immutable) group object.
+ */
+export function resolveGroupLayout(group: WorkGroup): LayoutNode | null {
+  if (resolvedLayouts.has(group)) return resolvedLayouts.get(group) ?? null;
+  // Parsed first: a layout restored from a saved session is untrusted.
+  const layout = reconcileLayout(parseLayout(group.layout), group.chatIds);
+  resolvedLayouts.set(group, layout);
+  return layout;
 }
 
 export interface ProjectNavigationSnapshot {
@@ -66,6 +86,8 @@ export interface WorkspaceNavigationActions {
   setProjectExpanded(expanded: boolean, path?: string): void;
   removeProject(path: string): void;
   selectWorkGroup(id: string): void;
+  /** Stores how the panels of a tab are arranged. */
+  setWorkGroupLayout(id: string, layout: LayoutNode | null): void;
   setProjectPath(path: string): void;
 }
 
@@ -116,6 +138,13 @@ export function createWorkspaceNavigation(
         groups: prev.groups.map((group) =>
           group.id === id ? { ...group, title: trimmed } : group,
         ),
+      }));
+    },
+    setWorkGroupLayout(id: string, layout: LayoutNode | null): void {
+      if (!navigation.getState().groups.some((group) => group.id === id)) return;
+      navigation.setState((prev) => ({
+        ...prev,
+        groups: prev.groups.map((group) => (group.id === id ? { ...group, layout } : group)),
       }));
     },
     setWorkGroupExpanded(id: string, expanded: boolean): void {

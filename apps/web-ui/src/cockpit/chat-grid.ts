@@ -1,5 +1,11 @@
 import { reconcile } from "../dom-utils.js";
-import { COLORIDE_DESIGN_TOKENS, type CockpitChatTab, type CockpitStoreBundle } from "../stores.js";
+import { type LayoutNode, panelIds, reconcileLayout } from "../layout-tree.js";
+import {
+  COLORIDE_DESIGN_TOKENS,
+  type CockpitChatTab,
+  type CockpitStoreBundle,
+  resolveGroupLayout,
+} from "../stores.js";
 import { UI_STRINGS, uiText } from "../ui-strings.js";
 import { VirtualChatMessageListRenderer } from "../virtualizer.js";
 import { attachHeaderScroll } from "./header-scroll.js";
@@ -12,8 +18,10 @@ interface ChatCellNodes {
 }
 
 /**
- * Zone 3: group tabs in the header and the multi-chat grid. Tabs and cells are keyed (by group
- * and chat id) and updated in place, so token streaming does not rebuild the grid.
+ * Zone 3: group tabs in the header and the panels of the active tab, arranged by its layout
+ * tree (any number of panels). Tabs and cells are keyed (by group and chat id) and updated in
+ * place, so token streaming does not rebuild anything. The split containers are only rebuilt
+ * when the shape of the layout changes; a resize just updates the sizes.
  */
 export class ChatGrid {
   readonly element: HTMLElement;
@@ -22,6 +30,8 @@ export class ChatGrid {
   private readonly tabs = new Map<string, HTMLButtonElement>();
   private readonly cells = new Map<string, ChatCellNodes>();
   private readonly empty: HTMLElement;
+  private layoutRoot: HTMLElement | null = null;
+  private layoutShape = "";
   private readonly messageRenderer = new VirtualChatMessageListRenderer();
   private readonly releaseHeaderScroll: () => void;
 
@@ -38,8 +48,8 @@ export class ChatGrid {
     this.element.style.overflow = "hidden";
 
     this.grid = doc.createElement("section");
-    this.grid.className = "coloride-zone-3-grid flex-1 p-3.5 gap-3 overflow-auto";
-    this.grid.style.display = "grid";
+    this.grid.className = "coloride-zone-3-grid flex-1 overflow-auto";
+    this.grid.style.display = "flex";
     this.element.append(this.grid);
 
     this.empty = doc.createElement("div");
@@ -89,25 +99,56 @@ export class ChatGrid {
     const z3 = this.stores.zone3.getState();
     const navigation = this.stores.navigation.getState();
     const activeGroup = navigation.groups.find((group) => group.id === navigation.activeGroupId);
-    this.grid.dataset.gridMode = String(z3.gridMode);
-    const columns = z3.gridMode === 1 ? 1 : 2;
-    this.grid.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
+    const chatsById = new Map(z3.chats.map((chat) => [chat.chatId, chat]));
+    let layout = activeGroup ? resolveGroupLayout(activeGroup) : null;
+    // A group can still list a chat that no longer exists.
+    if (layout && panelIds(layout).some((id) => !chatsById.has(id))) {
+      layout = reconcileLayout(
+        layout,
+        panelIds(layout).filter((id) => chatsById.has(id)),
+      );
+    }
 
-    const groupChats = z3.chats.filter((chat) => activeGroup?.chatIds.includes(chat.chatId));
-    const visible = groupChats.slice(0, z3.gridMode);
-    const selected = groupChats.find((chat) => chat.chatId === z3.activeChatId);
-    if (selected && !visible.includes(selected)) visible[0] = selected;
-
-    const shownIds = new Set(visible.map((chat) => chat.chatId));
+    const shownIds = new Set(panelIds(layout));
     for (const id of this.cells.keys()) if (!shownIds.has(id)) this.cells.delete(id);
-    if (visible.length === 0) {
+    if (!layout) {
+      this.layoutRoot = null;
+      this.layoutShape = "";
       reconcile(this.grid, [this.empty]);
       return;
     }
-    reconcile(
-      this.grid,
-      visible.map((chat) => this.updateCell(chat, z3.activeChatId === chat.chatId)),
-    );
+    for (const id of shownIds) {
+      const chat = chatsById.get(id);
+      if (chat) this.updateCell(chat, z3.activeChatId === id);
+    }
+
+    const shape = layoutShape(layout);
+    if (this.layoutRoot?.isConnected && shape === this.layoutShape) {
+      applySizes(layout, this.layoutRoot, true);
+      return;
+    }
+    // Moving a cell in the DOM resets its scroll position: put it back after the rebuild.
+    const scrolls = new Map<string, number>();
+    for (const [id, cell] of this.cells) scrolls.set(id, cell.messages.scrollTop);
+    this.layoutRoot = this.buildLayout(layout, true);
+    this.layoutShape = shape;
+    reconcile(this.grid, [this.layoutRoot]);
+    for (const [id, cell] of this.cells) cell.messages.scrollTop = scrolls.get(id) ?? 0;
+  }
+
+  private buildLayout(node: LayoutNode, isRoot: boolean): HTMLElement {
+    let el: HTMLElement;
+    if (node.kind === "panel") {
+      el = (this.cells.get(node.id) as ChatCellNodes).el;
+    } else {
+      el = this.grid.ownerDocument.createElement("div");
+      el.className = "coloride-layout-split";
+      el.dataset.direction = node.direction;
+      el.append(...node.children.map((child) => this.buildLayout(child, false)));
+    }
+    el.classList.toggle("coloride-layout-root", isRoot);
+    applySizes(node, el, isRoot);
+    return el;
   }
 
   private updateCell(chat: CockpitChatTab, active: boolean): HTMLElement {
@@ -149,4 +190,24 @@ export class ChatGrid {
     el.append(header, messages, logs);
     return { el, header, messages, logs };
   }
+}
+
+/** Identifies the structure of a layout (panels and split directions) but not the sizes. */
+function layoutShape(node: LayoutNode): string {
+  return node.kind === "panel"
+    ? node.id
+    : `${node.direction === "row" ? "r" : "c"}(${node.children.map(layoutShape).join(",")})`;
+}
+
+/** Sizes every child of a split with `flex-grow` proportional to its share; recurses. */
+function applySizes(node: LayoutNode, el: HTMLElement, isRoot: boolean): void {
+  if (isRoot) el.style.flex = "";
+  if (node.kind === "panel") return;
+  el.dataset.direction = node.direction;
+  node.children.forEach((child, index) => {
+    const childEl = el.children[index] as HTMLElement | undefined;
+    if (!childEl) return;
+    childEl.style.flex = `${node.sizes[index] ?? 0} 1 0px`;
+    applySizes(child, childEl, false);
+  });
 }

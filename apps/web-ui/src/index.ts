@@ -1,9 +1,4 @@
-import type {
-  CockpitChatTab,
-  CockpitGridMode,
-  CockpitPersonaMode,
-  InspectorTab,
-} from "./stores.js";
+import type { CockpitChatTab, CockpitPersonaMode, InspectorTab } from "./stores.js";
 
 export * from "./stores.js";
 export * from "./stream-renderer.js";
@@ -14,7 +9,6 @@ export * from "./theme/index.js";
 
 export interface CockpitShellState {
   readonly activePersona: CockpitPersonaMode;
-  readonly gridMode: CockpitGridMode;
   readonly activeInspectorTab: InspectorTab;
   readonly chats: readonly CockpitChatTab[];
 }
@@ -22,7 +16,6 @@ export interface CockpitShellState {
 export function createInitialCockpitShellState(): CockpitShellState {
   return {
     activePersona: "Develop",
-    gridMode: 1,
     activeInspectorTab: "code-diff",
     chats: [],
   };

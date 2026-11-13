@@ -11,7 +11,6 @@ import {
   CockpitDomController,
   type CockpitDomControllerOptions,
   type CockpitFileTreeNode,
-  type CockpitGridMode,
   type CockpitPersonaMode,
   type CockpitStoreBundle,
   FrameBatchedStreamRenderer,
@@ -26,6 +25,13 @@ import {
 
 export const WORKSPACE_SESSION_CACHE_FILENAME = "workspace_session_cache.bin";
 
+/**
+ * Legacy field of the session cache format, still required by the Rust side (1 | 2 | 4 | 8).
+ * The UI no longer has a grid mode (panels follow each tab's layout), so it is always written as
+ * 1 and ignored on restore until the cache format carries the layouts.
+ */
+export type SessionCacheGridMode = 1 | 2 | 4 | 8;
+
 export interface WorkspaceSessionCacheSnapshot {
   readonly navigation?: WorkspaceNavigationState;
   readonly chats?: readonly CockpitChatTab[];
@@ -33,7 +39,7 @@ export interface WorkspaceSessionCacheSnapshot {
   readonly workspaceRoot: string;
   readonly activePersona: CockpitPersonaMode;
   readonly activeActivityPanel: ActivityBarSection;
-  readonly gridMode: CockpitGridMode;
+  readonly gridMode: SessionCacheGridMode;
   readonly activeInspectorTab: InspectorTab;
   readonly activeChatId: string;
   readonly activeDocumentId: string;
@@ -144,7 +150,6 @@ export function lazyBootDesktopCockpit(
   const stores = createCockpitStoreBundle({
     initialNavigation: restoredSessionCache.navigation,
     initialPersona: restoredSessionCache.activePersona,
-    initialGridMode: restoredSessionCache.gridMode,
     initialInspectorTab: restoredSessionCache.activeInspectorTab,
     initialActiveSection: restoredSessionCache.activeActivityPanel,
     initialActiveChatId: restoredSessionCache.activeChatId,
@@ -255,7 +260,7 @@ export function lazyBootDesktopCockpit(
         workspaceRoot,
         activePersona: z1.activePersona,
         activeActivityPanel: z1.activeSection,
-        gridMode: z3.gridMode,
+        gridMode: 1,
         activeInspectorTab: z4.activeInspectorTab,
         activeChatId: z3.activeChatId,
         activeDocumentId: z4.activeDocumentId,

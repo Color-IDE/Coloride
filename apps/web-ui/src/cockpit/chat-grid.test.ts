@@ -1,7 +1,13 @@
 // @vitest-environment happy-dom
 import { ColorideEditorView, InMemoryBinaryHostBridge } from "@coloride/editor-cm6";
 import { describe, expect, it } from "vitest";
-import { CockpitDomController, createCockpitStoreBundle } from "../index.js";
+import {
+  CockpitDomController,
+  type WorkGroup,
+  createCockpitStoreBundle,
+  resolveGroupLayout,
+} from "../index.js";
+import { panelIds } from "../layout-tree.js";
 
 describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
   it("keeps work groups separate when changing project folders", () => {
@@ -68,7 +74,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     editorView.destroy();
     rootContainer.remove();
   });
-  it("shows the selected session in the single-panel view and restores it when returning to a group", () => {
+  it("shows every session of a tab at once, marks the selected one and keeps panels across tab switches", () => {
     const root = document.createElement("div");
     document.body.appendChild(root);
     const stores = createCockpitStoreBundle({
@@ -83,14 +89,105 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
       ipcChannel: new InMemoryBinaryHostBridge(),
     });
     const controller = new CockpitDomController({ rootContainer: root, stores, editorView });
+    const cells = () => Array.from(root.querySelectorAll<HTMLElement>(".coloride-chat-cell"));
+    expect(cells().map((cell) => cell.dataset.chatId)).toEqual(["a", "b"]);
     stores.selectChat("b");
-    expect(root.querySelector<HTMLElement>(".coloride-chat-cell")?.dataset.chatId).toBe("b");
+    expect(cells().find((cell) => cell.dataset.active === "true")?.dataset.chatId).toBe("b");
     stores.createWorkGroup("Other");
+    expect(cells()).toHaveLength(0);
     stores.selectWorkGroup("initial-group");
-    expect(root.querySelector<HTMLElement>(".coloride-chat-cell")?.dataset.chatId).toBe("b");
+    expect(cells().map((cell) => cell.dataset.chatId)).toEqual(["a", "b"]);
     expect(editorView.getStoreSnapshot().mountCount).toBe(1);
     controller.destroy();
     editorView.destroy();
     root.remove();
+  });
+  it("lays out any number of panels from the tab layout without rebuilding on streaming updates", () => {
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const chats = Array.from({ length: 12 }, (_, i) => ({
+      chatId: `c${i}`,
+      title: `Chat ${i}`,
+      modelName: "Codex",
+      validationState: "UnchangedBlue" as const,
+    }));
+    const stores = createCockpitStoreBundle({ initialChats: chats });
+    const editorView = new ColorideEditorView({
+      initialDocumentId: "src/main.ts",
+      initialContent: "const ready = true;",
+      ipcChannel: new InMemoryBinaryHostBridge(),
+    });
+    const controller = new CockpitDomController({ rootContainer: root, stores, editorView });
+    const cells = () => Array.from(root.querySelectorAll<HTMLElement>(".coloride-chat-cell"));
+    expect(cells()).toHaveLength(12);
+    const rootLayout = root.querySelector<HTMLElement>(".coloride-layout-root");
+    const firstCell = cells()[0];
+    expect(rootLayout?.classList.contains("coloride-layout-split")).toBe(true);
+
+    // Streaming-style state changes update cells in place: same split containers, same cells.
+    stores.zone3.setState((prev) => ({
+      ...prev,
+      terminalLogsByChatId: { ...prev.terminalLogsByChatId, c3: ["[stdout] building…"] },
+    }));
+    expect(root.querySelector(".coloride-layout-root")).toBe(rootLayout);
+    expect(cells()[0]).toBe(firstCell);
+
+    // Closing a panel changes the shape: the others keep their DOM nodes.
+    stores.closeChat("c5");
+    expect(cells()).toHaveLength(11);
+    expect(cells()[0]).toBe(firstCell);
+    expect(cells().some((cell) => cell.dataset.chatId === "c5")).toBe(false);
+
+    // Every split distributes the whole space.
+    for (const split of root.querySelectorAll<HTMLElement>(".coloride-layout-split")) {
+      const total = Array.from(split.children).reduce(
+        (sum, child) => sum + Number.parseFloat((child as HTMLElement).style.flex),
+        0,
+      );
+      expect(total).toBeCloseTo(1);
+    }
+    expect(editorView.getStoreSnapshot().mountCount).toBe(1);
+    controller.destroy();
+    editorView.destroy();
+    root.remove();
+  });
+  it("honours a stored layout for a tab and recovers from a corrupted or outdated one", () => {
+    const chats = ["a", "b", "c"].map((chatId) => ({
+      chatId,
+      title: chatId,
+      modelName: "Codex",
+      validationState: "UnchangedBlue" as const,
+    }));
+    const stores = createCockpitStoreBundle({ initialChats: chats });
+    const group = () => stores.navigation.getState().groups[0] as WorkGroup;
+
+    stores.setWorkGroupLayout("initial-group", {
+      kind: "split",
+      direction: "column",
+      sizes: [0.7, 0.3],
+      children: [
+        { kind: "panel", id: "c" },
+        {
+          kind: "split",
+          direction: "row",
+          sizes: [0.5, 0.5],
+          children: [
+            { kind: "panel", id: "a" },
+            { kind: "panel", id: "b" },
+          ],
+        },
+      ],
+    });
+    expect(panelIds(resolveGroupLayout(group()))).toEqual(["c", "a", "b"]);
+
+    // Outdated: a panel that no longer exists is dropped and a new chat is placed automatically.
+    stores.closeChat("a");
+    expect(panelIds(resolveGroupLayout(group())).sort()).toEqual(["b", "c"]);
+
+    // Corrupted (e.g. from a damaged saved session): falls back to an automatic layout.
+    stores.setWorkGroupLayout("initial-group", { kind: "split", children: 5 } as never);
+    expect(panelIds(resolveGroupLayout(group())).sort()).toEqual(["b", "c"]);
+    stores.setWorkGroupLayout("nope", null);
+    expect(stores.navigation.getState().groups).toHaveLength(1);
   });
 });

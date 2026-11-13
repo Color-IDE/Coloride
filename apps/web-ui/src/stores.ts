@@ -4,6 +4,7 @@ import {
   createWorkspaceNavigation,
 } from "./workspace-navigation.js";
 export type { WorkGroup, WorkspaceNavigationState } from "./workspace-navigation.js";
+export { resolveGroupLayout } from "./workspace-navigation.js";
 import type {
   ColorideValidationState,
   ConfidenceLevel,
@@ -22,8 +23,6 @@ export {
 } from "./cockpit-analysis.js";
 export { AtomicStore, type StoreListener } from "./atomic-store.js";
 export { COLORIDE_DESIGN_TOKENS, type DesignStateTokens } from "./design-state-tokens.js";
-
-export type CockpitGridMode = 1 | 2 | 4 | 8;
 
 export type CockpitPersonaMode = "Create" | "Learn" | "Develop" | "Infrastructure" | "Data";
 
@@ -114,7 +113,6 @@ export interface CockpitChatTab {
 }
 
 export interface Zone3MultiChatState {
-  readonly gridMode: CockpitGridMode;
   readonly activeChatId: string;
   readonly chats: readonly CockpitChatTab[];
   readonly messagesByChatId: Readonly<Record<string, readonly CockpitChatMessage[]>>;
@@ -146,7 +144,6 @@ export interface CockpitStoreBundle extends WorkspaceNavigationActions {
   toggleSidebar(open?: boolean): void;
   toggleInspector(open?: boolean): void;
   setUiZoomPercent(zoomPercent: number): void;
-  setGridMode(gridMode: CockpitGridMode): void;
   setInspectorTab(tab: InspectorTab): void;
   selectChat(chatId: string): number;
   closeChat(chatId: string): void;
@@ -177,7 +174,6 @@ export interface CockpitStoreBundle extends WorkspaceNavigationActions {
 export function createCockpitStoreBundle(options?: {
   initialNavigation?: WorkspaceNavigationState | undefined;
   initialPersona?: CockpitPersonaMode | undefined;
-  initialGridMode?: CockpitGridMode | undefined;
   initialInspectorTab?: InspectorTab | undefined;
   initialActiveSection?: ActivityBarSection | undefined;
   initialActiveChatId?: string | undefined;
@@ -278,7 +274,6 @@ export function createCockpitStoreBundle(options?: {
   }
 
   const zone3 = new AtomicStore<Zone3MultiChatState>({
-    gridMode: options?.initialGridMode ?? 1,
     activeChatId: initialChatId,
     chats: initialChats,
     messagesByChatId: initialMessages,
@@ -412,13 +407,6 @@ export function createCockpitStoreBundle(options?: {
       zone1.setState((prev) => ({
         ...prev,
         uiZoomPercent: clamped,
-      }));
-    },
-
-    setGridMode(gridMode: CockpitGridMode): void {
-      zone3.setState((prev) => ({
-        ...prev,
-        gridMode,
       }));
     },
 
