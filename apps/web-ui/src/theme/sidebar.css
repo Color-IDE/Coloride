@@ -270,13 +270,15 @@
     position: relative;
     flex: 1;
     min-height: 0;
+    /* Reaches over the panel's right padding (p-2.5 = 10px) so the scrollbar sits on the edge. */
+    margin-right: -10px;
   }
   .coloride-zone-2-scroll {
     /* Filling the viewport with inset rather than height: 100%, which a flex item may not
        resolve, leaving the list as tall as its content and clipped instead of scrollable. */
     position: absolute;
     inset: 0;
-    padding-right: 4px; /* keeps the rows clear of the scrollbar */
+    padding-right: 14px; /* the 10px taken back from the panel plus 4px clear of the scrollbar */
     overflow: auto;
     scrollbar-width: none;
   }
