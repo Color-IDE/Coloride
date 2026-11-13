@@ -329,4 +329,29 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     expect(track.nextElementSibling).toBe(add);
     cleanup();
   });
+
+  it("shows what the selected group has, not another project's group with the same name", () => {
+    const { root, stores, cells, cleanup } = mount();
+    const headerTabs = () =>
+      Array.from(
+        root.querySelectorAll<HTMLElement>(".coloride-zone-3-header .coloride-header-tab"),
+      );
+    const emptyShown = () => root.querySelector<HTMLElement>(".coloride-group-empty") !== null;
+
+    // Every project starts with a group "Workspace" that has the same id: only its content differs.
+    stores.setProjectPath("/projects/videos");
+    expect(cells().map((c) => c.dataset.chatId)).toEqual(["a", "b"]);
+    expect(headerTabs()).toHaveLength(2);
+
+    stores.setProjectPath("/projects/screenshots");
+    expect(stores.navigation.getState().groups[0]?.chatIds).toEqual([]);
+    expect(cells()).toHaveLength(0);
+    expect(headerTabs()).toHaveLength(0);
+    expect(emptyShown()).toBe(true);
+
+    stores.setProjectPath("/projects/videos");
+    expect(cells().map((c) => c.dataset.chatId)).toEqual(["a", "b"]);
+    expect(headerTabs()).toHaveLength(2);
+    cleanup();
+  });
 });

@@ -139,14 +139,20 @@ export class CockpitDomController {
         ([projectPath, groupId]) => this.inspector.changeScope(projectPath, groupId),
         (a, b) => a[0] === b[0] && a[1] === b[1],
       ),
+      // What Zone 3 shows: the active group's sessions and layout. The project matters too, since
+      // every project has a group "Workspace" with the same id but its own sessions.
       stores.navigation.subscribeSelector(
         (state) =>
           [
+            state.projectPath,
             state.activeGroupId,
-            state.groups.map((group) => `${group.id}:${group.title}`).join("|"),
+            state.groups
+              .map((group) => `${group.id}:${group.title}:${group.chatIds.join(",")}`)
+              .join("|"),
+            state.groups.find((group) => group.id === state.activeGroupId)?.layout,
           ] as const,
         () => this.chatGrid.update(),
-        (a, b) => a[0] === b[0] && a[1] === b[1],
+        (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3],
       ),
       stores.zone1.subscribe(() => {
         this.renderLayout();
