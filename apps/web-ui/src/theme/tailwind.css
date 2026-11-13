@@ -403,16 +403,11 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* Panel actions appear on hover or keyboard focus, like the tab close buttons. */
+  /* Panel actions (split, maximize, close) are always visible; the title shrinks, not them. */
   .coloride-chat-cell-actions {
     display: flex;
     flex: none;
     gap: 2px;
-    opacity: 0;
-  }
-  .coloride-chat-cell:hover .coloride-chat-cell-actions,
-  .coloride-chat-cell:focus-within .coloride-chat-cell-actions {
-    opacity: 1;
   }
   .coloride-chat-cell-action {
     display: inline-flex;
