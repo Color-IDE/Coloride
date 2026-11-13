@@ -113,10 +113,14 @@ export const UI_STRINGS = {
     failed: "Unable to start a terminal",
   },
   trust: {
-    restrictedTitle: "Restricted mode",
+    restrictedTitle: "Restricted Mode",
+    dismiss: "Dismiss",
     restrictedDetail:
-      "Nothing from this folder is run: no language servers, linters, Git hooks, tasks or debuggers.",
-    trustFolder: "Trust folder…",
+      "This folder is running in Restricted Mode. Code execution, language servers, extensions, tasks and debugging are disabled for your security.",
+    trustFolder: "Trust this folder",
+    learnMore: "Learn more",
+    learnMoreDetail:
+      "Closing this notice does not lift Restricted Mode. While the folder is restricted, Coloride will not start workspace language servers, run Git hooks or startup scripts, launch the debugger or activate extensions, and the terminal stays unavailable. Trusting the folder asks you to confirm first, and you can revoke it at any time.",
   },
   sidebar: {
     navigation: "Folder, groups and sessions",

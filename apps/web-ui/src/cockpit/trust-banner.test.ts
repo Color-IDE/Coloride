@@ -55,7 +55,7 @@ function setup(answer: "trust" | "decline" = "trust") {
   };
   const banner = () => root.querySelector<HTMLElement>(".coloride-trust-banner");
   const clickTrust = async () => {
-    banner()?.querySelector<HTMLButtonElement>("button")?.click();
+    banner()?.querySelector<HTMLButtonElement>(".coloride-trust-banner-action")?.click();
     await settle();
   };
   return { controller, editorView, openFolder, banner, clickTrust, prompts: () => prompts };

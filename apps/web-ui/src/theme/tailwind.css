@@ -3,6 +3,7 @@
 @import "./sidebar.css";
 @import "./inspector.css";
 @import "./header-tabs.css";
+@import "./trust-banner.css";
 @source "../**/*.ts";
 
 @theme {
