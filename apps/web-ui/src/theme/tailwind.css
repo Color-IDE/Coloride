@@ -427,6 +427,90 @@
     @apply text-[12.5px] font-medium !text-text-primary pb-2 border-b border-white/8;
   }
 
+  .coloride-chat-cell-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  .coloride-chat-cell-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* Panel actions appear on hover or keyboard focus, like the tab close buttons. */
+  .coloride-chat-cell-actions {
+    display: flex;
+    flex: none;
+    gap: 2px;
+    opacity: 0;
+  }
+  .coloride-chat-cell:hover .coloride-chat-cell-actions,
+  .coloride-chat-cell:focus-within .coloride-chat-cell-actions {
+    opacity: 1;
+  }
+  .coloride-chat-cell-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+  }
+  .coloride-chat-cell-action:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--color-text-primary);
+  }
+  .coloride-chat-cell-action:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+  /* "+" at the end of the group tabs in the Zone 3 header */
+  .coloride-chat-tab-add {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+  }
+  .coloride-chat-tab-add:hover:not(:disabled) {
+    background: var(--color-selected);
+    color: var(--color-text-primary);
+  }
+  .coloride-chat-tab-add:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+  .coloride-group-empty {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .coloride-group-empty-add {
+    padding: 6px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: var(--color-selected);
+    color: var(--color-text-primary);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .coloride-group-empty-add:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
   .coloride-chat-cell-messages {
     @apply flex-1 text-[13px] leading-[1.55] !text-text-secondary select-text;
   }

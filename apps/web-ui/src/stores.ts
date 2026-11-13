@@ -2,9 +2,11 @@ import {
   type WorkspaceNavigationActions,
   type WorkspaceNavigationState,
   createWorkspaceNavigation,
+  resolveGroupLayout,
 } from "./workspace-navigation.js";
 export type { WorkGroup, WorkspaceNavigationState } from "./workspace-navigation.js";
 export { resolveGroupLayout } from "./workspace-navigation.js";
+export type { AreaSize } from "./layout-tree.js";
 import type {
   ColorideValidationState,
   ConfidenceLevel,
@@ -15,6 +17,14 @@ import {
   extractSymbolsHeuristically,
   inferImpactedTestsHeuristically,
 } from "./cockpit-analysis.js";
+import {
+  type AreaSize,
+  DEFAULT_LAYOUT_ASPECT,
+  type SplitDirection,
+  type SplitPosition,
+  addPanel,
+  fitsArea,
+} from "./layout-tree.js";
 import { isSecretBearingPath, redactSecretsInLine } from "./security/secrets.js";
 
 export {
@@ -132,8 +142,29 @@ export interface Zone4InspectorState {
   readonly recoveredFromWal: boolean;
 }
 
+export interface CreateChatOptions {
+  /** Tab that receives the session. Defaults to the active one. */
+  readonly groupId?: string;
+  /** Existing panel to split. Without it the new panel goes where there is the most room. */
+  readonly from?: string;
+  readonly direction?: SplitDirection;
+  readonly position?: SplitPosition;
+  readonly title?: string;
+  readonly modelName?: string;
+}
+
 export interface CockpitStoreBundle extends WorkspaceNavigationActions {
   renameChat(id: string, title: string): void;
+  /**
+   * Creates a session and places it in the layout of a tab. Returns its id, or null when the
+   * tab does not exist or the panel would drop below the minimum size in the measured area.
+   */
+  createChat(options?: CreateChatOptions): string | null;
+  /** Same check as `createChat`, without creating anything. */
+  canCreateChat(options?: CreateChatOptions): boolean;
+  /** Size in pixels of the area holding the panels; unknown (null) means no size limit. */
+  setPanelArea(area: AreaSize | null): void;
+  getPanelArea(): AreaSize | null;
   readonly zone1: AtomicStore<Zone1ActivityState>;
   readonly zone2: AtomicStore<Zone2SidebarState>;
   readonly zone3: AtomicStore<Zone3MultiChatState>;
@@ -310,8 +341,88 @@ export function createCockpitStoreBundle(options?: {
     "6": "mcp",
   };
 
+  let panelArea: AreaSize | null = null;
+
+  /** Where and whether a new panel fits in a tab; null when it does not. */
+  const planNewPanel = (options: CreateChatOptions | undefined, chatId: string) => {
+    const state = navigation.getState();
+    const group = state.groups.find(
+      (item) => item.id === (options?.groupId ?? state.activeGroupId),
+    );
+    if (!group) return null;
+    const current = resolveGroupLayout(group);
+    const layout = addPanel(current, chatId, {
+      ...(options?.from ? { target: options.from } : {}),
+      ...(options?.direction ? { direction: options.direction } : {}),
+      ...(options?.position ? { position: options.position } : {}),
+      aspect: panelArea
+        ? panelArea.widthPx / Math.max(1, panelArea.heightPx)
+        : DEFAULT_LAYOUT_ASPECT,
+    });
+    if (panelArea && !fitsArea(layout, panelArea)) return null;
+    return { group, layout };
+  };
+  const nextChatId = () => {
+    const taken = new Set(zone3.getState().chats.map((chat) => chat.chatId));
+    let n = taken.size + 1;
+    while (taken.has(`chat-${n}`)) n += 1;
+    return `chat-${n}`;
+  };
+
   const bundle: CockpitStoreBundle = {
     ...navigationActions,
+    setPanelArea(area: AreaSize | null): void {
+      panelArea = area && area.widthPx > 0 && area.heightPx > 0 ? area : null;
+    },
+    getPanelArea(): AreaSize | null {
+      return panelArea;
+    },
+    canCreateChat(options?: CreateChatOptions): boolean {
+      return planNewPanel(options, "\u0000candidate") !== null;
+    },
+    createChat(options?: CreateChatOptions): string | null {
+      const chatId = nextChatId();
+      const plan = planNewPanel(options, chatId);
+      if (!plan) return null;
+      const z3 = zone3.getState();
+      const sibling = z3.chats.find((chat) => chat.chatId === (options?.from ?? z3.activeChatId));
+      const chat: CockpitChatTab = {
+        chatId,
+        title: options?.title?.trim() || `#${z3.chats.length + 1} New session`,
+        modelName: options?.modelName ?? sibling?.modelName ?? "Codex",
+        validationState: "UnchangedBlue",
+        agentExecutionStatus: "Idle",
+      };
+      zone3.setState((prev) => ({
+        ...prev,
+        chats: [...prev.chats, chat],
+        messagesByChatId: { ...prev.messagesByChatId, [chatId]: [] },
+        terminalLogsByChatId: { ...prev.terminalLogsByChatId, [chatId]: [] },
+      }));
+      zone2.setState((prev) => ({
+        ...prev,
+        sessions: [
+          ...prev.sessions,
+          {
+            chatId,
+            title: chat.title,
+            modelName: chat.modelName,
+            validationState: chat.validationState,
+            targetDocumentId: zone4.getState().activeDocumentId,
+          },
+        ],
+      }));
+      navigation.setState((prev) => ({
+        ...prev,
+        groups: prev.groups.map((group) =>
+          group.id === plan.group.id
+            ? { ...group, chatIds: [...group.chatIds, chatId], layout: plan.layout }
+            : group,
+        ),
+      }));
+      bundle.selectChat(chatId);
+      return chatId;
+    },
     renameChat(id: string, title: string): void {
       const trimmed = title.trim();
       if (

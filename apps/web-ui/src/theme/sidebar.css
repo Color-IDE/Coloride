@@ -108,12 +108,17 @@
     opacity: 0.4;
     cursor: default;
   }
-  .sidebar-more {
-    margin-right: 2px;
+  .sidebar-more,
+  .sidebar-add {
     visibility: hidden;
   }
+  .sidebar-more {
+    margin-right: 2px;
+  }
   .sidebar-row:hover .sidebar-more,
+  .sidebar-row:hover .sidebar-add,
   .sidebar-row:focus-within .sidebar-more,
+  .sidebar-row:focus-within .sidebar-add,
   .sidebar-more[aria-expanded="true"] {
     visibility: visible;
   }

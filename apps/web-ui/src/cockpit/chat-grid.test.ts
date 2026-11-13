@@ -190,4 +190,98 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     stores.setWorkGroupLayout("nope", null);
     expect(stores.navigation.getState().groups).toHaveLength(1);
   });
+  function mount() {
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const chat = (chatId: string) => ({
+      chatId,
+      title: chatId,
+      modelName: "Codex",
+      validationState: "UnchangedBlue" as const,
+    });
+    const stores = createCockpitStoreBundle({ initialChats: [chat("a"), chat("b")] });
+    const editorView = new ColorideEditorView({
+      initialDocumentId: "src/main.ts",
+      initialContent: "const ready = true;",
+      ipcChannel: new InMemoryBinaryHostBridge(),
+    });
+    const controller = new CockpitDomController({ rootContainer: root, stores, editorView });
+    const cells = () => Array.from(root.querySelectorAll<HTMLElement>(".coloride-chat-cell"));
+    const cleanup = () => {
+      controller.destroy();
+      editorView.destroy();
+      root.remove();
+    };
+    return { root, stores, cells, editorView, cleanup };
+  }
+
+  it("creates sessions from the header + and from each panel's split buttons", () => {
+    const { root, stores, cells, editorView, cleanup } = mount();
+    root.querySelector<HTMLButtonElement>(".coloride-chat-tab-add")?.click();
+    expect(cells().map((c) => c.dataset.chatId)).toContain("chat-3");
+    expect(stores.zone3.getState().activeChatId).toBe("chat-3");
+
+    const cellA = cells().find((c) => c.dataset.chatId === "a") as HTMLElement;
+    cellA.querySelector<HTMLButtonElement>(".coloride-split-right")?.click();
+    cellA.querySelector<HTMLButtonElement>(".coloride-split-down")?.click();
+    expect(cells()).toHaveLength(5);
+    // Acting on a panel's button must not also select that panel through its header.
+    expect(stores.zone3.getState().activeChatId).toBe("chat-5");
+    expect(editorView.getStoreSnapshot().mountCount).toBe(1);
+    cleanup();
+  });
+
+  it("closes a session from its panel, but never the last one", () => {
+    const { stores, cells, cleanup } = mount();
+    const close = (id: string) =>
+      cells()
+        .find((c) => c.dataset.chatId === id)
+        ?.querySelector<HTMLButtonElement>(".coloride-close-panel");
+    close("b")?.click();
+    expect(cells().map((c) => c.dataset.chatId)).toEqual(["a"]);
+    expect(close("a")?.disabled).toBe(true);
+    close("a")?.click();
+    expect(stores.zone3.getState().chats).toHaveLength(1);
+    cleanup();
+  });
+
+  it("disables the creation buttons, with an explanation, when no panel fits", () => {
+    const { root, stores, cells, cleanup } = mount();
+    stores.setPanelArea({ widthPx: 440, heightPx: 270 });
+    // Any state change refreshes the buttons (in the app the ResizeObserver also does).
+    stores.zone3.setState((prev) => ({ ...prev }));
+    const add = root.querySelector<HTMLButtonElement>(".coloride-chat-tab-add");
+    expect(add?.disabled).toBe(true);
+    expect(add?.title).toBe("No room for another panel");
+    const cellA = cells()[0] as HTMLElement;
+    expect(cellA.querySelector<HTMLButtonElement>(".coloride-split-down")?.disabled).toBe(true);
+    add?.click();
+    expect(cells()).toHaveLength(2);
+
+    stores.setPanelArea({ widthPx: 1400, heightPx: 900 });
+    stores.zone3.setState((prev) => ({ ...prev }));
+    expect(add?.disabled).toBe(false);
+    expect(add?.title).toBe("New session");
+    expect(cellA.querySelector<HTMLButtonElement>(".coloride-split-down")?.disabled).toBe(false);
+    cleanup();
+  });
+
+  it("offers a New session button in an empty tab and a + on every sidebar group", () => {
+    const { root, stores, cells, cleanup } = mount();
+    stores.createWorkGroup("Other");
+    expect(cells()).toHaveLength(0);
+    root.querySelector<HTMLButtonElement>(".coloride-group-empty-add")?.click();
+    expect(cells()).toHaveLength(1);
+    expect(stores.navigation.getState().groups[1]?.chatIds).toHaveLength(1);
+
+    const initialRow = root.querySelector<HTMLElement>(
+      '.sidebar-group[data-group-id="initial-group"]',
+    );
+    initialRow?.querySelector<HTMLButtonElement>(".sidebar-add")?.click();
+    expect(stores.navigation.getState().groups[0]?.chatIds).toHaveLength(3);
+    // Adding through the sidebar also activates that group and shows its new session.
+    expect(stores.navigation.getState().activeGroupId).toBe("initial-group");
+    expect(initialRow?.querySelectorAll(".sidebar-row--session")).toHaveLength(3);
+    cleanup();
+  });
 });

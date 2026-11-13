@@ -174,6 +174,15 @@ export class WorkspaceSidebar {
       kind: "group",
       icon: GROUP_ICON,
       onSelect: () => this.withProject(projectPath, () => stores.selectWorkGroup(group.id)),
+      onAdd: () =>
+        this.withProject(projectPath, () => {
+          if (stores.createChat({ groupId: group.id }) === null) {
+            this.showError(null, UI_STRINGS.sidebar.noRoom);
+            return;
+          }
+          this.error.hidden = true;
+          stores.setWorkGroupExpanded(group.id, true);
+        }),
       onToggle: () =>
         this.withProject(projectPath, () => {
           const latest = stores.navigation.getState().groups.find((item) => item.id === group.id);

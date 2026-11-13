@@ -38,6 +38,12 @@ export const UI_STRINGS = {
   },
   chat: {
     emptyGroup: "This group is empty. Agent and terminal panels will appear here.",
+    newSession: "New session",
+    newSessionIn: "New session in",
+    splitRight: "Split right",
+    splitDown: "Split down",
+    closePanel: "Close session",
+    noRoom: "No room for another panel",
   },
   search: {
     panel: "Global search (FTS5 BM25)",
@@ -87,6 +93,7 @@ export const UI_STRINGS = {
     expandAll: "Expand all groups",
     collapseAll: "Collapse all groups",
     removeProject: "Remove from list",
+    noRoom: "No room for another panel",
     renameGroup: "Rename group",
     expandGroup: "Expand group",
     collapseGroup: "Collapse group",
