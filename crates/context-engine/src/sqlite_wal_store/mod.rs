@@ -211,6 +211,7 @@ pub struct ContextSearchHit {
 /// and `UnsavedBufferOverlay` (`LOT-008`).
 #[derive(Debug)]
 pub struct SqliteWalContextEngine {
+    pub(crate) vector_changes: crate::changes::ChangeJournal,
     db_path: PathBuf,
     wal_path: PathBuf,
     pragmas: SqlitePragmaConfig,
@@ -241,6 +242,7 @@ impl SqliteWalContextEngine {
         let active_git_branch = git_branch.into();
 
         let mut engine = Self {
+            vector_changes: Default::default(),
             db_path,
             wal_path,
             pragmas: SqlitePragmaConfig::default(),
@@ -437,6 +439,7 @@ impl SqliteWalContextEngine {
             return Ok(false);
         }
 
+        self.vector_changes.mark(Some(norm_path.clone()));
         self.remove_chunks_for_file(&norm_path);
         self.rebuild_impact_analyzer_from_chunks();
 
