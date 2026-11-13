@@ -102,7 +102,7 @@
      instead of scrolling away. */
   .coloride-header-tab-add {
     position: sticky;
-    right: 8px;
+    right: 3px;
     z-index: 15; /* above the header edge shadow (z-index 10) */
     display: inline-flex;
     flex: none;
