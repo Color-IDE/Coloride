@@ -317,4 +317,16 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     expect(tabs()).toHaveLength(2);
     cleanup();
   });
+  it("keeps the + at the right end of the header, outside the strip that scrolls", () => {
+    const { root, stores, cleanup } = mount();
+    for (let i = 0; i < 6; i += 1) stores.createChat();
+    const header = root.querySelector<HTMLElement>(".coloride-zone-3-header") as HTMLElement;
+    const track = header.querySelector<HTMLElement>('[role="tablist"]') as HTMLElement;
+    const add = header.querySelector<HTMLElement>(".coloride-header-tab-add") as HTMLElement;
+    expect(track.querySelectorAll(".coloride-header-tab")).toHaveLength(8);
+    expect(track.contains(add)).toBe(false);
+    expect(add.parentElement).toBe(header);
+    expect(track.nextElementSibling).toBe(add);
+    cleanup();
+  });
 });

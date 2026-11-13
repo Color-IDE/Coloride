@@ -47,7 +47,6 @@
     pointer-events: none;
   }
   .coloride-header-tab:last-child::after,
-  .coloride-header-tab:has(+ .coloride-header-tab-add)::after,
   .coloride-header-tab[aria-selected="true"]::after,
   .coloride-header-tab:hover::after,
   .coloride-header-tab:has(+ .coloride-header-tab[aria-selected="true"])::after,
@@ -98,10 +97,11 @@
   .coloride-header-tab-close:hover {
     background: rgba(255, 255, 255, 0.12);
   }
-  /* "+" at the end of the strip (new session in Zone 3) */
+  /* "+" pinned at the right end of the header, so it never scrolls away with the tabs. */
   .coloride-header-tab-add {
     display: inline-flex;
     flex: none;
+    margin-right: 8px;
     align-items: center;
     justify-content: center;
     width: 26px;
