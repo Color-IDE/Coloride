@@ -79,6 +79,7 @@ export interface LazyBootDesktopOptions {
   readonly initialDecorations?: readonly EditorRangeDecoration[];
   readonly ipcChannel?: BinaryIpcChannel;
   readonly openWorkspace?: CockpitDomControllerOptions["openWorkspace"];
+  readonly switchWorkspace?: CockpitDomControllerOptions["switchWorkspace"];
   readonly readWorkspaceFile?: CockpitDomControllerOptions["readWorkspaceFile"];
   readonly searchWorkspace?: CockpitDomControllerOptions["searchWorkspace"];
   readonly analyzeDocument?: CockpitDomControllerOptions["analyzeDocument"];
@@ -103,13 +104,6 @@ export interface LazyBootDesktopHandle<TChannel extends BinaryIpcChannel = Binar
   destroy(): void;
 }
 
-function nowMs(): number {
-  if (typeof performance !== "undefined" && typeof performance.now === "function") {
-    return performance.now();
-  }
-  return Date.now();
-}
-
 /**
  * Execute the `LOT-005` Lazy Boot sequence in `desktop-tauri`:
  * 1. Immediately decode `workspace_session_cache.bin` (if provided) and restore window layout + active `ColorideEditorView` buffer (`p95 ≤ 3 s`).
@@ -124,7 +118,7 @@ export function lazyBootDesktopCockpit<TChannel extends BinaryIpcChannel>(
 export function lazyBootDesktopCockpit(
   options?: LazyBootDesktopOptions,
 ): LazyBootDesktopHandle<BinaryIpcChannel> {
-  const t0 = nowMs();
+  const t0 = performance.now();
   const defaultCache: WorkspaceSessionCacheSnapshot = {
     schemaVersion: CONTRACT_SCHEMA_VERSION,
     workspaceRoot: "/workspace/coloride",
@@ -198,13 +192,14 @@ export function lazyBootDesktopCockpit(
       editorView,
       onboardingController,
       ...(options?.openWorkspace ? { openWorkspace: options.openWorkspace } : {}),
+      ...(options?.switchWorkspace ? { switchWorkspace: options.switchWorkspace } : {}),
       ...(options?.readWorkspaceFile ? { readWorkspaceFile: options.readWorkspaceFile } : {}),
       ...(options?.searchWorkspace ? { searchWorkspace: options.searchWorkspace } : {}),
       ...(options?.analyzeDocument ? { analyzeDocument: options.analyzeDocument } : {}),
     });
   }
 
-  const bootToInteractiveMs = Math.max(0, nowMs() - t0);
+  const bootToInteractiveMs = Math.max(0, performance.now() - t0);
 
   let bgState: BackgroundServicesState = {
     vtslsLspReady: false,

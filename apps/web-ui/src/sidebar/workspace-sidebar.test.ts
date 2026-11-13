@@ -234,4 +234,70 @@ describe("Workspace sidebar", () => {
     stores.createWorkGroup("After destroy");
     expect(treeHost.innerHTML).toBe(before);
   });
+
+  it("stacks every opened project and keeps each project's groups after opening another", () => {
+    const { stores, root } = setup();
+    stores.createWorkGroup("Authentication");
+    stores.setProjectPath("/projects/Website");
+    stores.createWorkGroup("Landing");
+    const projects = Array.from(root.querySelectorAll<HTMLElement>(".sidebar-project"));
+    expect(projects.map((project) => project.dataset.projectPath)).toEqual([
+      "/projects/Coloride",
+      "/projects/Website",
+    ]);
+    const titles = (project: HTMLElement) =>
+      Array.from(project.querySelectorAll(".sidebar-row--group .sidebar-row-title")).map(
+        (el) => el.textContent,
+      );
+    expect(titles(projects[0] as HTMLElement)).toEqual(["Workspace", "Authentication"]);
+    expect(titles(projects[1] as HTMLElement)).toEqual(["Workspace", "Landing"]);
+    expect(projects.map((project) => project.dataset.active)).toEqual(["false", "true"]);
+  });
+
+  it("switches project (through the host) when selecting a group of another project", async () => {
+    const switchWorkspace = vi.fn(async () => [] as const);
+    const stores = createCockpitStoreBundle();
+    stores.setProjectPath("/projects/one");
+    stores.setProjectPath("/projects/two");
+    const root = document.createElement("aside");
+    const controlsHost = document.createElement("div");
+    const treeHost = document.createElement("div");
+    root.append(controlsHost, treeHost);
+    document.body.appendChild(root);
+    const sidebar = new WorkspaceSidebar({ stores, controlsHost, treeHost, switchWorkspace });
+    cleanup.push(() => {
+      sidebar.destroy();
+      root.remove();
+    });
+    root
+      .querySelector<HTMLButtonElement>(
+        '.sidebar-project[data-project-path="/projects/one"] .sidebar-row--group .sidebar-row-select',
+      )
+      ?.click();
+    await vi.waitFor(() => expect(stores.navigation.getState().projectPath).toBe("/projects/one"));
+    expect(switchWorkspace).toHaveBeenCalledWith("/projects/one");
+  });
+
+  it("collapses one project without touching the others and removes a project from the list", async () => {
+    const { stores, root } = setup();
+    stores.setProjectPath("/projects/Website");
+    const folder = root.querySelector<HTMLButtonElement>(
+      '.sidebar-project[data-project-path="/projects/Coloride"] .sidebar-row--folder .sidebar-row-select',
+    );
+    folder?.click();
+    const [first, second] = Array.from(root.querySelectorAll<HTMLElement>(".sidebar-group-tree"));
+    expect(first?.hidden).toBe(true);
+    expect(second?.hidden).toBe(false);
+    root
+      .querySelector<HTMLButtonElement>(
+        '.sidebar-project[data-project-path="/projects/Coloride"] .sidebar-row--folder .sidebar-more',
+      )
+      ?.click();
+    const remove = Array.from(root.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find(
+      (item) => item.textContent === "Remove from list",
+    );
+    remove?.click();
+    await vi.waitFor(() => expect(root.querySelectorAll(".sidebar-project")).toHaveLength(1));
+    expect(stores.navigation.getState().projectPath).toBe("/projects/Website");
+  });
 });

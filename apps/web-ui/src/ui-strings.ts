@@ -1,0 +1,122 @@
+/**
+ * Every user-visible text of the cockpit, in one place. The UI is in English; adding a language
+ * means providing another object with the same shape.
+ */
+export const UI_STRINGS = {
+  shell: {
+    cockpit: "Coloride 4-Zone Multi-Chat Cockpit",
+    activityBar: "Activity bar",
+    sidebar: "Sidebar",
+    chatGrid: "Multi-chat grid",
+    inspector: "Inspector",
+    chatGroups: "Chat groups",
+    openFiles: "Open files",
+  },
+  activity: {
+    sessions: "Chat sessions",
+    files: "File explorer",
+    search: "Global search",
+    debug: "Debug & tests",
+    git: "Git & checkpoints",
+    mcp: "MCP connectors & models",
+  },
+  persona: {
+    label: "Workspace persona",
+    Create: "Create",
+    Learn: "Learn",
+    Develop: "Develop",
+    Infrastructure: "Infrastructure",
+    Data: "Data",
+  },
+  titleBar: {
+    back: "Back",
+    forward: "Forward",
+    hideSidebar: "Hide sidebar",
+    showSidebar: "Show sidebar",
+    hideInspector: "Hide right panel",
+    showInspector: "Show right panel",
+  },
+  chat: {
+    emptyGroup: "This group is empty. Agent and terminal panels will appear here.",
+  },
+  search: {
+    panel: "Global search (FTS5 BM25)",
+    input: "Global search",
+    placeholder: "Search (FTS5 BM25 + unsaved buffers)…",
+    unsavedBuffer: "● Memory (unsaved)",
+    disk: "Disk",
+    failed: "Workspace search failed",
+  },
+  debug: {
+    panel: "Tree-sitter AST symbols & impacted tests",
+  },
+  mcp: {
+    panel: "Quarantined MCP connectors & 1-click onboarding",
+    openWizard: "Open 1-click onboarding (VS Code / Cursor / Claude)",
+    closeWizard: "Close 1-click onboarding",
+  },
+  files: {
+    tree: "Project files",
+    filter: "Filter files…",
+    filterLabel: "Filter project files",
+    noProject: "No project open",
+    noMatch: "No matching files",
+    openFolder: "Open folder",
+    opening: "Opening…",
+    openFailed: "Unable to open folder",
+    readFailed: "Unable to read file",
+  },
+  editor: {
+    noFile: "No file open",
+    unsaved: "Unsaved changes",
+    saveFailed: "Save failed",
+  },
+  sidebar: {
+    navigation: "Folder, groups and sessions",
+    openProject: "Open project",
+    openProjectMenu: "Open project…",
+    openProjectHint: "Open a project folder",
+    opening: "Opening…",
+    openFailed: "Unable to open project",
+    switchFailed: "Unable to switch project",
+    noProject: "No project open",
+    expandAll: "Expand all groups",
+    collapseAll: "Collapse all groups",
+    removeProject: "Remove from list",
+    renameGroup: "Rename group",
+    expandGroup: "Expand group",
+    collapseGroup: "Collapse group",
+    renameSession: "Rename session",
+    closeSession: "Close session",
+    expand: "Expand",
+    collapse: "Collapse",
+    options: "Options",
+    name: "Name",
+  },
+  onboarding: {
+    title: "1-click import (VS Code · Cursor · Claude Desktop)",
+    importDetected: "Import detected settings",
+    importing: "Importing…",
+    importFailed: "Import failed",
+    importRetry: "Import failed — retry",
+    quarantine: "Quarantined MCP servers",
+    pendingApproval: "Blocked — awaiting approval",
+    approved: "Approved",
+    rejected: "Rejected",
+    approve: "Approve",
+    reject: "Reject",
+    resetDefaults: "Reset to Coloride defaults",
+  },
+} as const;
+
+export const uiText = {
+  activityButton: (label: string, shortcut: string) => `${label} (${shortcut})`,
+  chatCell: (title: string, state: string) => `${title} (${state})`,
+  chatCellHeader: (icon: string, title: string, model: string, state: string) =>
+    `${icon} ${title} [${model}] — ${state}`,
+  closeTab: (name: string) => `Close ${name}`,
+  mcpSummary: (keymap: string, theme: string, servers: number) =>
+    `Keymap: ${keymap} · Theme: ${theme} · MCP: ${servers}`,
+  searchHit: (path: string, line: number, freshness: string, snippet: string) =>
+    `${path}:${line} [${freshness}] — ${snippet}`,
+} as const;
