@@ -98,11 +98,16 @@
   .coloride-header-tab-close:hover {
     background: rgba(255, 255, 255, 0.12);
   }
+  /* No right padding where the "+" ends the strip: a sticky offset is measured inside the padding. */
+  .coloride-zone-3-header .coloride-header-tab-track {
+    padding-right: 0;
+  }
   /* "+" right after the last tab. Once the tabs fill the strip it sticks to the right edge
      instead of scrolling away. */
   .coloride-header-tab-add {
     position: sticky;
-    right: 3px;
+    right: 4px; /* from the strip's edge: its right padding is removed below */
+    margin-right: 4px; /* same gap when the strip is scrolled to its end */
     z-index: 15; /* above the header edge shadow (z-index 10) */
     display: inline-flex;
     flex: none;
