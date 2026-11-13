@@ -40,7 +40,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 14px;
+    width: 22px;
     padding: 0;
     border: 0;
     background: transparent;
@@ -111,14 +111,19 @@
     flex: none;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     padding: 0;
     border: 0;
     border-radius: 6px;
     background: transparent;
     color: var(--color-text-secondary);
     cursor: pointer;
+  }
+  .coloride-file-tree-action svg,
+  .coloride-zone-4-tree-edge svg {
+    width: 18px;
+    height: 18px;
   }
   .coloride-file-tree-action:hover {
     background: rgba(255, 255, 255, 0.08);
