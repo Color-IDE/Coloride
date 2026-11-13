@@ -22,7 +22,7 @@ export interface InspectorOptions {
 /**
  * Zone 4: the code editor with its open-file tabs, and the project file tree beside it.
  * The CodeMirror 6 view is mounted once and only ever hidden, never unmounted.
- * Open tabs are remembered per project.
+ * Open tabs belong to a work group (a Zone 3 tab); each project and group remembers its own.
  */
 export class Inspector {
   readonly element: HTMLElement;
@@ -32,19 +32,20 @@ export class Inspector {
   private readonly empty: HTMLElement;
   private readonly tabs: HeaderTabs;
   private editorScrollbar: ThinScrollbar | null = null;
-  /** Files opened in this project, in opening order. They accumulate until closed. */
+  /** Files opened in this group, in opening order. They accumulate until closed. */
   private openTabs: string[] = [];
   /** Set when no file is shown; cleared as soon as another file is opened. */
   private closedDocId: string | null = null;
   private projectPath: string;
+  private groupId: string;
+  /** Open tabs and the shown file of every project/group that is not the active one. */
+  private readonly tabsByScope = new Map<string, { tabs: string[]; active: string | null }>();
   /**
-   * Tabs of the projects that are not active. `unsaved` keeps the edits that were not saved
-   * (buffers are keyed by relative path, so another project would overwrite them).
+   * Unsaved edits of the projects that are not active, by project. Buffers are keyed by relative
+   * path, so another project's file of the same name would overwrite them. Groups of the same
+   * project share their buffers (it is the same file), so nothing is stashed between them.
    */
-  private readonly tabsByProject = new Map<
-    string,
-    { tabs: string[]; active: string | null; unsaved: Map<string, string> }
-  >();
+  private readonly unsavedByProject = new Map<string, Map<string, string>>();
   /** Files shown in the current project, whose in-memory buffer can be trusted. */
   private loadedPaths = new Set<string>();
 
@@ -53,7 +54,9 @@ export class Inspector {
     private readonly options: InspectorOptions,
   ) {
     const { stores } = options;
-    this.projectPath = stores.navigation.getState().projectPath;
+    const navigation = stores.navigation.getState();
+    this.projectPath = navigation.projectPath;
+    this.groupId = navigation.activeGroupId;
 
     this.element = doc.createElement("section");
     this.element.className =
@@ -161,34 +164,53 @@ export class Inspector {
     this.options.header.title = message;
   }
 
-  /** Swaps the open tabs (and resets the tree view) when the active project changes. */
-  changeProject(projectPath: string): void {
-    if (projectPath === this.projectPath) return;
-    const activeId = this.options.stores.zone4.getState().activeDocumentId;
+  private scopeKey(projectPath = this.projectPath, groupId = this.groupId): string {
+    return `${projectPath}\u0000${groupId}`;
+  }
+
+  /**
+   * Swaps the open tabs when the active project or work group changes. A project change also
+   * resets the tree view and keeps the leaving project's unsaved edits aside.
+   */
+  changeScope(projectPath: string, groupId: string): void {
+    if (projectPath === this.projectPath && groupId === this.groupId) return;
     const { stores } = this.options;
-    const unsaved = new Map<string, string>();
-    for (const path of this.openTabs) {
-      const content = stores.getDocumentContent(path);
-      if (content !== undefined && stores.isDocumentUnsaved(path)) unsaved.set(path, content);
-    }
-    this.tabsByProject.set(this.projectPath, {
+    const activeId = stores.zone4.getState().activeDocumentId;
+    this.tabsByScope.set(this.scopeKey(), {
       tabs: this.openTabs,
       active: this.closedDocId === null ? activeId : null,
-      unsaved,
     });
-    const saved = this.tabsByProject.get(projectPath);
-    this.projectPath = projectPath;
-    this.openTabs = saved?.tabs ?? [];
-    this.loadedPaths = new Set();
-    // Put back the edits this project had when it was left, so returning never reloads from disk.
-    for (const [path, content] of saved?.unsaved ?? []) {
-      stores.updateInMemoryDocumentContent(path, content, true);
-      this.loadedPaths.add(path);
+
+    const projectChanged = projectPath !== this.projectPath;
+    if (projectChanged) {
+      const unsaved = new Map<string, string>();
+      const prefix = `${this.projectPath}\u0000`;
+      for (const [key, scope] of this.tabsByScope) {
+        if (!key.startsWith(prefix)) continue;
+        for (const path of scope.tabs) {
+          const content = stores.getDocumentContent(path);
+          if (content !== undefined && stores.isDocumentUnsaved(path)) unsaved.set(path, content);
+        }
+      }
+      this.unsavedByProject.set(this.projectPath, unsaved);
     }
-    // The editor still holds the previous project's file: show the empty state until a file of
-    // this project is opened (or the one it had open is restored below).
+
+    this.projectPath = projectPath;
+    this.groupId = groupId;
+    const saved = this.tabsByScope.get(this.scopeKey());
+    this.openTabs = saved?.tabs ?? [];
+    if (projectChanged) {
+      this.loadedPaths = new Set();
+      // Put back the edits this project had when it was left, so returning never reloads from disk.
+      for (const [path, content] of this.unsavedByProject.get(projectPath) ?? []) {
+        stores.updateInMemoryDocumentContent(path, content, true);
+        this.loadedPaths.add(path);
+      }
+      this.tree.reset();
+    }
+    // The editor still holds the previous file: show the empty state until a file of this group is
+    // shown (the one it had open is restored below).
     this.closedDocId = activeId;
-    this.tree.reset();
     this.update();
     if (saved?.active) this.openFile(saved.active);
   }

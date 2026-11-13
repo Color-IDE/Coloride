@@ -135,8 +135,9 @@ export class CockpitDomController {
 
     this.unsubscribers.push(
       stores.navigation.subscribeSelector(
-        (state) => state.projectPath,
-        (projectPath) => this.inspector.changeProject(projectPath),
+        (state) => [state.projectPath, state.activeGroupId] as const,
+        ([projectPath, groupId]) => this.inspector.changeScope(projectPath, groupId),
+        (a, b) => a[0] === b[0] && a[1] === b[1],
       ),
       stores.navigation.subscribeSelector(
         (state) =>

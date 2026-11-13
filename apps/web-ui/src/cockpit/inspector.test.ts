@@ -171,7 +171,7 @@ describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () =
       controller.destroy();
       rootContainer.remove();
     });
-    return { stores, editorView, tab, dotShown, close, dialog, choose };
+    return { stores, editorView, tab, dotShown, close, dialog, choose, root: rootContainer };
   }
   const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -237,5 +237,83 @@ describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () =
     close("src/a.ts");
     expect(dialog()).toBeNull();
     expect(tab("src/a.ts")).toBeNull();
+  });
+
+  it("gives each work group its own file tabs, and an empty group shows the empty state", () => {
+    const { stores, tab, root } = setup();
+    const paths = () =>
+      Array.from(
+        root.querySelectorAll<HTMLElement>(".coloride-zone-4-header .coloride-header-tab"),
+      ).map((el) => el.dataset.path);
+    const emptyShown = () =>
+      root.querySelector<HTMLElement>(".coloride-zone-4-empty")?.hidden === false;
+    stores.selectFileFromTree("src/a.ts", "a");
+    stores.selectFileFromTree("src/b.ts", "b");
+    expect(paths()).toEqual(expect.arrayContaining(["src/a.ts", "src/b.ts"]));
+    const first = paths();
+
+    // A new (empty) group has no files: the right side changes even though no session is selected.
+    stores.createWorkGroup("Other");
+    expect(paths()).toEqual([]);
+    expect(emptyShown()).toBe(true);
+    stores.selectFileFromTree("src/other.ts", "o");
+    expect(paths()).toEqual(["src/other.ts"]);
+    expect(emptyShown()).toBe(false);
+
+    stores.selectWorkGroup("initial-group");
+    expect(paths()).toEqual(first);
+    expect(tab("src/other.ts")).toBeNull();
+    stores.selectWorkGroup(stores.navigation.getState().groups[1]?.id as string);
+    expect(paths()).toEqual(["src/other.ts"]);
+  });
+
+  it("shares unsaved edits between the groups of a project, because it is the same file", async () => {
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const stores = createCockpitStoreBundle();
+    const editorView = new ColorideEditorView({
+      initialDocumentId: "src/main.ts",
+      initialContent: "const ready = true;",
+      ipcChannel: new InMemoryBinaryHostBridge(),
+    });
+    let reads = 0;
+    const controller = new CockpitDomController({
+      rootContainer: root,
+      stores,
+      editorView,
+      readWorkspaceFile: async () => {
+        reads += 1;
+        return "on disk";
+      },
+    });
+    cleanups.push(() => {
+      controller.destroy();
+      root.remove();
+    });
+    stores.setFileTree([
+      {
+        path: "src/a.ts",
+        name: "a.ts",
+        depth: 0,
+        isDirectory: false,
+        validationState: "UnchangedBlue",
+      },
+    ]);
+    const openFromTree = async () => {
+      root
+        .querySelector<HTMLElement>(".coloride-zone-4-tree-column .cm-coloride-virtual-tree-row")
+        ?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    };
+    await openFromTree();
+    expect(reads).toBe(1);
+    stores.updateInMemoryDocumentContent("src/a.ts", "edited", true);
+
+    stores.createWorkGroup("Other");
+    await openFromTree();
+    // Same project, same file: the unsaved buffer is reused, not reloaded from disk.
+    expect(reads).toBe(1);
+    expect(stores.getDocumentContent("src/a.ts")).toBe("edited");
+    expect(stores.isDocumentUnsaved("src/a.ts")).toBe(true);
   });
 });

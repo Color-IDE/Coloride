@@ -112,6 +112,14 @@ export function createWorkspaceNavigation(
   );
   let groupSequence = 0;
 
+  /** The session a group should show: its last active one, else its first that still exists. */
+  const sessionToFocus = (group: WorkGroup): string | undefined => {
+    const existing = new Set(getChatIds());
+    return [group.lastActiveChatId, ...group.chatIds].find(
+      (id): id is string => !!id && group.chatIds.includes(id) && existing.has(id),
+    );
+  };
+
   return {
     navigation,
     createWorkGroup(title: string): void {
@@ -210,10 +218,7 @@ export function createWorkspaceNavigation(
       const current = navigation.getState();
       const group = current.groups.find((item) => item.id === id);
       if (!group) return;
-      const chatIds = new Set(getChatIds());
-      const chatId = [group.lastActiveChatId, ...group.chatIds].find(
-        (id) => id && group.chatIds.includes(id) && chatIds.has(id),
-      );
+      const chatId = sessionToFocus(group);
       if (chatId) onSelectChat(chatId);
       else if (current.activeGroupId !== id)
         navigation.setState((prev) => ({ ...prev, activeGroupId: id }));

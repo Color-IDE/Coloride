@@ -134,6 +134,10 @@
     flex: 0 1 auto;
     padding-right: 0;
   }
+  /* No tabs yet: the strip's left padding would only push the "+" away from the divider. */
+  .coloride-zone-3-header .coloride-header-tab-track:empty {
+    padding-left: 0;
+  }
   .coloride-header-tab-add {
     display: inline-flex;
     flex: none;
