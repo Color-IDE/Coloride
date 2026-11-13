@@ -163,7 +163,8 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
     expect(stores.zone3.getState().activeChatId).toBe("chat-2");
     expect(stores.zone4.getState().syncedChatId).toBe("chat-2");
     expect(stores.zone4.getState().activeDocumentId).toBe("src/stripe.ts");
-    expect(stores.zone4.getState().lastSyncDurationMs).toBeLessThan(10);
+    // The < 10 ms sync budget is asserted on a p95 in apps/desktop-tauri (Lazy Boot scenario);
+    // one sample here would only measure CI scheduler noise.
     expect(editorView.getStoreSnapshot().mountCount).toBe(1);
 
     // Check 2px Coloride border tokens on Zone 3 chat cells

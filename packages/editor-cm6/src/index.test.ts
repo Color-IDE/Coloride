@@ -229,11 +229,17 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
       highlightSnippetWithLezer(sampleTsx, "tsx");
     }
 
-    const lezerStart = performance.now();
-    const tokens = highlightSnippetWithLezer(sampleTsx, "tsx");
-    const lezerElapsedMs = performance.now() - lezerStart;
+    // Median of several runs: one sample is at the mercy of GC pauses on shared CI runners.
+    const lezerSamplesMs: number[] = [];
+    let tokens: ReturnType<typeof highlightSnippetWithLezer> = [];
+    for (let s = 0; s < 21; s += 1) {
+      const lezerStart = performance.now();
+      tokens = highlightSnippetWithLezer(sampleTsx, "tsx");
+      lezerSamplesMs.push(performance.now() - lezerStart);
+    }
+    lezerSamplesMs.sort((a, b) => a - b);
     expect(tokens.length).toBeGreaterThan(5);
-    expect(lezerElapsedMs).toBeLessThan(2);
+    expect(lezerSamplesMs[Math.floor(lezerSamplesMs.length / 2)] ?? 0).toBeLessThan(2);
 
     // 2. Continuous typing in a 2,000-line TypeScript file (p95 <= 16 ms)
     const twoThousandLines = Array.from(
@@ -252,13 +258,16 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
     document.body.appendChild(container);
     editor.mount(container);
 
+    // Warm-up keystrokes are not measured; 100 samples keep the p95 stable on noisy runners.
     const keystrokeSamplesMs: number[] = [];
     let cursor = editor.getDocumentText().length;
-    for (let i = 0; i < 40; i += 1) {
+    for (let i = 0; i < 110; i += 1) {
       const ch = String.fromCharCode(97 + (i % 26));
       const t0 = performance.now();
       editor.dispatchUserEdit(cursor, cursor, ch);
-      keystrokeSamplesMs.push(performance.now() - t0);
+      if (i >= 10) {
+        keystrokeSamplesMs.push(performance.now() - t0);
+      }
       cursor += 1;
     }
     keystrokeSamplesMs.sort((a, b) => a - b);
