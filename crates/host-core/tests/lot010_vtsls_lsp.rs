@@ -43,6 +43,8 @@ struct Fixture {
     diagnostics: Receiver<DocumentDiagnostics>,
     /// The exact text of every revision the buffer went through.
     texts: HashMap<u32, String>,
+    /// How long handing each edit to the language servers took (the keystroke's share).
+    forward_times: Vec<Duration>,
 }
 
 fn fixture() -> Fixture {
@@ -75,6 +77,7 @@ fn fixture() -> Fixture {
         services,
         diagnostics,
         texts: HashMap::new(),
+        forward_times: Vec::new(),
     };
     fx.remember();
     assert!(fx
@@ -124,11 +127,13 @@ impl Fixture {
                 ime_composing: false,
             })
             .unwrap();
+        let started = Instant::now();
         self.services.transaction_applied(
             &rope_before,
             &changes,
             self.documents.session(DOCUMENT_ID, GENERATION).unwrap(),
         );
+        self.forward_times.push(started.elapsed());
         self.remember();
     }
 
@@ -242,6 +247,14 @@ fn under_a_burst_of_edits_every_delivered_batch_is_exact_for_the_revision_it_nam
     }
     // `diagnostics_for` checks every batch on the way; the last revision must be reached, and
     // it reports the names present in the final text.
+    // Two-speed: the keystroke only enqueues the delta; vtsls works on its own time.
+    let mut times = fx.forward_times.clone();
+    times.sort_unstable();
+    let p95 = times[times.len() * 95 / 100];
+    assert!(
+        p95 < Duration::from_millis(2),
+        "forwarding an edit took {p95:?} (p95)"
+    );
     let last = fx.diagnostics_for(fx.revision());
     let mut names = missing_names(&last);
     names.sort_unstable();
