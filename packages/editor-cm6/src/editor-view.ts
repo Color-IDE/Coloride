@@ -6,6 +6,7 @@ import {
   EditorSelection as CmSelection,
   Compartment,
   EditorState,
+  Transaction,
 } from "@codemirror/state";
 import {
   EditorView,
@@ -107,6 +108,7 @@ export class ColorideEditorView {
   private lastTriggeredKeyCommand: string | null = null;
   private readonly keymapCompartment = new Compartment();
   private readonly themeCompartment = new Compartment();
+  private readonly historyCompartment = new Compartment();
   private unsubscribeIpc: (() => void) | null = null;
   private readonly storeListeners = new Set<() => void>();
   private readonly ipcChannel: BinaryIpcChannel;
@@ -192,15 +194,19 @@ export class ColorideEditorView {
       this.ipcChannel.openDocument(this.documentId, this.sessionGeneration, nextContent),
     );
 
+    // Undo history belongs to one document: drop it with the old text, so Ctrl+Z in the next
+    // file can never bring the previous file's content back (and get saved over it).
     view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: nextContent },
       selection: CmSelection.cursor(0),
       effects: [
+        this.historyCompartment.reconfigure([]),
         setColorideDecorationsEffect.of(decorations),
         suppressLocalInvalidationAnnotation.of(true),
       ],
-      annotations: documentSwitchAnnotation.of(true),
+      annotations: [documentSwitchAnnotation.of(true), Transaction.addToHistory.of(false)],
     });
+    view.dispatch({ effects: this.historyCompartment.reconfigure(history()) });
 
     this.notifyStoreListeners();
   }
@@ -467,7 +473,7 @@ export class ColorideEditorView {
         }),
         highlightActiveLineGutter(),
         highlightSpecialChars(),
-        history(),
+        this.historyCompartment.of(history()),
         drawSelection(),
         dropCursor(),
         EditorState.allowMultipleSelections.of(true),
@@ -525,13 +531,19 @@ export class ColorideEditorView {
           return;
         }
 
+        // host-core applies a transaction's changes one after another, each on the text left by
+        // the previous one; CM6 reports them all in pre-edit coordinates. Shift each change by
+        // the length delta of the ones before it (they come in ascending, non-overlapping order).
         const changes: TextChange[] = [];
+        let shift = 0;
         update.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
+          const insertedText = inserted.toString();
           changes.push({
-            range_utf16: { start: fromA, end: toA },
+            range_utf16: { start: fromA + shift, end: toA + shift },
             range_utf8: null,
-            inserted_text: inserted.toString(),
+            inserted_text: insertedText,
           });
+          shift += insertedText.length - (toA - fromA);
         });
 
         if (changes.length === 0) {

@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
-import { EditorState } from "@codemirror/state";
+import { redo, undo } from "@codemirror/commands";
+import { EditorSelection, EditorState } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
 import {
   COLORIDE_STATE_VISUAL_TOKENS,
@@ -335,5 +336,54 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
     const encodedSnap = encodeEditorSnapshotBinary(rawSnap);
     const decodedSnap = decodeEditorSnapshotBinary(encodedSnap);
     expect(decodedSnap).toEqual(rawSnap);
+  });
+  it("sends multi-cursor edits in the sequential coordinates host-core applies them in", () => {
+    const ipcChannel = new InMemoryBinaryHostBridge();
+    const editor = new ColorideEditorView({
+      initialDocumentId: "src/multi.ts",
+      initialContent: "a\nbb\nccc\n",
+      ipcChannel,
+    });
+    const view = editor.getEditorView();
+    // Three cursors typing at once, then one replace-all style transaction that grows and shrinks text.
+    view.dispatch({
+      changes: [
+        { from: 0, insert: "// " },
+        { from: 2, insert: "// " },
+        { from: 5, insert: "// " },
+      ],
+      selection: EditorSelection.create([EditorSelection.cursor(0)]),
+    });
+    view.dispatch({
+      changes: [
+        { from: 3, to: 4, insert: "AAAA" },
+        { from: 8, to: 10, insert: "" },
+        { from: 14, to: 17, insert: "C" },
+      ],
+    });
+    expect(ipcChannel.getHostText("src/multi.ts", 1)).toBe(editor.getDocumentText());
+    expect(editor.getDocumentText()).toBe("// AAAA\n// \n// C\n");
+    editor.destroy();
+  });
+
+  it("never lets undo carry one document's text into the next after a switch", () => {
+    const ipcChannel = new InMemoryBinaryHostBridge();
+    const editor = new ColorideEditorView({
+      initialDocumentId: "src/a.ts",
+      initialContent: "const a = 1;\n",
+      ipcChannel,
+    });
+    const view = editor.getEditorView();
+    editor.dispatchUserEdit(10, 11, "2");
+    editor.switchDocument("src/b.ts", "const b = 1;\n");
+    expect(undo(view)).toBe(false);
+    expect(redo(view)).toBe(false);
+    expect(editor.getDocumentText()).toBe("const b = 1;\n");
+    // History still works inside the new document.
+    editor.dispatchUserEdit(10, 11, "9");
+    expect(undo(view)).toBe(true);
+    expect(editor.getDocumentText()).toBe("const b = 1;\n");
+    expect(ipcChannel.getHostText("src/b.ts", 2)).toBe("const b = 1;\n");
+    editor.destroy();
   });
 });
