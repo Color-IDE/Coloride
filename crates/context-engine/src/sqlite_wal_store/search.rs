@@ -292,7 +292,9 @@ impl SqliteWalContextEngine {
         let hits = self.query_hybrid(query, 64);
         let mut excerpts = Vec::new();
         let mut token_budget_used = 0u32;
-        let mut had_redactions = !self.scanner.audit_log().is_empty();
+        // Restricted only when this bundle carries redacted text: indexed chunks were sanitized
+        // when they were indexed (and keep the placeholder), excerpts re-scanned now may add more.
+        let mut had_redactions = false;
 
         for hit in hits {
             if self
@@ -305,9 +307,6 @@ impl SqliteWalContextEngine {
             let sanitized = self
                 .scanner
                 .sanitize_text(&hit.excerpt.source_path, &hit.excerpt.content);
-            if sanitized.contains_redactions() {
-                had_redactions = true;
-            }
             let estimated_tokens = estimate_token_count(&sanitized.sanitized_text);
             if token_budget_used.saturating_add(estimated_tokens) > token_budget_max
                 && !excerpts.is_empty()
@@ -315,6 +314,11 @@ impl SqliteWalContextEngine {
                 break;
             }
             token_budget_used = token_budget_used.saturating_add(estimated_tokens);
+            if sanitized.contains_redactions()
+                || sanitized.sanitized_text.contains(REDACTED_SECRET_MARKER)
+            {
+                had_redactions = true;
+            }
             let mut safe_excerpt = hit.excerpt;
             safe_excerpt.content = sanitized.sanitized_text;
             excerpts.push(safe_excerpt);

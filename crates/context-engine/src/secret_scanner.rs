@@ -77,6 +77,9 @@ struct IgnoreRule {
 }
 
 /// Security filter enforced **before SQLite indexing** and **before `ContextBundle` export** (`LOT-008`).
+/// Prefix of every placeholder that replaces a secret (`[REDACTED_SECRET:<KIND>]`).
+pub const REDACTED_SECRET_MARKER: &str = "[REDACTED_SECRET:";
+
 #[derive(Debug, Clone)]
 pub struct AclAndSecretScanner {
     gitignore_rules: Vec<IgnoreRule>,
@@ -161,6 +164,17 @@ impl AclAndSecretScanner {
     /// Clear recorded audit events.
     pub fn clear_audit_log(&mut self) {
         self.audit_log.clear();
+    }
+
+    /// Most audit events kept in memory: every indexing pass and every export re-scans text, so
+    /// an unbounded log would grow for the whole session. The oldest half goes when it is full.
+    pub const MAX_AUDIT_EVENTS: usize = 10_000;
+
+    fn record_audit_event(&mut self, event: AuditSecretRedactionEvent) {
+        if self.audit_log.len() >= Self::MAX_AUDIT_EVENTS {
+            self.audit_log.drain(..Self::MAX_AUDIT_EVENTS / 2);
+        }
+        self.audit_log.push(event);
     }
 
     /// Verify whether a workspace-relative path is permitted by ACL, `.gitignore`, `.colorideignore`,
@@ -266,7 +280,7 @@ impl AclAndSecretScanner {
                         redacted_span_utf8: span,
                         secret_blake3_fingerprint: fingerprint,
                     };
-                    self.audit_log.push(event.clone());
+                    self.record_audit_event(event.clone());
                     events.push(event);
                     pem_accumulator.clear();
                     sanitized_lines.push(format!(
@@ -292,7 +306,7 @@ impl AclAndSecretScanner {
                         redacted_span_utf8: span,
                         secret_blake3_fingerprint: fingerprint,
                     };
-                    self.audit_log.push(event.clone());
+                    self.record_audit_event(event.clone());
                     events.push(event);
                     sanitized_lines.push(format!(
                         "{}{line_ending}",
@@ -317,7 +331,7 @@ impl AclAndSecretScanner {
                 skip_raw_entropy,
             );
             for ev in line_events {
-                self.audit_log.push(ev.clone());
+                self.record_audit_event(ev.clone());
                 events.push(ev);
             }
             sanitized_lines.push(format!("{redacted_line}{line_ending}"));
@@ -340,7 +354,7 @@ impl AclAndSecretScanner {
                 redacted_span_utf8: span,
                 secret_blake3_fingerprint: fingerprint,
             };
-            self.audit_log.push(event.clone());
+            self.record_audit_event(event.clone());
             events.push(event);
             sanitized_lines.push(
                 SecretRuleKind::PemPrivateKey

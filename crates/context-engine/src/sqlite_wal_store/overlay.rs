@@ -15,7 +15,7 @@ pub struct UnsavedBufferEntry {
 impl UnsavedBufferEntry {
     #[must_use]
     pub const fn has_unsaved_changes(&self) -> bool {
-        self.interactive_revision > self.disk_saved_revision
+        self.interactive_revision != self.disk_saved_revision
     }
 }
 
@@ -45,7 +45,8 @@ impl UnsavedBufferOverlay {
         content_blake3_hash: Option<String>,
     ) {
         let norm_path = normalize_rel_path(file_path);
-        if interactive_revision > disk_saved_revision {
+        // `!=`, not `>`: a buffer opened with unsaved edits has `NEVER_SAVED_REVISION` on disk.
+        if interactive_revision != disk_saved_revision {
             let hash = content_blake3_hash.unwrap_or_else(|| compute_rope_blake3_hex(&rope));
             self.entries.insert(
                 norm_path.clone(),
@@ -78,20 +79,17 @@ impl UnsavedBufferOverlay {
     ) {
         self.entries.clear();
         for session in document_service.sessions() {
-            if session.interactive_revision() > session.disk_saved_revision() {
-                let resolved_path = session
-                    .disk_path()
-                    .and_then(|disk_p| {
-                        if let Some(root) = workspace_root {
-                            disk_p
-                                .strip_prefix(root)
-                                .ok()
-                                .map(|rel| normalize_rel_path(&rel.to_string_lossy()))
-                        } else {
-                            Some(normalize_rel_path(&disk_p.to_string_lossy()))
-                        }
-                    })
-                    .unwrap_or_else(|| normalize_rel_path(session.document_id()));
+            if session.has_unsaved_changes() {
+                let resolved_path = match (session.disk_path(), workspace_root) {
+                    // A file outside the workspace (another project's session) is not this
+                    // workspace's file, whatever its relative id says.
+                    (Some(disk_p), Some(root)) => match disk_p.strip_prefix(root) {
+                        Ok(rel) => normalize_rel_path(&rel.to_string_lossy()),
+                        Err(_) => continue,
+                    },
+                    (Some(disk_p), None) => normalize_rel_path(&disk_p.to_string_lossy()),
+                    (None, _) => normalize_rel_path(session.document_id()),
+                };
 
                 self.entries.insert(
                     resolved_path.clone(),

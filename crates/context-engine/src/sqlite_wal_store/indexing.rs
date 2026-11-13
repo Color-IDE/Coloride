@@ -74,11 +74,24 @@ impl SqliteWalContextEngine {
         Ok(Some(file_row))
     }
 
+    /// The chunks of one file. Chunk ids start with `"{file_path}#"` and the table is ordered, so
+    /// this is a range scan, not a pass over every chunk of the workspace.
+    pub(super) fn chunks_of_file<'a>(
+        &'a self,
+        norm_path: &'a str,
+    ) -> impl Iterator<Item = &'a SqliteAstChunkRow> + 'a {
+        let prefix = format!("{norm_path}#");
+        self.ast_chunks
+            .range(prefix.clone()..)
+            .take_while(move |(id, _)| id.starts_with(&prefix))
+            .map(|(_, chunk)| chunk)
+            // A file literally named "a.ts#b" shares the prefix of "a.ts".
+            .filter(move |chunk| chunk.file_path == norm_path)
+    }
+
     pub(super) fn remove_chunks_for_file(&mut self, norm_path: &str) {
         let chunk_ids_to_remove: Vec<String> = self
-            .ast_chunks
-            .values()
-            .filter(|c| c.file_path == norm_path)
+            .chunks_of_file(norm_path)
             .map(|c| c.chunk_id.clone())
             .collect();
 
@@ -118,11 +131,7 @@ impl SqliteWalContextEngine {
         let mut next_analyzer = ImpactAnalyzer::new();
         for file_row in self.files.values() {
             let mut file_text = String::new();
-            for chunk in self
-                .ast_chunks
-                .values()
-                .filter(|c| c.file_path == file_row.file_path)
-            {
+            for chunk in self.chunks_of_file(&file_row.file_path) {
                 file_text.push_str(&chunk.sanitized_content);
                 file_text.push('\n');
             }
@@ -278,6 +287,11 @@ pub(super) fn build_chunks_for_parsed_file(
     (file_row, chunks, fts_rows)
 }
 
+/// Every file under `workspace_root`, as normalized relative paths.
+///
+/// Symbolic links are never followed: a link cycle would recurse forever and a link may point
+/// outside the workspace. A subdirectory that cannot be read (permissions, removed meanwhile) is
+/// skipped instead of failing the whole index; only an unreadable root is an error.
 pub(super) fn collect_workspace_files_recursively(
     workspace_root: &Path,
     current_dir: &Path,
@@ -288,20 +302,20 @@ pub(super) fn collect_workspace_files_recursively(
         source,
     })?;
 
-    for entry_res in entries {
-        let entry = entry_res.map_err(|source| ContextStorageError::Io {
-            path: current_dir.to_path_buf(),
-            source,
-        })?;
-        let path = entry.path();
-        let file_name = entry.file_name();
-        let name_str = file_name.to_string_lossy();
-        if name_str == ".git" || name_str == "node_modules" || name_str == "target" {
+    for entry in entries.flatten() {
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name == ".git" || name == "node_modules" || name == "target" {
             continue;
         }
-        if path.is_dir() {
-            collect_workspace_files_recursively(workspace_root, &path, out)?;
-        } else if path.is_file() {
+        let path = entry.path();
+        if file_type.is_dir() {
+            // Errors below the root only lose that subtree.
+            let _ = collect_workspace_files_recursively(workspace_root, &path, out);
+        } else if file_type.is_file() {
             if let Ok(rel) = path.strip_prefix(workspace_root) {
                 out.push(normalize_rel_path(&rel.to_string_lossy()));
             }

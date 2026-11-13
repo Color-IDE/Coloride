@@ -26,6 +26,7 @@ use crate::ast_graph::{
 };
 use crate::secret_scanner::{
     normalize_rel_path, AclAndSecretScanner, AclDenialReason, AuditSecretRedactionEvent,
+    REDACTED_SECRET_MARKER,
 };
 
 mod indexer;
