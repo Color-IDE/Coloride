@@ -52,10 +52,13 @@ export class SidebarPanels {
       "coloride-zone-2-sidebar bg-sidebar border-y border-l border-r-0 border-white/8 rounded-tl-[16px] rounded-bl-[16px] p-2.5 h-full";
     this.element.setAttribute("aria-label", UI_STRINGS.shell.sidebar);
     this.element.style.minWidth = "0";
-    // The panel scrolls inside `scroll`, with the same thin overlay scrollbar as the file tree
-    // (the native one is hidden); the panel itself only clips and positions the scrollbar.
+    // The project controls stay fixed at the top; everything below them scrolls inside `scroll`
+    // with the same thin overlay scrollbar as the file tree (the native one is hidden).
     this.element.style.overflow = "hidden";
-    this.element.style.position = "relative";
+    this.element.style.display = "flex";
+    this.element.style.flexDirection = "column";
+    const viewport = doc.createElement("div");
+    viewport.className = "coloride-zone-2-viewport";
     const scroll = doc.createElement("div");
     scroll.className = "coloride-zone-2-scroll";
 
@@ -102,9 +105,10 @@ export class SidebarPanels {
     this.mcpSummary.className = "coloride-mcp-onboarding-summary";
     this.mcp.append(this.wizardButton, this.mcpSummary);
 
-    scroll.append(this.projectControls, this.sessions, this.search, this.debug, this.mcp);
-    this.element.append(scroll);
-    this.scrollbar = attachThinScrollbar(this.element, scroll, "y");
+    scroll.append(this.sessions, this.search, this.debug, this.mcp);
+    viewport.append(scroll);
+    this.element.append(this.projectControls, viewport);
+    this.scrollbar = attachThinScrollbar(viewport, scroll, "y");
 
     this.workspaceSidebar = new WorkspaceSidebar({
       controlsHost: this.projectControls,
