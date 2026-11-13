@@ -46,9 +46,9 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     expect((controls as HTMLElement).hidden).toBe(false);
     stores.createWorkGroup("Authentication");
     expect(stores.navigation.getState().groups.at(-1)?.title).toBe("Authentication");
-    expect(rootContainer.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe(
-      "Authentication",
-    );
+    // The header lists the sessions of the active group; a new, empty group has none.
+    expect(rootContainer.querySelectorAll(".coloride-session-tab")).toHaveLength(0);
+    expect(rootContainer.querySelector(".coloride-chat-tab-add")).not.toBeNull();
     expect(rootContainer.querySelectorAll(".coloride-chat-cell")).toHaveLength(0);
     rootContainer
       .querySelector<HTMLButtonElement>('button[data-group-id="initial-group"]')
@@ -282,6 +282,34 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     // Adding through the sidebar also activates that group and shows its new session.
     expect(stores.navigation.getState().activeGroupId).toBe("initial-group");
     expect(initialRow?.querySelectorAll(".sidebar-row--session")).toHaveLength(3);
+    cleanup();
+  });
+  it("shows one header tab per session of the active group instead of the group name", () => {
+    const { root, stores, cells, cleanup } = mount();
+    const tabs = () => Array.from(root.querySelectorAll<HTMLElement>(".coloride-session-tab"));
+    expect(tabs().map((tab) => tab.dataset.chatId)).toEqual(["a", "b"]);
+    expect(tabs()[1]?.textContent).toContain("b");
+    expect(root.querySelector(".coloride-chat-tab-bar")?.textContent).not.toContain("Workspace");
+    expect(root.querySelector(".coloride-work-group-tab")).toBeNull();
+
+    tabs()[0]?.click();
+    expect(stores.zone3.getState().activeChatId).toBe("a");
+    expect(tabs()[0]?.getAttribute("aria-selected")).toBe("true");
+    expect(tabs()[1]?.getAttribute("aria-selected")).toBe("false");
+
+    // New sessions appear as tabs as they are created; closing one removes its tab and panel.
+    root.querySelector<HTMLButtonElement>(".coloride-chat-tab-add")?.click();
+    expect(tabs().map((tab) => tab.dataset.chatId)).toEqual(["a", "b", "chat-3"]);
+    expect(tabs()[2]?.getAttribute("aria-selected")).toBe("true");
+    tabs()[1]?.querySelector<HTMLButtonElement>(".coloride-tab-close-btn")?.click();
+    expect(tabs().map((tab) => tab.dataset.chatId)).toEqual(["a", "chat-3"]);
+    expect(cells().map((cell) => cell.dataset.chatId)).not.toContain("b");
+
+    // Another group shows its own sessions.
+    stores.createWorkGroup("Other");
+    expect(tabs()).toHaveLength(0);
+    stores.selectWorkGroup("initial-group");
+    expect(tabs()).toHaveLength(2);
     cleanup();
   });
 });

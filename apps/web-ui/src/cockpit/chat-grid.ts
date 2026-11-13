@@ -12,6 +12,13 @@ import { VirtualChatMessageListRenderer } from "../virtualizer.js";
 import { attachHeaderScroll } from "./header-scroll.js";
 import { CLOSE_PANEL_ICON, SPLIT_DOWN_ICON, SPLIT_RIGHT_ICON } from "./panel-icons.js";
 
+interface SessionTabNodes {
+  readonly el: HTMLElement;
+  readonly icon: HTMLElement;
+  readonly label: HTMLElement;
+  readonly close: HTMLButtonElement;
+}
+
 interface ChatCellNodes {
   readonly el: HTMLElement;
   readonly header: HTMLElement;
@@ -24,8 +31,8 @@ interface ChatCellNodes {
 }
 
 /**
- * Zone 3: group tabs in the header and the panels of the active tab, arranged by its layout
- * tree (any number of panels). Tabs and cells are keyed (by group and chat id) and updated in
+ * Zone 3: a header tab per session of the active group, and the panels of that group arranged
+ * by its layout tree (any number of panels). Tabs and cells are keyed (by group and chat id) and updated in
  * place, so token streaming does not rebuild anything. The split containers are only rebuilt
  * when the shape of the layout changes; a resize just updates the sizes.
  */
@@ -33,7 +40,7 @@ export class ChatGrid {
   readonly element: HTMLElement;
   private readonly grid: HTMLElement;
   private readonly tabBar: HTMLElement;
-  private readonly tabs = new Map<string, HTMLButtonElement>();
+  private readonly tabs = new Map<string, SessionTabNodes>();
   private readonly cells = new Map<string, ChatCellNodes>();
   private readonly empty: HTMLElement;
   private readonly addButton: HTMLButtonElement;
@@ -152,26 +159,72 @@ export class ChatGrid {
     this.releaseHeaderScroll();
   }
 
+  /** One header tab per session of the active group; selecting one focuses its panel. */
   private updateTabs(): void {
-    const doc = this.tabBar.ownerDocument;
+    const z3 = this.stores.zone3.getState();
     const navigation = this.stores.navigation.getState();
-    const ids = new Set(navigation.groups.map((group) => group.id));
+    const activeGroup = navigation.groups.find((group) => group.id === navigation.activeGroupId);
+    const chatsById = new Map(z3.chats.map((chat) => [chat.chatId, chat]));
+    const chats = (activeGroup?.chatIds ?? []).flatMap((id) => chatsById.get(id) ?? []);
+    const ids = new Set(chats.map((chat) => chat.chatId));
     for (const id of this.tabs.keys()) if (!ids.has(id)) this.tabs.delete(id);
-    const ordered = navigation.groups.map((group) => {
-      let tab = this.tabs.get(group.id);
+    const ordered = chats.map((chat) => {
+      let tab = this.tabs.get(chat.chatId);
       if (!tab) {
-        tab = doc.createElement("button");
-        tab.type = "button";
-        tab.className = "coloride-chat-tab coloride-work-group-tab";
-        tab.setAttribute("role", "tab");
-        tab.addEventListener("click", () => this.stores.selectWorkGroup(group.id));
-        this.tabs.set(group.id, tab);
+        tab = this.createSessionTab(chat.chatId);
+        this.tabs.set(chat.chatId, tab);
       }
-      if (tab.textContent !== group.title) tab.textContent = group.title;
-      tab.setAttribute("aria-selected", String(group.id === navigation.activeGroupId));
-      return tab;
+      const token = COLORIDE_DESIGN_TOKENS[chat.validationState];
+      if (tab.label.textContent !== chat.title) tab.label.textContent = chat.title;
+      if (tab.icon.textContent !== token.icon) tab.icon.textContent = token.icon;
+      tab.el.dataset.validationState = chat.validationState;
+      tab.el.title = `${chat.title} · ${chat.modelName}`;
+      tab.el.setAttribute("aria-selected", String(chat.chatId === z3.activeChatId));
+      tab.close.disabled =
+        z3.chats.length <= 1 ||
+        z3.activeRunningAgentChatId === chat.chatId ||
+        z3.sequentialAgentQueue.includes(chat.chatId);
+      return tab.el;
     });
     reconcile(this.tabBar, [...ordered, this.addButton]);
+  }
+
+  private createSessionTab(chatId: string): SessionTabNodes {
+    const doc = this.tabBar.ownerDocument;
+    const el = doc.createElement("div");
+    el.className = "coloride-chat-tab coloride-session-tab";
+    el.setAttribute("role", "tab");
+    el.tabIndex = 0;
+    el.dataset.chatId = chatId;
+    const icon = doc.createElement("span");
+    icon.className = "coloride-tab-icon";
+    icon.setAttribute("aria-hidden", "true");
+    const label = doc.createElement("span");
+    label.className = "coloride-tab-label";
+    const close = doc.createElement("button");
+    close.type = "button";
+    close.className = "coloride-tab-close-btn";
+    close.setAttribute("aria-label", UI_STRINGS.chat.closePanel);
+    close.title = UI_STRINGS.chat.closePanel;
+    close.innerHTML = CLOSE_PANEL_ICON;
+    close.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (!close.disabled) this.stores.closeChat(chatId);
+    });
+    el.append(icon, label, close);
+    el.addEventListener("click", () => this.stores.selectChat(chatId));
+    el.addEventListener("keydown", (event: KeyboardEvent) => {
+      if (event.target !== el || (event.key !== "Enter" && event.key !== " ")) return;
+      event.preventDefault();
+      this.stores.selectChat(chatId);
+    });
+    // Middle click closes, like the file tabs.
+    el.addEventListener("auxclick", (event: MouseEvent) => {
+      if (event.button !== 1) return;
+      event.preventDefault();
+      if (!close.disabled) this.stores.closeChat(chatId);
+    });
+    return { el, icon, label, close };
   }
 
   private updateGrid(): void {
