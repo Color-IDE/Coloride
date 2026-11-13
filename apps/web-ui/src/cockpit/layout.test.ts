@@ -185,4 +185,63 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
     editorView.destroy();
     rootContainer.remove();
   });
+  it("handles Cmd/Ctrl+1..6 and Cmd/Ctrl+S even when focus is outside the shell (e.g. after clicking the title bar)", () => {
+    const rootContainer = document.createElement("div");
+    document.body.appendChild(rootContainer);
+    const stores = createCockpitStoreBundle();
+    const editorView = new ColorideEditorView({
+      initialDocumentId: "src/main.ts",
+      initialContent: "const ready = true;",
+      ipcChannel: new InMemoryBinaryHostBridge(),
+    });
+    const controller = new CockpitDomController({ rootContainer, stores, editorView });
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(document.activeElement).toBe(document.body);
+
+    // Keys go to `body` when nothing inside the app has focus.
+    const press = (key: string, init: KeyboardEventInit = { metaKey: true }) =>
+      document.body.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, ...init }));
+    press("3");
+    expect(stores.zone1.getState().activeSection).toBe("search");
+    press("2");
+    expect(stores.zone1.getState().activeSection).toBe("files");
+    press("1", { ctrlKey: true });
+    expect(stores.zone1.getState().activeSection).toBe("sessions");
+    // Plain digits are not shortcuts.
+    press("4", {});
+    expect(stores.zone1.getState().activeSection).toBe("sessions");
+
+    controller.destroy();
+    // After destroy the shortcuts are gone: no listener may outlive the controller.
+    press("3");
+    expect(stores.zone1.getState().activeSection).toBe("sessions");
+    rootContainer.remove();
+  });
+  it("lets the window be dragged from the empty part of the Zone 3 and Zone 4 headers", () => {
+    const rootContainer = document.createElement("div");
+    document.body.appendChild(rootContainer);
+    const stores = createCockpitStoreBundle();
+    const editorView = new ColorideEditorView({
+      initialDocumentId: "src/main.ts",
+      initialContent: "const ready = true;",
+      ipcChannel: new InMemoryBinaryHostBridge(),
+    });
+    const controller = new CockpitDomController({ rootContainer, stores, editorView });
+    // Tauri only drags when the pressed element itself has the attribute: the tab strip fills the
+    // whole Zone 4 header, so it must carry it too (tabs and buttons inside it stay clickable).
+    for (const zone of [".coloride-zone-3-header", ".coloride-zone-4-header"]) {
+      const header = document.querySelector<HTMLElement>(zone);
+      const track = header?.querySelector<HTMLElement>(".coloride-header-tab-track");
+      expect(header?.hasAttribute("data-tauri-drag-region")).toBe(true);
+      expect(track?.hasAttribute("data-tauri-drag-region")).toBe(true);
+    }
+    expect(
+      document
+        .querySelector(".coloride-header-tab")
+        ?.closest("[data-tauri-drag-region]")
+        ?.matches(".coloride-header-tab"),
+    ).not.toBe(true);
+    controller.destroy();
+    rootContainer.remove();
+  });
 });

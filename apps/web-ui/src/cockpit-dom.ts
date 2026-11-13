@@ -119,7 +119,6 @@ export class CockpitDomController {
     this.shell.style.width = "100%";
     this.shell.style.height = "100vh";
     this.shell.style.overflow = "hidden";
-    this.shell.addEventListener("keydown", (event) => this.handleShortcut(event));
     this.shell.append(
       this.activityBar.element,
       this.sidebar.element,
@@ -136,7 +135,12 @@ export class CockpitDomController {
     this.titleBar.recordChatVisit(stores.zone3.getState().activeChatId);
     this.inspector.mountEditor();
 
+    // On the document, not the shell: with nothing focused (after clicking the title bar or an
+    // empty area) key events target `body`, which is outside the shell.
+    const onKeydown = (event: KeyboardEvent) => this.handleShortcut(event);
+    doc.addEventListener("keydown", onKeydown);
     this.unsubscribers.push(
+      () => doc.removeEventListener("keydown", onKeydown),
       stores.navigation.subscribeSelector(
         (state) => [state.projectPath, state.activeGroupId] as const,
         ([projectPath, groupId]) => this.inspector.changeScope(projectPath, groupId),
