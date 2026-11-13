@@ -64,7 +64,7 @@
     top: 0;
     right: 0;
     bottom: 0;
-    width: clamp(150px, 40%, 260px);
+    width: clamp(150px, 30%, 240px); /* the width it has when it is kept visible */
     background: var(--color-main);
     transform: translateX(100%);
     visibility: hidden;
