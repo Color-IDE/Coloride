@@ -36,7 +36,11 @@ export class EditorTabs {
   }
 
   /** `activePath` is null when no file is shown (every tab closed, or a project switch). */
-  update(paths: readonly string[], activePath: string | null, hasUnsavedChanges: boolean): void {
+  update(
+    paths: readonly string[],
+    activePath: string | null,
+    unsavedPaths: ReadonlySet<string>,
+  ): void {
     const wanted = new Set(paths);
     for (const path of this.tabs.keys()) if (!wanted.has(path)) this.tabs.delete(path);
     let activeTab: HTMLElement | null = null;
@@ -48,7 +52,7 @@ export class EditorTabs {
       }
       const active = path === activePath;
       tab.el.setAttribute("aria-selected", String(active));
-      const unsaved = active && hasUnsavedChanges;
+      const unsaved = unsavedPaths.has(path);
       tab.dot.hidden = !unsaved;
       if (unsaved) tab.el.dataset.unsavedChanges = "true";
       else delete tab.el.dataset.unsavedChanges;

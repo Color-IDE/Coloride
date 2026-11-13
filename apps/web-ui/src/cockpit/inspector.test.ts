@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { ColorideEditorView, InMemoryBinaryHostBridge } from "@coloride/editor-cm6";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { CockpitDomController, createCockpitStoreBundle } from "../index.js";
 
 describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () => {
@@ -135,5 +135,103 @@ describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () =
     expect(empty()).toBe(false);
     controller.destroy();
     rootContainer.remove();
+  });
+
+  const cleanups: Array<() => void> = [];
+  afterEach(() => {
+    for (const cleanup of cleanups.splice(0)) cleanup();
+  });
+
+  function setup() {
+    const rootContainer = document.createElement("div");
+    document.body.appendChild(rootContainer);
+    const stores = createCockpitStoreBundle();
+    const editorView = new ColorideEditorView({
+      initialDocumentId: "src/main.ts",
+      initialContent: "const ready = true;",
+      ipcChannel: new InMemoryBinaryHostBridge(),
+    });
+    const controller = new CockpitDomController({ rootContainer, stores, editorView });
+    const tab = (path: string) =>
+      rootContainer.querySelector<HTMLElement>(`.coloride-inspector-tab[data-path="${path}"]`);
+    const dotShown = (path: string) =>
+      tab(path)?.querySelector<HTMLElement>(".coloride-inspector-unsaved-dot")?.hidden === false;
+    const close = (path: string) =>
+      rootContainer
+        .querySelector<HTMLButtonElement>(`[aria-label="Close ${path.split("/").pop()}"]`)
+        ?.click();
+    const dialog = () => rootContainer.querySelector<HTMLElement>(".coloride-unsaved-dialog");
+    const choose = (choice: string) =>
+      rootContainer.querySelector<HTMLButtonElement>(`[data-choice="${choice}"]`)?.click();
+    cleanups.push(() => {
+      controller.destroy();
+      rootContainer.remove();
+    });
+    return { stores, editorView, tab, dotShown, close, dialog, choose };
+  }
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it("keeps unsaved edits of a project while another project is shown", () => {
+    const { stores } = setup();
+    stores.setProjectPath("/projects/a");
+    stores.selectFileFromTree("a1.ts", "on disk A");
+    stores.updateInMemoryDocumentContent("a1.ts", "edited in A", true);
+
+    stores.setProjectPath("/projects/b");
+    // Project B has a file with the same relative path: it takes over the shared buffer.
+    stores.selectFileFromTree("a1.ts", "on disk B");
+    expect(stores.getDocumentContent("a1.ts")).toBe("on disk B");
+
+    stores.setProjectPath("/projects/a");
+    expect(stores.getDocumentContent("a1.ts")).toBe("edited in A");
+    expect(stores.isDocumentUnsaved("a1.ts")).toBe(true);
+  });
+
+  it("shows the unsaved dot on every tab that has changes, not only the active one", () => {
+    const { stores, editorView, dotShown } = setup();
+    stores.selectFileFromTree("src/a.ts", "const a = 1;");
+    editorView.dispatchUserEdit(0, 0, "// ");
+    expect(dotShown("src/a.ts")).toBe(true);
+
+    stores.selectFileFromTree("src/b.ts", "const b = 1;");
+    expect(dotShown("src/b.ts")).toBe(false);
+    expect(dotShown("src/a.ts")).toBe(true);
+  });
+
+  it("asks before closing a tab with unsaved changes and honours each choice", async () => {
+    const { stores, editorView, tab, close, dialog, choose } = setup();
+    stores.selectFileFromTree("src/a.ts", "const a = 1;");
+    editorView.dispatchUserEdit(0, 0, "// ");
+
+    close("src/a.ts");
+    expect(dialog()).not.toBeNull();
+    choose("cancel");
+    await settle();
+    expect(dialog()).toBeNull();
+    expect(tab("src/a.ts")).not.toBeNull();
+    expect(stores.isDocumentUnsaved("src/a.ts")).toBe(true);
+
+    close("src/a.ts");
+    choose("discard");
+    await settle();
+    expect(tab("src/a.ts")).toBeNull();
+    expect(stores.getDocumentContent("src/a.ts")).toBeUndefined();
+
+    stores.selectFileFromTree("src/c.ts", "const c = 1;");
+    editorView.dispatchUserEdit(0, 0, "// ");
+    close("src/c.ts");
+    choose("save");
+    await settle();
+    await settle();
+    expect(tab("src/c.ts")).toBeNull();
+    expect(stores.isDocumentUnsaved("src/c.ts")).toBe(false);
+  });
+
+  it("closes a tab without asking when it has no unsaved changes", () => {
+    const { stores, tab, close, dialog } = setup();
+    stores.selectFileFromTree("src/a.ts", "const a = 1;");
+    close("src/a.ts");
+    expect(dialog()).toBeNull();
+    expect(tab("src/a.ts")).toBeNull();
   });
 });

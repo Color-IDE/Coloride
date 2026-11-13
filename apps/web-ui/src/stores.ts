@@ -159,6 +159,10 @@ export interface CockpitStoreBundle extends WorkspaceNavigationActions {
     hasUnsavedChanges?: boolean,
   ): void;
   markDocumentSaved(filePath: string): void;
+  /** True while the in-memory buffer of `filePath` differs from what was last saved. */
+  isDocumentUnsaved(filePath: string): boolean;
+  /** Forgets the in-memory buffer so the next open reads the file from disk again. */
+  discardDocumentBuffer(filePath: string): void;
   runGlobalSearch(query: string): readonly CockpitSearchResultItem[];
   setGlobalSearchResults(query: string, results: readonly CockpitSearchResultItem[]): void;
   setAstAnalysis(
@@ -573,6 +577,14 @@ export function createCockpitStoreBundle(options?: {
         unsaved: hasUnsavedChanges,
         validationState: nextValidation,
       });
+    },
+
+    isDocumentUnsaved(filePath: string): boolean {
+      return documentBuffers.get(filePath)?.unsaved ?? false;
+    },
+
+    discardDocumentBuffer(filePath: string): void {
+      documentBuffers.delete(filePath);
     },
 
     markDocumentSaved(filePath: string): void {

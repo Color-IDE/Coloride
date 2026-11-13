@@ -4,12 +4,15 @@ import { type ThinScrollbar, attachThinScrollbar } from "../thin-scrollbar.js";
 import { UI_STRINGS } from "../ui-strings.js";
 import { EditorTabs } from "./editor-tabs.js";
 import { FileTreePanel } from "./file-tree-panel.js";
+import { askUnsavedChoice } from "./unsaved-dialog.js";
 
 export interface InspectorOptions {
   readonly stores: CockpitStoreBundle;
   readonly editorView: ColorideEditorView;
   readonly header: HTMLElement;
   readonly readWorkspaceFile?: (path: string) => Promise<string>;
+  /** Saves the document currently shown in the editor. */
+  readonly saveActiveDocument: () => Promise<void>;
   /** Re-runs native analysis once a file is shown. */
   readonly onFileShown: (path: string) => void;
   readonly onTreeScroll: (scrollTopPx: number, viewportHeightPx: number) => void;
@@ -33,7 +36,14 @@ export class Inspector {
   /** Set when no file is shown; cleared as soon as another file is opened. */
   private closedDocId: string | null = null;
   private projectPath: string;
-  private readonly tabsByProject = new Map<string, { tabs: string[]; active: string | null }>();
+  /**
+   * Tabs of the projects that are not active. `unsaved` keeps the edits that were not saved
+   * (buffers are keyed by relative path, so another project would overwrite them).
+   */
+  private readonly tabsByProject = new Map<
+    string,
+    { tabs: string[]; active: string | null; unsaved: Map<string, string> }
+  >();
   /** Files shown in the current project, whose in-memory buffer can be trusted. */
   private loadedPaths = new Set<string>();
 
@@ -50,6 +60,7 @@ export class Inspector {
     this.element.setAttribute("aria-label", UI_STRINGS.shell.inspector);
     this.element.style.minWidth = "0";
     this.element.style.overflow = "hidden";
+    this.element.style.position = "relative";
 
     this.previewHost = doc.createElement("div");
     this.previewHost.className =
@@ -81,7 +92,7 @@ export class Inspector {
 
     this.tabs = new EditorTabs(doc, options.header, {
       open: (path) => this.openFile(path),
-      close: (path) => this.closeTab(path),
+      close: (path) => this.requestCloseTab(path),
     });
   }
 
@@ -118,7 +129,7 @@ export class Inspector {
       }
     }
     const noFile = this.closedDocId !== null;
-    this.tabs.update(this.openTabs, noFile ? null : z4.activeDocumentId, z4.hasUnsavedChanges);
+    this.renderTabs(noFile ? null : z4.activeDocumentId);
 
     const wasHidden = this.editorHost.style.display === "none";
     this.previewHost.style.display = "none";
@@ -133,8 +144,12 @@ export class Inspector {
     this.tree.update(stores.zone2.getState().fileTree, stores.zone4.getState().activeDocumentId);
   }
 
+  /** Called after every edit/save: refreshes the unsaved dot of the tabs. */
   setUnsaved(hasUnsavedChanges: boolean): void {
     this.element.dataset.unsavedChanges = String(hasUnsavedChanges);
+    this.renderTabs(
+      this.closedDocId !== null ? null : this.options.stores.zone4.getState().activeDocumentId,
+    );
   }
 
   reportError(message: string): void {
@@ -145,14 +160,26 @@ export class Inspector {
   changeProject(projectPath: string): void {
     if (projectPath === this.projectPath) return;
     const activeId = this.options.stores.zone4.getState().activeDocumentId;
+    const { stores } = this.options;
+    const unsaved = new Map<string, string>();
+    for (const path of this.openTabs) {
+      const content = stores.getDocumentContent(path);
+      if (content !== undefined && stores.isDocumentUnsaved(path)) unsaved.set(path, content);
+    }
     this.tabsByProject.set(this.projectPath, {
       tabs: this.openTabs,
       active: this.closedDocId === null ? activeId : null,
+      unsaved,
     });
     const saved = this.tabsByProject.get(projectPath);
     this.projectPath = projectPath;
     this.openTabs = saved?.tabs ?? [];
     this.loadedPaths = new Set();
+    // Put back the edits this project had when it was left, so returning never reloads from disk.
+    for (const [path, content] of saved?.unsaved ?? []) {
+      stores.updateInMemoryDocumentContent(path, content, true);
+      this.loadedPaths.add(path);
+    }
     // The editor still holds the previous project's file: show the empty state until a file of
     // this project is opened (or the one it had open is restored below).
     this.closedDocId = activeId;
@@ -193,6 +220,41 @@ export class Inspector {
     this.tabs.destroy();
     this.tree.destroy();
     this.editorScrollbar?.destroy();
+  }
+
+  private renderTabs(activePath: string | null): void {
+    const { stores } = this.options;
+    const unsaved = new Set(this.openTabs.filter((path) => stores.isDocumentUnsaved(path)));
+    this.tabs.update(this.openTabs, activePath, unsaved);
+  }
+
+  /** Closes a tab; one with unsaved changes first asks whether to save, discard or keep it. */
+  private requestCloseTab(path: string): void {
+    const { stores } = this.options;
+    if (!stores.isDocumentUnsaved(path)) {
+      this.closeTab(path);
+      return;
+    }
+    const name = path.split("/").pop() || path;
+    void askUnsavedChoice(this.element, name).then(async (choice) => {
+      if (choice === "cancel") return;
+      if (choice === "save") {
+        try {
+          // Only the shown document can be saved: bring the tab forward first.
+          if (stores.zone4.getState().activeDocumentId !== path || this.closedDocId !== null) {
+            this.openFile(path);
+          }
+          await this.options.saveActiveDocument();
+        } catch (error: unknown) {
+          this.reportError(error instanceof Error ? error.message : UI_STRINGS.editor.saveFailed);
+          return; // keep the tab open: nothing is lost
+        }
+      } else {
+        stores.discardDocumentBuffer(path);
+        this.loadedPaths.delete(path);
+      }
+      this.closeTab(path);
+    });
   }
 
   private closeTab(path: string): void {

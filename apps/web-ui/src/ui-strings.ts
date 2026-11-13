@@ -70,6 +70,10 @@ export const UI_STRINGS = {
     noFile: "No file open",
     unsaved: "Unsaved changes",
     saveFailed: "Save failed",
+    unsavedTitle: "Unsaved changes",
+    save: "Save",
+    discard: "Don't save",
+    cancel: "Cancel",
   },
   sidebar: {
     navigation: "Folder, groups and sessions",
@@ -115,6 +119,7 @@ export const uiText = {
   chatCellHeader: (icon: string, title: string, model: string, state: string) =>
     `${icon} ${title} [${model}] — ${state}`,
   closeTab: (name: string) => `Close ${name}`,
+  unsavedPrompt: (name: string) => `Do you want to save the changes you made to ${name}?`,
   mcpSummary: (keymap: string, theme: string, servers: number) =>
     `Keymap: ${keymap} · Theme: ${theme} · MCP: ${servers}`,
   searchHit: (path: string, line: number, freshness: string, snippet: string) =>

@@ -92,6 +92,7 @@ export class CockpitDomController {
       stores,
       editorView,
       header: this.titleBar.zone4Header,
+      saveActiveDocument: () => this.saveActiveDocument(),
       onFileShown: (path) => this.requestNativeAnalysis(path),
       onTreeScroll: (scrollTopPx, viewportHeightPx) =>
         this.storeFileTreeScroll(scrollTopPx, viewportHeightPx),
