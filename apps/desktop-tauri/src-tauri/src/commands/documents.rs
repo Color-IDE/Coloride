@@ -27,7 +27,12 @@ pub fn open_document_binary_command(
         }
         Some(root) => {
             let path = resolve_authorized_workspace_file(&root, &document_id)?;
-            bridge.open_document_from_disk_binary(document_id, session_generation, path)
+            bridge.open_document_with_editor_text_binary(
+                document_id,
+                session_generation,
+                path,
+                &initial_text,
+            )
         }
         None => bridge.open_document_binary(document_id, session_generation, &initial_text),
     }

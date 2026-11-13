@@ -80,15 +80,21 @@ impl DesktopBinaryEditorBridge {
         })
     }
 
-    pub fn open_document_from_disk_binary(
+    /// Open a workspace file with the editor's current text (which may hold unsaved edits),
+    /// keeping the disk path and hash for saving and conflict detection.
+    pub fn open_document_with_editor_text_binary(
         &mut self,
         document_id: impl Into<String>,
         session_generation: u32,
         disk_path: impl Into<PathBuf>,
+        editor_text: &str,
     ) -> Result<Vec<u8>, DocumentError> {
-        let snapshot =
-            self.documents
-                .open_document_from_disk(document_id, session_generation, disk_path)?;
+        let snapshot = self.documents.open_document_with_editor_text(
+            document_id,
+            session_generation,
+            disk_path,
+            editor_text,
+        )?;
         encode_editor_snapshot_ipc(&snapshot).map_err(|error| {
             DocumentError::EditorIpc(format!("EditorSnapshot IPC encode failed: {error}"))
         })

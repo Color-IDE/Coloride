@@ -118,6 +118,14 @@ impl DocumentSession {
         &self.validation_ranges
     }
 
+    /// Record that `revision` reached the disk. Saves only move forward, except from
+    /// `NEVER_SAVED_REVISION`, which any real save replaces.
+    pub(super) fn record_disk_save(&mut self, revision: u32) {
+        if self.disk_saved_revision == NEVER_SAVED_REVISION || revision > self.disk_saved_revision {
+            self.disk_saved_revision = revision;
+        }
+    }
+
     /// Produce the immutable `EditorSnapshot` contract for this session.
     #[must_use]
     pub fn snapshot(&self) -> EditorSnapshot {

@@ -39,52 +39,17 @@ impl DocumentService {
         disk_path: Option<PathBuf>,
         initial_text: &str,
     ) -> Result<EditorSnapshot, DocumentError> {
-        let document_id = document_id.into();
-        let rope = Rope::from_str(initial_text);
-        let initial_revision = 0;
-        let disk_saved_revision = 0;
-        let content_blake3_hash = compute_rope_blake3_hex(&rope);
-        let last_known_disk_hash = if disk_path.is_some() {
-            Some(content_blake3_hash.clone())
-        } else {
-            None
-        };
-
-        if let Some(journal) = &mut self.journal {
-            journal.append_and_sync(JournalRecord::DocumentOpened {
-                document_id: document_id.clone(),
-                session_generation,
-                disk_path: disk_path.clone(),
-                initial_revision,
-                disk_saved_revision,
-                initial_text: initial_text.to_string(),
-                content_blake3_hash: content_blake3_hash.clone(),
-                last_known_disk_hash: last_known_disk_hash.clone(),
-            })?;
-        }
-
-        let session = DocumentSession {
-            document_id: document_id.clone(),
+        let last_known_disk_hash = disk_path
+            .as_ref()
+            .map(|_| blake3::hash(initial_text.as_bytes()).to_hex().to_string());
+        self.open_session(
+            document_id.into(),
             session_generation,
             disk_path,
-            rope,
-            interactive_revision: initial_revision,
-            journaled_revision: initial_revision,
-            disk_saved_revision,
-            content_blake3_hash,
+            initial_text.to_string(),
             last_known_disk_hash,
-            selection: EditorSelection::default(),
-            ime_composing: false,
-            validation_ranges: Vec::new(),
-        };
-        let snapshot = session.snapshot();
-        self.latest_generation_by_doc
-            .insert(document_id.clone(), session_generation);
-        self.sessions.insert(
-            DocumentSessionKey::new(document_id, session_generation),
-            session,
-        );
-        Ok(snapshot)
+            0,
+        )
     }
 
     /// Open a local file from disk into a `ropey::Rope` (`p95 <= 50 ms` for 1 MB).
@@ -94,25 +59,75 @@ impl DocumentService {
         session_generation: u32,
         disk_path: impl Into<PathBuf>,
     ) -> Result<EditorSnapshot, DocumentError> {
-        let document_id = document_id.into();
         let disk_path = disk_path.into();
         let initial_text =
             std::fs::read_to_string(&disk_path).map_err(|source| DocumentError::Io {
                 path: disk_path.clone(),
                 source,
             })?;
-        let content_blake3_hash = blake3::hash(initial_text.as_bytes()).to_hex().to_string();
-        let rope = Rope::from_str(&initial_text);
+        let disk_hash = blake3::hash(initial_text.as_bytes()).to_hex().to_string();
+        self.open_session(
+            document_id.into(),
+            session_generation,
+            Some(disk_path),
+            initial_text,
+            Some(disk_hash),
+            0,
+        )
+    }
 
+    /// Open a workspace file with the text the editor is showing, which may hold unsaved edits.
+    ///
+    /// The rope starts from `editor_text` so the editor and host-core never diverge; the disk is
+    /// only read to remember its hash (for the external-conflict check on save) and to know
+    /// whether the buffer starts out dirty. A file missing on disk opens as unsaved.
+    pub fn open_document_with_editor_text(
+        &mut self,
+        document_id: impl Into<String>,
+        session_generation: u32,
+        disk_path: impl Into<PathBuf>,
+        editor_text: &str,
+    ) -> Result<EditorSnapshot, DocumentError> {
+        let disk_path = disk_path.into();
+        let disk_hash = if disk_path.exists() {
+            Some(compute_file_blake3_hex(&disk_path)?)
+        } else {
+            None
+        };
+        let editor_hash = blake3::hash(editor_text.as_bytes()).to_hex().to_string();
+        let disk_saved_revision = if disk_hash.as_deref() == Some(editor_hash.as_str()) {
+            0
+        } else {
+            NEVER_SAVED_REVISION
+        };
+        self.open_session(
+            document_id.into(),
+            session_generation,
+            Some(disk_path),
+            editor_text.to_string(),
+            disk_hash,
+            disk_saved_revision,
+        )
+    }
+
+    fn open_session(
+        &mut self,
+        document_id: String,
+        session_generation: u32,
+        disk_path: Option<PathBuf>,
+        initial_text: String,
+        last_known_disk_hash: Option<String>,
+        disk_saved_revision: u32,
+    ) -> Result<EditorSnapshot, DocumentError> {
+        let rope = Rope::from_str(&initial_text);
         let initial_revision = 0;
-        let disk_saved_revision = 0;
-        let last_known_disk_hash = Some(content_blake3_hash.clone());
+        let content_blake3_hash = compute_rope_blake3_hex(&rope);
 
         if let Some(journal) = &mut self.journal {
             journal.append_and_sync(JournalRecord::DocumentOpened {
                 document_id: document_id.clone(),
                 session_generation,
-                disk_path: Some(disk_path.clone()),
+                disk_path: disk_path.clone(),
                 initial_revision,
                 disk_saved_revision,
                 initial_text,
@@ -124,7 +139,7 @@ impl DocumentService {
         let session = DocumentSession {
             document_id: document_id.clone(),
             session_generation,
-            disk_path: Some(disk_path),
+            disk_path,
             rope,
             interactive_revision: initial_revision,
             journaled_revision: initial_revision,
@@ -365,9 +380,7 @@ impl DocumentService {
         }
 
         let session = self.session_mut(&pending.document_id, pending.session_generation)?;
-        if pending.target_revision > session.disk_saved_revision {
-            session.disk_saved_revision = pending.target_revision;
-        }
+        session.record_disk_save(pending.target_revision);
         session.last_known_disk_hash = Some(pending.target_blake3_hash.clone());
         Ok(session.snapshot())
     }

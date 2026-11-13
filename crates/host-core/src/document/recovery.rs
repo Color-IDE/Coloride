@@ -70,9 +70,7 @@ pub fn recover_workspace_from_journal(
             } => {
                 let key = DocumentSessionKey::new(document_id, session_generation);
                 if let Some(session) = sessions.get_mut(&key) {
-                    if disk_saved_revision > session.disk_saved_revision {
-                        session.disk_saved_revision = disk_saved_revision;
-                    }
+                    session.record_disk_save(disk_saved_revision);
                     session.last_known_disk_hash = Some(disk_blake3_hash);
                 }
             }

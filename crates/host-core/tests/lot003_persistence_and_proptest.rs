@@ -691,3 +691,65 @@ fn rejects_stale_session_generation_and_revision_mismatch_and_rolls_back_invalid
     assert_eq!(session.text(), "const count = 10;\n");
     assert_eq!(session.interactive_revision(), 0);
 }
+
+#[test]
+fn opening_with_editor_text_keeps_unsaved_edits_and_saves_them() {
+    let dir = tempdir().expect("create tempdir");
+    let file_path = dir.path().join("dirty.ts");
+    std::fs::write(&file_path, "const a = 1;\n").unwrap();
+
+    let mut service = DocumentService::new_in_memory();
+    // The editor reopens a tab whose buffer holds edits that never reached the disk.
+    let snapshot = service
+        .open_document_with_editor_text("dirty.ts", 2, &file_path, "const a = 42;\n")
+        .unwrap();
+    assert!(snapshot.has_unsaved_changes);
+    assert_eq!(
+        service.session("dirty.ts", 2).unwrap().text(),
+        "const a = 42;\n"
+    );
+
+    // An edit computed by the editor against its own text lands where it expects.
+    let tx = EditorTransaction {
+        schema_version: CONTRACT_SCHEMA_VERSION,
+        document_id: "dirty.ts".to_string(),
+        session_generation: 2,
+        base_revision: 0,
+        op_id: "op-1".to_string(),
+        changes: vec![TextChange {
+            range_utf16: Utf16Span::new(Utf16CodeUnitOffset::new(13), Utf16CodeUnitOffset::new(13)),
+            range_utf8: None,
+            inserted_text: " // x".to_string(),
+        }],
+        selection: EditorSelection::default(),
+        origin: TransactionOrigin::User,
+        ime_composing: false,
+    };
+    service.apply_transaction(tx).unwrap();
+
+    let saved = service.save_document_atomic("dirty.ts", 2).unwrap();
+    assert!(!saved.has_unsaved_changes);
+    assert_eq!(
+        std::fs::read_to_string(&file_path).unwrap(),
+        "const a = 42; // x\n"
+    );
+}
+
+#[test]
+fn opening_with_editor_text_equal_to_disk_is_clean_and_still_detects_conflicts() {
+    let dir = tempdir().expect("create tempdir");
+    let file_path = dir.path().join("clean.ts");
+    std::fs::write(&file_path, "let b = 2;\n").unwrap();
+
+    let mut service = DocumentService::new_in_memory();
+    let snapshot = service
+        .open_document_with_editor_text("clean.ts", 1, &file_path, "let b = 2;\n")
+        .unwrap();
+    assert!(!snapshot.has_unsaved_changes);
+
+    std::fs::write(&file_path, "let b = 3; // external\n").unwrap();
+    assert!(matches!(
+        service.save_document_atomic("clean.ts", 1).unwrap_err(),
+        DocumentError::ExternalDiskConflict { .. }
+    ));
+}

@@ -24,6 +24,10 @@ use crate::offsets::{
 
 static ATOMIC_TMP_COUNTER: AtomicU64 = AtomicU64::new(1);
 
+/// `disk_saved_revision` of a buffer whose text was never on disk (opened with unsaved edits):
+/// no interactive revision ever equals it, so the session reports unsaved changes until a save.
+pub const NEVER_SAVED_REVISION: u32 = u32::MAX;
+
 /// Composite key uniquely identifying an active document buffer session.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct DocumentSessionKey {
