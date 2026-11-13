@@ -434,6 +434,15 @@
     background: rgba(120, 170, 255, 0.1);
     border-style: dashed;
   }
+  /* The agent's mark before a panel's title */
+  .coloride-chat-cell-title-icon {
+    display: inline-flex;
+    vertical-align: -2px;
+    margin-right: 6px;
+  }
+  .coloride-chat-cell-title-icon[hidden] {
+    display: none;
+  }
   .coloride-chat-cell-title {
     flex: 1;
     min-width: 0;

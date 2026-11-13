@@ -1,6 +1,7 @@
 import { reconcile } from "../dom-utils.js";
 import { type LayoutNode, panel, panelIds, reconcileLayout } from "../layout-tree.js";
 import { PLUS_ICON } from "../sidebar/icons.js";
+import { splitSessionNumber } from "../sidebar/sidebar-row.js";
 import {
   COLORIDE_DESIGN_TOKENS,
   type CockpitChatTab,
@@ -21,6 +22,7 @@ import { NewPanelMenu } from "./new-panel-menu.js";
 import { PanelDrag } from "./panel-drag.js";
 import {
   CLOSE_PANEL_ICON,
+  CODEX_ICON,
   MAXIMIZE_ICON,
   RESTORE_ICON,
   SPLIT_DOWN_ICON,
@@ -28,6 +30,13 @@ import {
   TERMINAL_ICON,
 } from "./panel-icons.js";
 import { type TerminalHost, TerminalPane, type TerminalViewFactory } from "./terminal-pane.js";
+
+/** The icon of a session's header tab: the terminal glyph, the Codex mark, or its state glyph. */
+function tabIcon(chat: CockpitChatTab, stateGlyph: string): { svg: string } | { text: string } {
+  if (chat.kind === "terminal") return { svg: TERMINAL_ICON };
+  if (chat.modelName === "Codex") return { svg: CODEX_ICON };
+  return { text: stateGlyph };
+}
 
 /** What shells need: the host that starts them and the emulator that draws them. */
 export interface ChatGridTerminals {
@@ -39,6 +48,9 @@ interface ChatCellNodes {
   readonly el: HTMLElement;
   readonly header: HTMLElement;
   readonly title: HTMLElement;
+  /** The mark of the agent (Codex) before the title, and the text after it. */
+  readonly titleIcon: HTMLElement;
+  readonly titleText: HTMLElement;
   readonly splitRight: HTMLButtonElement;
   readonly splitDown: HTMLButtonElement;
   readonly maximize: HTMLButtonElement;
@@ -248,11 +260,14 @@ export class ChatGrid {
     this.tabs.update(
       chats.map((chat): HeaderTabSpec => {
         const token = COLORIDE_DESIGN_TOKENS[chat.validationState];
+        // "#16 New session": the name, with its number as a muted label after it.
+        const numbered = splitSessionNumber(chat.title);
         return {
           key: chat.chatId,
-          label: chat.title,
+          label: numbered.name,
           title: chat.kind === "terminal" ? chat.title : `${chat.title} · ${chat.modelName}`,
-          icon: chat.kind === "terminal" ? { svg: TERMINAL_ICON } : { text: token.icon },
+          icon: tabIcon(chat, token.icon),
+          ...(numbered.number ? { badge: numbered.number } : {}),
           selected: chat.chatId === z3.activeChatId,
           closable: this.canCloseSession(chat.chatId),
           data: { validationState: chat.validationState },
@@ -389,7 +404,7 @@ export class ChatGrid {
       cell.el.dataset.kind = "terminal";
       cell.el.dataset.active = String(active);
       cell.el.setAttribute("aria-label", chat.title);
-      if (cell.title.textContent !== chat.title) cell.title.textContent = chat.title;
+      if (cell.titleText.textContent !== chat.title) cell.titleText.textContent = chat.title;
       return cell.el;
     }
     const token = COLORIDE_DESIGN_TOKENS[chat.validationState];
@@ -401,7 +416,10 @@ export class ChatGrid {
     cell.el.style.backgroundColor = token.darkBg;
     cell.el.style.color = token.darkText;
     const headerText = uiText.chatCellHeader(token.icon, chat.title, chat.modelName, token.labelEn);
-    if (cell.title.textContent !== headerText) cell.title.textContent = headerText;
+    if (cell.titleText.textContent !== headerText) cell.titleText.textContent = headerText;
+    const mark = chat.modelName === "Codex" ? CODEX_ICON : "";
+    if (cell.titleIcon.innerHTML !== mark) cell.titleIcon.innerHTML = mark;
+    cell.titleIcon.hidden = mark === "";
     this.messageRenderer.renderInto(cell.messages, z3.messagesByChatId[chat.chatId] ?? [], 0, 400);
     const logs = z3.terminalLogsByChatId[chat.chatId] ?? [];
     cell.logs.dataset.logCount = String(logs.length);
@@ -431,6 +449,12 @@ export class ChatGrid {
     header.addEventListener("pointercancel", () => this.panelDrag.cancel());
     const title = doc.createElement("span");
     title.className = "coloride-chat-cell-title";
+    const titleIcon = doc.createElement("span");
+    titleIcon.className = "coloride-chat-cell-title-icon";
+    titleIcon.setAttribute("aria-hidden", "true");
+    titleIcon.hidden = true;
+    const titleText = doc.createElement("span");
+    title.append(titleIcon, titleText);
     const actions = doc.createElement("div");
     actions.className = "coloride-chat-cell-actions";
     const action = (className: string, icon: string, label: string, run: () => void) => {
@@ -495,6 +519,19 @@ export class ChatGrid {
       logs.hidden = true;
     }
     el.append(header, messages, logs);
-    return { el, header, title, splitRight, splitDown, maximize, close, messages, logs, kind };
+    return {
+      el,
+      header,
+      title,
+      titleIcon,
+      titleText,
+      splitRight,
+      splitDown,
+      maximize,
+      close,
+      messages,
+      logs,
+      kind,
+    };
   }
 }

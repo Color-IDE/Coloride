@@ -70,6 +70,17 @@
     height: 12px;
     margin: 1px;
   }
+  /* The session number, muted, right after the name */
+  .coloride-header-tab-badge {
+    flex: none;
+    margin-left: -2px;
+    color: var(--color-text-muted);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+  .coloride-header-tab-badge[hidden] {
+    display: none;
+  }
   .coloride-header-tab .coloride-header-tab-label {
     overflow: hidden;
     text-overflow: ellipsis;
