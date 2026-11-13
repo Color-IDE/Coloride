@@ -107,6 +107,22 @@ pub(crate) fn load_workspace(
     *trust_gate = host_core::WorkspaceTrustGate::open(state.trust_store_path(), &canonical)
         .map_err(|error| tracing::warn!(%error, "workspace stays untrusted"))
         .ok();
+    // Same for its language servers: stopping them kills their processes. The new workspace
+    // gets its own set, which stays idle until it is trusted.
+    let mut language_services = state
+        .language_services
+        .lock()
+        .map_err(|_| "language services lock poisoned".to_string())?;
+    if let Some(previous) = language_services.take() {
+        previous.stop();
+    }
+    *language_services = trust_gate.as_ref().map(|gate| {
+        std::sync::Arc::new(host_core::LanguageServices::new(
+            gate.clone(),
+            state.diagnostics_sink.clone(),
+        ))
+    });
+    drop(language_services);
     drop(trust_gate);
     *state
         .workspace_root

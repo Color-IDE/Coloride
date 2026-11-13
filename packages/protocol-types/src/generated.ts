@@ -281,6 +281,16 @@ export type DiagnosticEntry = {
   message: string;
 };
 
+export type DocumentDiagnostics = {
+  schema_version: number;
+  document_id: string;
+  session_generation: number;
+  base_revision: number;
+  content_blake3_hash: string;
+  source: DiagnosticSource;
+  items: Array<DiagnosticEntry>;
+};
+
 export type QualityDiagnosticsSummary = {
   vtsls_error_count: number;
   vtsls_warning_count: number;

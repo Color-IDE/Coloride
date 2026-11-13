@@ -1,9 +1,11 @@
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use context_engine::SqliteWalContextEngine;
-use host_core::{WorkspaceTrustGate, WORKSPACE_TRUST_STORE_FILENAME};
+use host_core::{
+    DiagnosticsSink, LanguageServices, WorkspaceTrustGate, WORKSPACE_TRUST_STORE_FILENAME,
+};
 
 use crate::bridge::DesktopBinaryEditorBridge;
 
@@ -14,6 +16,11 @@ pub(crate) struct DesktopAppState {
     /// Trust gate of the open workspace. `None` (no workspace, or a root whose decision cannot
     /// be recorded) means untrusted: nothing may be launched.
     pub(crate) trust_gate: Mutex<Option<WorkspaceTrustGate>>,
+    /// Language servers of the open workspace. They exist only for a workspace with a gate and
+    /// run only once it is trusted; replacing or dropping them kills their processes.
+    pub(crate) language_services: Mutex<Option<Arc<LanguageServices>>>,
+    /// Where revision-tagged diagnostics go (the UI, through a Tauri event).
+    pub(crate) diagnostics_sink: DiagnosticsSink,
     pub(crate) app_data_dir: PathBuf,
     pub(crate) context_engine: Mutex<Option<SqliteWalContextEngine>>,
     /// Bumped (under the `context_engine` lock) each time a workspace is opened. An index built
@@ -29,11 +36,17 @@ pub(crate) struct DesktopAppState {
 }
 
 impl DesktopAppState {
-    pub(crate) fn new(bridge: DesktopBinaryEditorBridge, app_data_dir: PathBuf) -> Self {
+    pub(crate) fn new(
+        bridge: DesktopBinaryEditorBridge,
+        app_data_dir: PathBuf,
+        diagnostics_sink: DiagnosticsSink,
+    ) -> Self {
         Self {
             bridge: Mutex::new(bridge),
             workspace_root: Mutex::new(None),
             trust_gate: Mutex::new(None),
+            language_services: Mutex::new(None),
+            diagnostics_sink,
             app_data_dir,
             context_engine: Mutex::new(None),
             workspace_generation: AtomicU64::new(0),
@@ -48,6 +61,13 @@ impl DesktopAppState {
         self.app_data_dir.join(WORKSPACE_TRUST_STORE_FILENAME)
     }
 
+    pub(crate) fn language_services(&self) -> Option<Arc<LanguageServices>> {
+        self.language_services
+            .lock()
+            .ok()
+            .and_then(|services| services.clone())
+    }
+
     /// Whether closing the window or quitting must first ask the UI what to do with unsaved edits.
     pub(crate) fn close_needs_confirmation(&self) -> bool {
         !self.exit_confirmed.load(Ordering::SeqCst)
@@ -60,5 +80,28 @@ pub(crate) fn test_state(data_dir: &std::path::Path) -> DesktopAppState {
     DesktopAppState::new(
         DesktopBinaryEditorBridge::with_journal(data_dir.join("documents.wal")).unwrap(),
         data_dir.to_path_buf(),
+        Arc::new(|_| {}),
     )
+}
+
+/// Like `test_state`, collecting the diagnostics that would be sent to the UI.
+#[cfg(test)]
+pub(crate) fn test_state_collecting_diagnostics(
+    data_dir: &std::path::Path,
+) -> (
+    DesktopAppState,
+    std::sync::mpsc::Receiver<host_core::DocumentDiagnostics>,
+) {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let sender = Mutex::new(sender);
+    let state = DesktopAppState::new(
+        DesktopBinaryEditorBridge::with_journal(data_dir.join("documents.wal")).unwrap(),
+        data_dir.to_path_buf(),
+        Arc::new(move |batch| {
+            if let Ok(sender) = sender.lock() {
+                let _ = sender.send(batch);
+            }
+        }),
+    );
+    (state, receiver)
 }

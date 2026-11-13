@@ -58,7 +58,12 @@ pub(crate) fn revoke_workspace_trust(
     state: &DesktopAppState,
 ) -> Result<WorkspaceTrustReport, String> {
     if let Some(gate) = current_gate(state)? {
-        gate.revoke().map_err(|error| error.to_string())?;
+        // Restricted mode again: the gate denies new launches, and what runs is stopped.
+        let revoked = gate.revoke();
+        if let Some(services) = state.language_services() {
+            services.stop();
+        }
+        revoked.map_err(|error| error.to_string())?;
     }
     workspace_trust(state)
 }

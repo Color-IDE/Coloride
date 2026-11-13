@@ -134,6 +134,7 @@ pub fn generate_typescript_bindings() -> String {
         DiagnosticSeverity::decl(),
         DiagnosticSource::decl(),
         DiagnosticEntry::decl(),
+        DocumentDiagnostics::decl(),
         QualityDiagnosticsSummary::decl(),
         PreviewRuntimeReport::decl(),
         EvidenceArtifact::decl(),

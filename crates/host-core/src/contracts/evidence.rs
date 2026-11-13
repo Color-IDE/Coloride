@@ -46,6 +46,22 @@ pub struct DiagnosticEntry {
     pub message: String,
 }
 
+/// All diagnostics one tool reports for one document, computed for one exact revision.
+///
+/// Spans are UTF-16 offsets into the text of `base_revision`. A consumer holding a newer
+/// revision must not apply them as they are: it either maps them through the edits made since
+/// `base_revision` or, when an edit touched the range, discards them (`LOT-010`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct DocumentDiagnostics {
+    pub schema_version: u16,
+    pub document_id: String,
+    pub session_generation: u32,
+    pub base_revision: u32,
+    pub content_blake3_hash: String,
+    pub source: DiagnosticSource,
+    pub items: Vec<DiagnosticEntry>,
+}
+
 /// Aggregated `vtsls` and Biome diagnostics for an `Evidence` bundle.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
 pub struct QualityDiagnosticsSummary {

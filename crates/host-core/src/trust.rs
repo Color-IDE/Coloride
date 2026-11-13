@@ -13,12 +13,14 @@ use std::collections::BTreeSet;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command};
+use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+use crate::process::{SupervisedChild, SupervisionError};
 
 pub const WORKSPACE_TRUST_STORE_FILENAME: &str = "workspace_trust.json";
 const TRUST_STORE_SCHEMA_VERSION: u16 = 1;
@@ -76,7 +78,7 @@ pub enum TrustError {
     Spawn {
         program: PathBuf,
         #[source]
-        source: std::io::Error,
+        source: SupervisionError,
     },
 }
 
@@ -306,11 +308,12 @@ impl GatedCommand {
         &mut self.command
     }
 
-    /// Spawns the process. Trust is checked again here: it may have been revoked, or the
-    /// workspace closed, since the command was built.
-    pub fn spawn(mut self) -> Result<Child, TrustError> {
+    /// Spawns the process, bound to the Host's lifetime (see [`SupervisedChild`]). Trust is
+    /// checked again here: it may have been revoked, or the workspace closed, since the command
+    /// was built.
+    pub fn spawn(self) -> Result<SupervisedChild, TrustError> {
         self.gate.authorize(self.capability)?;
-        let child = self.command.spawn().map_err(|source| TrustError::Spawn {
+        let child = SupervisedChild::spawn(self.command).map_err(|source| TrustError::Spawn {
             program: self.program.clone(),
             source,
         })?;

@@ -190,6 +190,29 @@ pub fn line_col_to_utf16(
     Ok(target_cu)
 }
 
+/// Convert a position received from an external tool (a language server) to a UTF-16 offset,
+/// clamping instead of failing: a line past the end maps to the end of the document, a column
+/// past the end of its line to the end of that line (as LSP specifies), and a column inside a
+/// surrogate pair to the start of that pair. The result is always a valid offset of `rope`.
+#[must_use]
+pub fn line_col_to_utf16_clamped(rope: &Rope, line_col: LineCol) -> Utf16CodeUnitOffset {
+    let line_idx = line_col.line as usize;
+    if line_idx >= rope.len_lines() {
+        return Utf16CodeUnitOffset::new(rope.len_utf16_cu() as u32);
+    }
+    let line_start_cu = rope.char_to_utf16_cu(rope.line_to_char(line_idx));
+    let line = rope.line(line_idx);
+    let mut visible_chars = line.len_chars();
+    while visible_chars > 0 && matches!(line.char(visible_chars - 1), '\n' | '\r') {
+        visible_chars -= 1;
+    }
+    let line_len_cu = line.slice(0..visible_chars).len_utf16_cu();
+    let target_cu = line_start_cu + (line_col.col_utf16 as usize).min(line_len_cu);
+    // Snap to a character boundary (never the middle of a surrogate pair).
+    let aligned_cu = rope.char_to_utf16_cu(rope.utf16_cu_to_char(target_cu));
+    Utf16CodeUnitOffset::new(aligned_cu as u32)
+}
+
 /// Compute the lowercase hex `blake3` digest of a `ropey::Rope` by streaming its chunks
 /// without allocating a contiguous string buffer.
 #[must_use]
