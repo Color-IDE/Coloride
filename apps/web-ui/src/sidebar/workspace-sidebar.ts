@@ -233,7 +233,7 @@ export class WorkspaceSidebar {
       stores.setProjectExpanded(true, projectPath);
       const taken = new Set(stores.navigation.getState().groups.map((group) => group.title));
       const base = UI_STRINGS.sidebar.newGroup;
-      let title = base;
+      let title: string = base;
       for (let n = 2; taken.has(title); n += 1) title = `${base} ${n}`;
       stores.createWorkGroup(title);
       // The navigation subscription has already rendered the new row.
