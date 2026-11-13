@@ -34,7 +34,7 @@ export interface HeaderTabsOptions {
   readonly unsavedLabel: string;
   readonly onSelect: (key: string) => void;
   readonly onClose: (key: string) => void;
-  /** Controls pinned to the right end of the header, outside the scrolling strip (e.g. a "+"). */
+  /** Controls kept after the last tab, inside the scrolling strip (e.g. a "+" button). */
   readonly trailing?: readonly HTMLElement[];
 }
 
@@ -65,8 +65,9 @@ export class HeaderTabs {
     this.track.className = "coloride-header-tab-track";
     this.track.setAttribute("role", "tablist");
     this.track.setAttribute("aria-label", options.ariaLabel);
-    header.replaceChildren(this.track, ...(options.trailing ?? []));
+    header.replaceChildren(this.track);
     this.releaseHeaderScroll = attachHeaderScroll(header, this.track);
+    if (options.trailing) this.track.append(...options.trailing);
   }
 
   update(specs: readonly HeaderTabSpec[]): void {
@@ -83,7 +84,7 @@ export class HeaderTabs {
       if (spec.selected) selectedTab = tab.el;
       return tab.el;
     });
-    reconcile(this.track, ordered);
+    reconcile(this.track, [...ordered, ...(this.options.trailing ?? [])]);
     (selectedTab as HTMLElement | null)?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
   }
 

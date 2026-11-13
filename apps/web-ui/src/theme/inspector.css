@@ -8,22 +8,6 @@
   .coloride-zone-4-header .coloride-thin-scrollbar--x {
     right: 46px;
   }
-  /* Zone 3: shadows and scrollbar stop before the "+" pinned at the right (26px + 8px margin). */
-  .coloride-macos-titlebar .coloride-zone-3-header::after {
-    inset: 0 34px 0 0;
-  }
-  .coloride-zone-3-header .coloride-thin-scrollbar--x {
-    right: 42px;
-  }
-  /* With the right panel collapsed its toggle sits over the header: the "+" moves left of it. */
-  .coloride-macos-titlebar[data-inspector-open="false"] .coloride-zone-3-header::after {
-    inset: 0 76px 0 0;
-  }
-  .coloride-macos-titlebar[data-inspector-open="false"]
-    .coloride-zone-3-header
-    .coloride-thin-scrollbar--x {
-    right: 84px;
-  }
   /* Tabs end right before the panel toggle pinned to the corner. */
   .coloride-zone-4-header .coloride-header-tab-track {
     margin-right: 38px;
