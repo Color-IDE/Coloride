@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   type LayoutNode,
   addPanel,
+  canAddPanel,
   computeRects,
+  fitsArea,
   hasPanel,
   layoutFromPanels,
   movePanel,
@@ -183,5 +185,30 @@ describe("layout-tree", () => {
         children: [{ kind: "panel", id: "only" }],
       }),
     ).toEqual(panel("only"));
+  });
+
+  it("fits panels without scrolling until the minimum size is reached, then refuses more", () => {
+    const area = { widthPx: 1000, heightPx: 700 };
+    expect(fitsArea(null, area)).toBe(true);
+    expect(fitsArea(panel("a"), { widthPx: 0, heightPx: 0 })).toBe(false);
+
+    // Add panels one by one wherever there is room, exactly as the UI will.
+    let layout: LayoutNode | null = null;
+    let count = 0;
+    while (canAddPanel(layout, area)) {
+      layout = addPanel(layout, `p${count}`, { aspect: area.widthPx / area.heightPx });
+      count += 1;
+      expect(fitsArea(layout, area)).toBe(true);
+      expect(count).toBeLessThan(200);
+    }
+    // 1000x700 with 220x140 panels: a real limit, well above the old 8 and not unbounded.
+    expect(count).toBeGreaterThan(8);
+    expect(count).toBeLessThan(30);
+    expect(canAddPanel(layout, area)).toBe(false);
+
+    // A smaller window fits fewer; removing a panel makes room again.
+    expect(canAddPanel(layout, { widthPx: 500, heightPx: 300 })).toBe(false);
+    const fewer = removePanel(layout, "p0");
+    expect(canAddPanel(fewer, area)).toBe(true);
   });
 });

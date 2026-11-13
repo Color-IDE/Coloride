@@ -48,7 +48,7 @@ export class ChatGrid {
     this.element.style.overflow = "hidden";
 
     this.grid = doc.createElement("section");
-    this.grid.className = "coloride-zone-3-grid flex-1 overflow-auto";
+    this.grid.className = "coloride-zone-3-grid flex-1 overflow-hidden";
     this.grid.style.display = "flex";
     this.element.append(this.grid);
 

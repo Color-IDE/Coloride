@@ -39,6 +39,11 @@ export interface LayoutRect {
 export const DEFAULT_LAYOUT_ASPECT = 1.6;
 /** A panel never shrinks below this fraction of its split when resized by hand. */
 export const MIN_PANEL_FRACTION = 0.1;
+/**
+ * Smallest panel that is still readable. Panels share the area and shrink without scrolling; a
+ * panel that would be smaller than this is refused instead (see `canAddPanel`).
+ */
+export const MIN_PANEL_SIZE_PX = { width: 220, height: 140 } as const;
 
 export function panel(id: string): PanelNode {
   return { kind: "panel", id };
@@ -107,6 +112,27 @@ export function computeRects(
   };
   if (node) visit(node, { x: 0, y: 0, width: aspect, height: 1 });
   return rects;
+}
+
+export interface AreaSize {
+  readonly widthPx: number;
+  readonly heightPx: number;
+}
+
+/** True when every panel of the layout is at least `min` pixels wide and tall in `area`. */
+export function fitsArea(
+  root: LayoutNode | null,
+  area: AreaSize,
+  min: { readonly width: number; readonly height: number } = MIN_PANEL_SIZE_PX,
+): boolean {
+  if (area.widthPx <= 0 || area.heightPx <= 0) return false;
+  const rects = computeRects(root, area.widthPx / area.heightPx);
+  for (const rect of rects.values()) {
+    // Rects are in units where the area is `aspect` x 1, so one unit is `heightPx` pixels.
+    if (rect.width * area.heightPx < min.width - 1e-6) return false;
+    if (rect.height * area.heightPx < min.height - 1e-6) return false;
+  }
+  return true;
 }
 
 function splitIn(
@@ -188,6 +214,23 @@ export function addPanel(
   if (!target || !rect) return root;
   const direction = options.direction ?? (rect.width >= rect.height ? "row" : "column");
   return splitIn(root, target, id, direction, options.position ?? "after");
+}
+
+/**
+ * Whether one more panel fits in `area` (placed where `addPanel` would put it, or at the given
+ * target/direction). A panel being added is refused rather than squeezed below the minimum.
+ */
+export function canAddPanel(
+  root: LayoutNode | null,
+  area: AreaSize,
+  options: AddPanelOptions = {},
+  min = MIN_PANEL_SIZE_PX,
+): boolean {
+  const probe = addPanel(root, "\u0000candidate", {
+    ...options,
+    aspect: area.widthPx / Math.max(1, area.heightPx),
+  });
+  return fitsArea(probe, area, min);
 }
 
 function removeIn(node: LayoutNode, id: string): LayoutNode | null {
