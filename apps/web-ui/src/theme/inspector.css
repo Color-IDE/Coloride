@@ -40,22 +40,21 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
+    width: 20px;
     padding: 0;
     border: 0;
     background: transparent;
-    color: var(--color-text-muted);
+    color: #858585;
     cursor: pointer;
-    opacity: 0.55;
-    transition: opacity 120ms ease, background 120ms ease;
+    transition: color 120ms ease, background 120ms ease;
   }
   .coloride-zone-4-tree-edge[hidden] {
     display: none;
   }
   .coloride-zone-4-tree-edge:hover,
   .coloride-zone-4-tree-edge:focus-visible {
-    opacity: 1;
-    background: rgba(255, 255, 255, 0.06);
+    color: var(--color-text-primary);
+    background: var(--color-selected);
     outline: none;
   }
   .coloride-zone-4-body[data-tree-hidden="true"] .coloride-zone-4-tree-column {
@@ -111,22 +110,23 @@
     flex: none;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: 26px;
+    height: 26px;
     padding: 0;
     border: 0;
     border-radius: 6px;
     background: transparent;
-    color: var(--color-text-secondary);
+    color: #858585; /* same as the panel toggles of the header */
     cursor: pointer;
   }
+  /* Same size as the header's panel icons */
   .coloride-file-tree-action svg,
   .coloride-zone-4-tree-edge svg {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
   }
   .coloride-file-tree-action:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--color-selected);
     color: var(--color-text-primary);
   }
   .coloride-file-tree-filter {
