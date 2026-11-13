@@ -77,7 +77,8 @@ export function createInitialStores(options?: CockpitStoreOptions) {
         : "sessions",
     activePersona: initialPersona,
     sidebarOpen: true,
-    inspectorOpen: true,
+    // Closed at launch: the code editor panel opens when the user opens a file or toggles it.
+    inspectorOpen: false,
     fileTreeAccessible: true,
     uiZoomPercent: options?.initialUiZoomPercent ?? 100,
     permissionsLevel: "standard-enforced",

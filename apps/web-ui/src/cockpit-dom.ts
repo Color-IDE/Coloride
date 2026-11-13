@@ -105,7 +105,11 @@ export class CockpitDomController {
     this.sidebar = new SidebarPanels(doc, {
       stores,
       onboarding: this.onboardingController,
-      openFile: (path, onError) => void this.inspector.openFile(path, onError),
+      openFile: (path, onError) => {
+        // A file opened from the sidebar (search results) is shown in Zone 4, which starts closed.
+        stores.toggleInspector(true);
+        void this.inspector.openFile(path, onError);
+      },
       ...(options.openWorkspace ? { openWorkspace: options.openWorkspace } : {}),
       ...(options.switchWorkspace ? { switchWorkspace: options.switchWorkspace } : {}),
       ...(options.searchWorkspace ? { searchWorkspace: options.searchWorkspace } : {}),

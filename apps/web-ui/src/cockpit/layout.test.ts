@@ -23,17 +23,21 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
     const toggle = document.querySelector<HTMLButtonElement>(".coloride-inspector-toggle");
     const shell = rootContainer.querySelector<HTMLElement>(".coloride-cockpit-shell");
     const header = document.querySelector<HTMLElement>(".coloride-zone-4-header");
-    expect(toggle?.getAttribute("aria-label")).toBe("Hide right panel");
-    toggle?.click();
+    // The right panel starts closed (the editor stays mounted, only hidden).
     expect(stores.zone1.getState().inspectorOpen).toBe(false);
     expect(shell?.style.gridTemplateColumns.endsWith(" 0px")).toBe(true);
     expect(header?.style.visibility).toBe("hidden");
     expect(toggle?.getAttribute("aria-label")).toBe("Show right panel");
-    expect(editorView.getEditorView().dom).toBe(editorDom);
     expect(editorDom.isConnected).toBe(true);
     toggle?.click();
+    expect(stores.zone1.getState().inspectorOpen).toBe(true);
     expect(header?.style.visibility).toBe("visible");
+    expect(toggle?.getAttribute("aria-label")).toBe("Hide right panel");
     expect(editorView.getEditorView().dom).toBe(editorDom);
+    toggle?.click();
+    expect(stores.zone1.getState().inspectorOpen).toBe(false);
+    expect(editorView.getEditorView().dom).toBe(editorDom);
+    toggle?.click();
     const sidebarToggle = document.querySelector<HTMLButtonElement>(".coloride-sidebar-toggle");
     expect(sidebarToggle?.getAttribute("aria-label")).toBe("Hide sidebar");
     sidebarToggle?.click();
@@ -277,5 +281,25 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
     expect(legacy.zone1.getState().activeSection).toBe("sessions");
     const kept = createCockpitStoreBundle({ initialActiveSection: "search" });
     expect(kept.zone1.getState().activeSection).toBe("search");
+  });
+  it("opens the right panel when a file is opened from a search result, since it starts closed", () => {
+    const rootContainer = document.createElement("div");
+    document.body.appendChild(rootContainer);
+    const stores = createCockpitStoreBundle();
+    const editorView = new ColorideEditorView({
+      initialDocumentId: "src/main.ts",
+      initialContent: "const ready = true;",
+      ipcChannel: new InMemoryBinaryHostBridge(),
+    });
+    const controller = new CockpitDomController({ rootContainer, stores, editorView });
+    stores.updateInMemoryDocumentContent("src/found.ts", "export const needleValue = 1;", false);
+    stores.setActivitySection("search");
+    stores.runGlobalSearch("needleValue");
+    expect(stores.zone1.getState().inspectorOpen).toBe(false);
+    rootContainer.querySelector<HTMLElement>(".coloride-search-result-item")?.click();
+    expect(stores.zone1.getState().inspectorOpen).toBe(true);
+    expect(stores.zone4.getState().activeDocumentId).toBe("src/found.ts");
+    controller.destroy();
+    rootContainer.remove();
   });
 });
