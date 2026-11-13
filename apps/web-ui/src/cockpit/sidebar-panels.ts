@@ -1,4 +1,4 @@
-import type { OnboardingModalController } from "../onboarding-modal.js";
+import type { OnboardingModalController } from "../onboarding/index.js";
 import { WorkspaceSidebar } from "../sidebar/workspace-sidebar.js";
 import type {
   CockpitAstSymbolItem,

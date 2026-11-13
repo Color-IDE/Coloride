@@ -14,6 +14,7 @@ import {
   extractSymbolsHeuristically,
   inferImpactedTestsHeuristically,
 } from "./cockpit-analysis.js";
+import { isSecretBearingPath, redactSecretsInLine } from "./security/secrets.js";
 
 export {
   extractSymbolsHeuristically as extractAstSymbolsFromSource,
@@ -167,46 +168,6 @@ export interface CockpitStoreBundle extends WorkspaceNavigationActions {
   refreshAstAndImpactedTests(filePath: string, content: string): void;
   startAgentTaskOnChat(chatId: string): "Running" | "QueuedSequential";
   completeAgentTaskOnChat(chatId: string): void;
-}
-
-function nowMs(): number {
-  if (typeof performance !== "undefined" && typeof performance.now === "function") {
-    return performance.now();
-  }
-  return Date.now();
-}
-
-const SECRET_TOKEN_PATTERNS: readonly RegExp[] = [
-  /\bsk-[A-Za-z0-9_-]{12,}\b/g,
-  /\bghp_[A-Za-z0-9]{12,}\b/g,
-  /\bAKIA[0-9A-Z]{12,}\b/g,
-  /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g,
-];
-
-function isAclExcludedPath(filePath: string): boolean {
-  const normalized = filePath.replace(/\\/g, "/").toLowerCase();
-  const base = normalized.split("/").pop() ?? normalized;
-  return (
-    base === ".env" ||
-    (base.startsWith(".env.") && base !== ".env.example") ||
-    base.endsWith(".pem") ||
-    base.endsWith(".key")
-  );
-}
-
-function redactSecretsInLine(line: string): {
-  readonly sanitized: string;
-  readonly redactedCount: number;
-} {
-  let sanitized = line;
-  let redactedCount = 0;
-  for (const regex of SECRET_TOKEN_PATTERNS) {
-    sanitized = sanitized.replace(regex, () => {
-      redactedCount += 1;
-      return "[REDACTED_SECRET]";
-    });
-  }
-  return { sanitized, redactedCount };
 }
 
 export function createCockpitStoreBundle(options?: {
@@ -468,7 +429,7 @@ export function createCockpitStoreBundle(options?: {
      * Synchronize Zone 4 right inspector with the selected chat in Zone 3 in `< 10 ms`.
      */
     selectChat(chatId: string): number {
-      const t0 = nowMs();
+      const t0 = performance.now();
       const chatState = zone3.getState();
       const targetChat = chatState.chats.find((c) => c.chatId === chatId);
       if (!targetChat) {
@@ -494,7 +455,7 @@ export function createCockpitStoreBundle(options?: {
 
       const nextDocId = targetChat.targetDocumentId ?? zone4.getState().activeDocumentId;
       const bufRecord = documentBuffers.get(nextDocId);
-      const syncDurationMs = Math.max(0, nowMs() - t0);
+      const syncDurationMs = Math.max(0, performance.now() - t0);
       zone4.setState((prev) => ({
         ...prev,
         syncedChatId: chatId,
@@ -555,7 +516,7 @@ export function createCockpitStoreBundle(options?: {
      * Open a file clicked in the Zone 2 File Tree inside the Zone 4 CodeMirror 6 Inspector in `< 10 ms`.
      */
     selectFileFromTree(filePath: string, contentOverride?: string): number {
-      const t0 = nowMs();
+      const t0 = performance.now();
       const z2 = zone2.getState();
       const fileIdx = z2.fileTree.findIndex((n) => n.path === filePath);
       const treeNode = fileIdx >= 0 ? z2.fileTree[fileIdx] : undefined;
@@ -581,7 +542,7 @@ export function createCockpitStoreBundle(options?: {
         impactedTests,
       }));
 
-      const syncDurationMs = Math.max(0, nowMs() - t0);
+      const syncDurationMs = Math.max(0, performance.now() - t0);
       zone4.setState((prev) => ({
         ...prev,
         activeDocumentId: filePath,
@@ -667,7 +628,7 @@ export function createCockpitStoreBundle(options?: {
       const results: CockpitSearchResultItem[] = [];
 
       for (const [filePath, record] of documentBuffers.entries()) {
-        if (isAclExcludedPath(filePath)) {
+        if (isSecretBearingPath(filePath)) {
           continue;
         }
         const lines = record.content.split(/\r?\n/);

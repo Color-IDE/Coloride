@@ -9,7 +9,7 @@ export * from "./stores.js";
 export * from "./stream-renderer.js";
 export * from "./virtualizer.js";
 export * from "./cockpit-dom.js";
-export * from "./onboarding-modal.js";
+export * from "./onboarding/index.js";
 export * from "./theme/index.js";
 
 export interface CockpitShellState {

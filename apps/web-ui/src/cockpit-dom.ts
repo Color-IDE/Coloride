@@ -4,7 +4,7 @@ import { ChatGrid } from "./cockpit/chat-grid.js";
 import { Inspector } from "./cockpit/inspector.js";
 import { SidebarPanels } from "./cockpit/sidebar-panels.js";
 import { TitleBar } from "./cockpit/title-bar.js";
-import { OnboardingModalController, createInitialOnboardingState } from "./onboarding-modal.js";
+import { OnboardingModalController, createInitialOnboardingState } from "./onboarding/index.js";
 import type {
   CockpitAstSymbolItem,
   CockpitFileTreeNode,
