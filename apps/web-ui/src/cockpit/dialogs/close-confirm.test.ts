@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 import { ColorideEditorView, InMemoryBinaryHostBridge } from "@coloride/editor-cm6";
 import { afterEach, describe, expect, it } from "vitest";
-import { CockpitDomController, createCockpitStoreBundle } from "../index.js";
-import type { Inspector } from "./inspector.js";
+import { CockpitDomController, createCockpitStoreBundle } from "../../index.js";
+import type { Inspector } from "../inspector/inspector.js";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {

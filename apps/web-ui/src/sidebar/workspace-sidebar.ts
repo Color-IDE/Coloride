@@ -1,4 +1,4 @@
-import { sessionIcon } from "../cockpit/session-presentation.js";
+import { sessionIcon } from "../cockpit/panels/session-presentation.js";
 import { attribute, button, reconcile, visibility } from "../dom-utils.js";
 import type { CockpitChatTab, CockpitFileTreeNode, CockpitStoreBundle } from "../stores/index.js";
 import { UI_STRINGS } from "../ui-strings.js";

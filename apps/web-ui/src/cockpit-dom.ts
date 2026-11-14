@@ -1,20 +1,20 @@
 import type { ColorideEditorView } from "@coloride/editor-cm6";
-import { ActivityBar } from "./cockpit/activity-bar.js";
-import { ChatGrid } from "./cockpit/chat-grid.js";
-import { type DebugHost, DebugPanel } from "./cockpit/debug-panel.js";
-import { Inspector } from "./cockpit/inspector.js";
-import { ShellLayout } from "./cockpit/shell-layout.js";
-import { bindShellShortcuts } from "./cockpit/shell-shortcuts.js";
-import { SidebarPanels } from "./cockpit/sidebar-panels.js";
-import type { TerminalHost, TerminalViewFactory } from "./cockpit/terminal-pane.js";
-import { TitleBar } from "./cockpit/title-bar.js";
 import {
   TrustBanner,
   type WorkspaceTrustHost,
   type WorkspaceTrustReport,
-} from "./cockpit/trust-banner.js";
-import { askUnsavedPrompt } from "./cockpit/unsaved-dialog.js";
-import { createXtermView } from "./cockpit/xterm-view.js";
+} from "./cockpit/dialogs/trust-banner.js";
+import { askUnsavedPrompt } from "./cockpit/dialogs/unsaved-dialog.js";
+import { type DebugHost, DebugPanel } from "./cockpit/inspector/debug-panel.js";
+import { Inspector } from "./cockpit/inspector/inspector.js";
+import { ChatGrid } from "./cockpit/panels/chat-grid.js";
+import { ActivityBar } from "./cockpit/shell/activity-bar.js";
+import { ShellLayout } from "./cockpit/shell/shell-layout.js";
+import { bindShellShortcuts } from "./cockpit/shell/shell-shortcuts.js";
+import { SidebarPanels } from "./cockpit/shell/sidebar-panels.js";
+import { TitleBar } from "./cockpit/shell/title-bar.js";
+import type { TerminalHost, TerminalViewFactory } from "./cockpit/terminal/terminal-pane.js";
+import { createXtermView } from "./cockpit/terminal/xterm-view.js";
 import { OnboardingModalController, createInitialOnboardingState } from "./onboarding/index.js";
 import type {
   CockpitAstSymbolItem,
@@ -31,19 +31,19 @@ export type {
   DebugCommandMessage,
   DebugEventMessage,
   DebugHost,
-} from "./cockpit/debug-panel.js";
+} from "./cockpit/inspector/debug-panel.js";
 export type {
   TerminalHandle,
   TerminalHost,
   TerminalView,
   TerminalViewFactory,
-} from "./cockpit/terminal-pane.js";
-export { createXtermView } from "./cockpit/xterm-view.js";
+} from "./cockpit/terminal/terminal-pane.js";
+export { createXtermView } from "./cockpit/terminal/xterm-view.js";
 export type {
   WorkspaceTrustHost,
   WorkspaceTrustReport,
   WorkspaceTrustState,
-} from "./cockpit/trust-banner.js";
+} from "./cockpit/dialogs/trust-banner.js";
 
 export interface CockpitDomControllerOptions {
   readonly rootContainer: HTMLElement;

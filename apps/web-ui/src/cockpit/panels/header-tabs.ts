@@ -1,4 +1,4 @@
-import { reconcile } from "../dom-utils.js";
+import { reconcile } from "../../dom-utils.js";
 import { attachHeaderScroll } from "./header-scroll.js";
 
 const CLOSE_TAB_ICON =

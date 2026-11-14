@@ -1,13 +1,13 @@
 import type { ColorideEditorView } from "@coloride/editor-cm6";
-import type { CockpitFileTreeNode, CockpitStoreBundle } from "../stores/index.js";
-import { fileTreeIconColor, fileTreeIconSvg } from "../theme/file-tree-icons.js";
-import { type ThinScrollbar, attachThinScrollbar } from "../thin-scrollbar.js";
-import { UiPreferences, browserStorage } from "../ui-preferences.js";
-import { UI_STRINGS, uiText } from "../ui-strings.js";
+import type { CockpitFileTreeNode, CockpitStoreBundle } from "../../stores/index.js";
+import { fileTreeIconColor, fileTreeIconSvg } from "../../theme/file-tree-icons.js";
+import { type ThinScrollbar, attachThinScrollbar } from "../../thin-scrollbar.js";
+import { UiPreferences, browserStorage } from "../../ui-preferences.js";
+import { UI_STRINGS, uiText } from "../../ui-strings.js";
+import { askUnsavedChoice } from "../dialogs/unsaved-dialog.js";
+import { type HeaderTabSpec, HeaderTabs } from "../panels/header-tabs.js";
+import { TREE_HIDE_ICON, TREE_SHOW_ICON } from "../panels/panel-icons.js";
 import { FileTreePanel } from "./file-tree-panel.js";
-import { type HeaderTabSpec, HeaderTabs } from "./header-tabs.js";
-import { TREE_HIDE_ICON, TREE_SHOW_ICON } from "./panel-icons.js";
-import { askUnsavedChoice } from "./unsaved-dialog.js";
 
 export interface InspectorOptions {
   readonly stores: CockpitStoreBundle;

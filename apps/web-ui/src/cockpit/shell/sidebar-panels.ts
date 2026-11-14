@@ -1,14 +1,14 @@
-import type { OnboardingModalController } from "../onboarding/index.js";
-import { WorkspaceSidebar } from "../sidebar/workspace-sidebar.js";
+import type { OnboardingModalController } from "../../onboarding/index.js";
+import { WorkspaceSidebar } from "../../sidebar/workspace-sidebar.js";
 import type {
   CockpitAstSymbolItem,
   CockpitFileTreeNode,
   CockpitImpactedTestItem,
   CockpitSearchResultItem,
   CockpitStoreBundle,
-} from "../stores/index.js";
-import { type ThinScrollbar, attachThinScrollbar } from "../thin-scrollbar.js";
-import { UI_STRINGS, uiText } from "../ui-strings.js";
+} from "../../stores/index.js";
+import { type ThinScrollbar, attachThinScrollbar } from "../../thin-scrollbar.js";
+import { UI_STRINGS, uiText } from "../../ui-strings.js";
 
 export interface SidebarPanelsOptions {
   readonly stores: CockpitStoreBundle;

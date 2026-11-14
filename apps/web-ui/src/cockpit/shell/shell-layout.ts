@@ -1,7 +1,7 @@
-import { PANEL_DIMENSIONS } from "../panel-geometry.js";
-import type { Zone1ActivityState } from "../stores/index.js";
-import type { UiPreferences } from "../ui-preferences.js";
-import { PanelResizeHandle } from "./panel-resize.js";
+import { PANEL_DIMENSIONS } from "../../panel-geometry.js";
+import type { Zone1ActivityState } from "../../stores/index.js";
+import type { UiPreferences } from "../../ui-preferences.js";
+import { PanelResizeHandle } from "../panels/panel-resize.js";
 
 /** Grid columns shared by the title bar and the shell, so headers stay above their zone. */
 const DEFAULT_SIDEBAR_WIDTH = PANEL_DIMENSIONS.sidebar.defaultWidth;

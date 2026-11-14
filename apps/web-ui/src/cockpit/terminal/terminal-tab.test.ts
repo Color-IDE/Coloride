@@ -7,7 +7,7 @@ import {
   type TerminalHost,
   type TerminalView,
   createCockpitStoreBundle,
-} from "../index.js";
+} from "../../index.js";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {

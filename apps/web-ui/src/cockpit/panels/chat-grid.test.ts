@@ -6,8 +6,8 @@ import {
   type WorkGroup,
   createCockpitStoreBundle,
   resolveGroupLayout,
-} from "../index.js";
-import { type LayoutNode, panelIds } from "../layout-tree.js";
+} from "../../index.js";
+import { type LayoutNode, panelIds } from "../../layout-tree.js";
 
 /** The header + opens a menu: Codex, then Interface, creates an agent session. */
 function addSessionFromMenu(root: HTMLElement): void {

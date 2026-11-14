@@ -1,6 +1,6 @@
-import type { CockpitStoreBundle, Zone1ActivityState } from "../stores/index.js";
-import { INSPECTOR_TOGGLE_ICONS, NAV_BACK_ICON } from "../theme/index.js";
-import { UI_STRINGS } from "../ui-strings.js";
+import type { CockpitStoreBundle, Zone1ActivityState } from "../../stores/index.js";
+import { INSPECTOR_TOGGLE_ICONS, NAV_BACK_ICON } from "../../theme/index.js";
+import { UI_STRINGS } from "../../ui-strings.js";
 
 const MAX_HISTORY = 50;
 

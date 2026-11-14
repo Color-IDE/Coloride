@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { CockpitFileTreeNode } from "../stores/index.js";
+import type { CockpitFileTreeNode } from "../../stores/index.js";
 import { FileTreePanel } from "./file-tree-panel.js";
 
 afterEach(() => {

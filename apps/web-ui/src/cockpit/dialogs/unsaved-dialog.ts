@@ -1,4 +1,4 @@
-import { UI_STRINGS, uiText } from "../ui-strings.js";
+import { UI_STRINGS, uiText } from "../../ui-strings.js";
 
 export type UnsavedChoice = "save" | "discard" | "cancel";
 

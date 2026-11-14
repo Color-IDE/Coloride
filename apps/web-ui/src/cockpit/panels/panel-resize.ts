@@ -1,4 +1,4 @@
-import { PANEL_DIMENSIONS, type PanelSide } from "../panel-geometry.js";
+import { PANEL_DIMENSIONS, type PanelSide } from "../../panel-geometry.js";
 /** Which side panel a bar resizes: the left one (the sidebar) or the right one (the inspector). */
 export type ResizablePanel = PanelSide;
 

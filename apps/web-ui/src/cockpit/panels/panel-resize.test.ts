@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 import { ColorideEditorView, InMemoryBinaryHostBridge } from "@coloride/editor-cm6";
 import { afterEach, describe, expect, it } from "vitest";
-import { CockpitDomController, createCockpitStoreBundle } from "../index.js";
-import { UI_PREFERENCES_KEY } from "../ui-preferences.js";
+import { CockpitDomController, createCockpitStoreBundle } from "../../index.js";
+import { UI_PREFERENCES_KEY } from "../../ui-preferences.js";
 import { PANEL_LIMITS, clampPanelWidth } from "./panel-resize.js";
 
 const cleanups: Array<() => void> = [];

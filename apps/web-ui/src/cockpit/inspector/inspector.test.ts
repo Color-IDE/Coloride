@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { ColorideEditorView, InMemoryBinaryHostBridge } from "@coloride/editor-cm6";
 import { afterEach, describe, expect, it } from "vitest";
-import { CockpitDomController, createCockpitStoreBundle } from "../index.js";
+import { CockpitDomController, createCockpitStoreBundle } from "../../index.js";
 import type { Inspector } from "./inspector.js";
 
 describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () => {

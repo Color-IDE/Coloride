@@ -43,8 +43,8 @@ cargo test --workspace
 ### Frontend boundaries and performance checks
 
 `cockpit-dom.ts` composes zones and routes store subscriptions; document-scoped
-shortcuts live in `cockpit/shell-shortcuts.ts`, and column geometry/resizing in
-`cockpit/shell-layout.ts`. `ui-preferences.ts` owns the versioned UI snapshot
+shortcuts live in `cockpit/shell/shell-shortcuts.ts`, and column geometry/resizing in
+`cockpit/shell/shell-layout.ts`. `ui-preferences.ts` owns the versioned UI snapshot
 (widths and hidden tree), validates persisted data, and migrates the old keys.
 Document text still belongs to Rust host-core; UI preferences contain no document text.
 

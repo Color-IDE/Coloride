@@ -7,7 +7,7 @@ import {
   type DebugEventMessage,
   type DebugHost,
   createCockpitStoreBundle,
-} from "../index.js";
+} from "../../index.js";
 import type { Inspector } from "./inspector.js";
 
 const cleanups: Array<() => void> = [];

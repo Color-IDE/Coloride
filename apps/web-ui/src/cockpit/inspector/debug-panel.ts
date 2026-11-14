@@ -1,4 +1,4 @@
-import { UI_STRINGS } from "../ui-strings.js";
+import { UI_STRINGS } from "../../ui-strings.js";
 
 /** One DAP event as the host forwards it (the body is untrusted adapter data). */
 export interface DebugEventMessage {

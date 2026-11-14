@@ -1,16 +1,21 @@
-import { reconcile } from "../dom-utils.js";
-import { type LayoutNode, panel, panelIds, reconcileLayout } from "../layout-tree.js";
-import { PLUS_ICON } from "../sidebar/icons.js";
-import { sessionDisplayTitle } from "../sidebar/sidebar-row.js";
+import { reconcile } from "../../dom-utils.js";
+import { type LayoutNode, panel, panelIds, reconcileLayout } from "../../layout-tree.js";
+import { PLUS_ICON } from "../../sidebar/icons.js";
+import { sessionDisplayTitle } from "../../sidebar/sidebar-row.js";
 import {
   COLORIDE_DESIGN_TOKENS,
   type CockpitChatTab,
   type CockpitStoreBundle,
   resolveGroupLayout,
   resolveGroupMaximized,
-} from "../stores/index.js";
-import { UI_STRINGS, uiText } from "../ui-strings.js";
-import { VirtualChatMessageListRenderer } from "../virtualizer.js";
+} from "../../stores/index.js";
+import { UI_STRINGS, uiText } from "../../ui-strings.js";
+import { VirtualChatMessageListRenderer } from "../../virtualizer.js";
+import {
+  type TerminalHost,
+  TerminalPane,
+  type TerminalViewFactory,
+} from "../terminal/terminal-pane.js";
 import { type HeaderTabSpec, HeaderTabs } from "./header-tabs.js";
 import {
   type LayoutHandleHost,
@@ -28,7 +33,6 @@ import {
   SPLIT_RIGHT_ICON,
 } from "./panel-icons.js";
 import { sessionIcon } from "./session-presentation.js";
-import { type TerminalHost, TerminalPane, type TerminalViewFactory } from "./terminal-pane.js";
 
 /** The icon of a session's header tab: the terminal glyph, the Codex mark, or its state glyph. */
 function tabIcon(chat: CockpitChatTab, stateGlyph: string): { svg: string } | { text: string } {
