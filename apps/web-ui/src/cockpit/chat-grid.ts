@@ -413,7 +413,11 @@ export class ChatGrid {
     cell.el.style.backgroundColor = token.darkBg;
     cell.el.style.color = token.darkText;
     const headerText = uiText.chatCellHeader(token.icon, chat.title, chat.modelName, token.labelEn);
-    if (cell.titleText.textContent !== headerText) cell.titleText.textContent = headerText;
+    // The title is just the session's name ("New session #8"); the model and the validation
+    // state stay available as its tooltip.
+    const plainTitle = sessionDisplayTitle(chat.title);
+    if (cell.titleText.textContent !== plainTitle) cell.titleText.textContent = plainTitle;
+    cell.titleText.title = headerText;
     const mark = chat.modelName === "Codex" ? CODEX_ICON : "";
     if (cell.titleIcon.innerHTML !== mark) cell.titleIcon.innerHTML = mark;
     cell.titleIcon.hidden = mark === "";
