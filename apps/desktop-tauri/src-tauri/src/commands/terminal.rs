@@ -116,7 +116,8 @@ pub fn terminal_close_command(state: tauri::State<'_, DesktopAppState>, id: u32)
     }
 }
 
-#[cfg(test)]
+/// Real shells: they need process supervision, which only exists on Unix.
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use crate::commands::trust::{apply_trust_decision, revoke_workspace_trust};
@@ -151,5 +152,26 @@ mod tests {
         load_workspace(&state, other.path().to_str().unwrap()).unwrap();
         assert!(terminal(&state, second).is_err());
         assert!(shell.has_exited());
+    }
+}
+
+/// Without process supervision a terminal is refused, even in a trusted folder (fail closed).
+#[cfg(all(test, not(unix)))]
+mod unsupported_platform_tests {
+    use super::*;
+    use crate::commands::trust::apply_trust_decision;
+    use crate::commands::workspace::load_workspace;
+    use crate::state::test_state;
+
+    #[test]
+    fn a_trusted_workspace_still_gets_no_unsupervised_terminal() {
+        let data = tempfile::tempdir().unwrap();
+        let workspace = tempfile::tempdir().unwrap();
+        let state = test_state(data.path());
+        load_workspace(&state, workspace.path().to_str().unwrap()).unwrap();
+        let gate = state.trust_gate.lock().unwrap().clone().unwrap();
+        apply_trust_decision(&gate, true).unwrap();
+        let size = TerminalSize { cols: 80, rows: 24 };
+        assert!(open_terminal(&state, size, Arc::new(|_| {})).is_err());
     }
 }
