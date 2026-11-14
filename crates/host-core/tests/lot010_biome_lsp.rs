@@ -165,9 +165,9 @@ fn is_alive(pid: u32) -> bool {
 #[test]
 fn real_biome_reports_diagnostics_tagged_with_the_revision_they_were_computed_for() {
     let mut fx = fixture(true);
-    assert!(fx
-        .services
-        .ensure_server(&biome_server_spec(repository_biome())));
+    fx.services
+        .try_ensure_server(&biome_server_spec(repository_biome()))
+        .unwrap_or_else(|error| panic!("language server did not start: {error}"));
     assert!(fx.services.is_running(DiagnosticSource::Biome));
     let session = fx.documents.session(DOCUMENT_ID, GENERATION).unwrap();
     fx.services.document_opened(session);
@@ -245,9 +245,9 @@ fn a_document_opened_before_trust_is_picked_up_when_the_server_starts() {
         .is_err());
 
     fx.gate.grant().unwrap();
-    assert!(fx
-        .services
-        .ensure_server(&biome_server_spec(repository_biome())));
+    fx.services
+        .try_ensure_server(&biome_server_spec(repository_biome()))
+        .unwrap_or_else(|error| panic!("language server did not start: {error}"));
     let batch = fx.diagnostics_for(fx.revision());
     assert_eq!(
         covered(&fx.text(), &batch, "lint/suspicious/noDoubleEquals"),
@@ -258,9 +258,9 @@ fn a_document_opened_before_trust_is_picked_up_when_the_server_starts() {
 #[test]
 fn stopping_the_services_kills_the_server_process() {
     let fx = fixture(true);
-    assert!(fx
-        .services
-        .ensure_server(&biome_server_spec(repository_biome())));
+    fx.services
+        .try_ensure_server(&biome_server_spec(repository_biome()))
+        .unwrap_or_else(|error| panic!("language server did not start: {error}"));
     let pids = fx.services.server_process_ids();
     assert_eq!(pids.len(), 1);
     assert!(is_alive(pids[0]));

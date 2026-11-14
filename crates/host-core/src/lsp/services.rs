@@ -186,6 +186,20 @@ impl LanguageServices {
     /// Starts `spec` unless a live server already reports for the same source. Returns whether
     /// that server is running afterwards. On an untrusted workspace nothing is launched.
     pub fn ensure_server(&self, spec: &LanguageServerSpec) -> bool {
+        match self.try_ensure_server(spec) {
+            Ok(()) => true,
+            Err(error) => {
+                tracing::info!(source = ?spec.profile.source, %error, "language server not started");
+                false
+            }
+        }
+    }
+
+    /// Like [`Self::ensure_server`], but says why a server could not be started.
+    ///
+    /// # Errors
+    /// The trust gate refused, or the server could not be launched or initialized.
+    pub fn try_ensure_server(&self, spec: &LanguageServerSpec) -> Result<(), LspError> {
         let mut state = self.state();
         state.servers.retain(|server| server.session.is_alive());
         let source = spec.profile.source;
@@ -194,16 +208,9 @@ impl LanguageServices {
             .iter()
             .any(|server| server.session.source() == source)
         {
-            return true;
+            return Ok(());
         }
-        let session =
-            match LanguageServerSession::start(&self.gate, &spec.profile, self.sink.clone()) {
-                Ok(session) => session,
-                Err(error) => {
-                    tracing::info!(?source, %error, "language server not started");
-                    return false;
-                }
-            };
+        let session = LanguageServerSession::start(&self.gate, &spec.profile, self.sink.clone())?;
         for (path, document) in &state.open {
             if spec.language_ids.contains(&document.language_id) {
                 let _ = session.open_document(
@@ -223,7 +230,7 @@ impl LanguageServices {
             session: Arc::new(session),
             language_ids: spec.language_ids.clone(),
         });
-        true
+        Ok(())
     }
 
     /// Whether a live server reports diagnostics for `source`.

@@ -80,9 +80,9 @@ fn fixture() -> Fixture {
         forward_times: Vec::new(),
     };
     fx.remember();
-    assert!(fx
-        .services
-        .ensure_server(&vtsls_server_spec(repository_vtsls())));
+    fx.services
+        .try_ensure_server(&vtsls_server_spec(repository_vtsls()))
+        .unwrap_or_else(|error| panic!("language server did not start: {error}"));
     fx.services
         .document_opened(fx.documents.session(DOCUMENT_ID, GENERATION).unwrap());
     fx

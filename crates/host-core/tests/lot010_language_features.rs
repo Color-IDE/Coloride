@@ -53,8 +53,12 @@ fn fixture() -> Fixture {
     let gate = WorkspaceTrustGate::open(dir.path().join("trust.json"), &root).unwrap();
     gate.grant().unwrap();
     let services = LanguageServices::new(gate, Arc::new(|_| {}));
-    assert!(services.ensure_server(&vtsls_server_spec(tool("vtsls"))));
-    assert!(services.ensure_server(&biome_server_spec(tool("biome"))));
+    services
+        .try_ensure_server(&vtsls_server_spec(tool("vtsls")))
+        .unwrap_or_else(|error| panic!("language server did not start: {error}"));
+    services
+        .try_ensure_server(&biome_server_spec(tool("biome")))
+        .unwrap_or_else(|error| panic!("language server did not start: {error}"));
     let mut documents = DocumentService::new_in_memory();
     documents
         .open_document_from_disk(DOCUMENT_ID, GENERATION, root.join(DOCUMENT_ID))
