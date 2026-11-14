@@ -1,0 +1,52 @@
+@layer components {
+  /* One thin overlay scrollbar for every scroller: header tabs, file tree, code editor. */
+  .coloride-thin-scrollbar {
+    position: absolute;
+    z-index: 30;
+    background: transparent;
+    opacity: 0;
+    pointer-events: none;
+    cursor: default;
+    transition: opacity 150ms ease;
+    -webkit-app-region: no-drag;
+  }
+
+  .coloride-thin-scrollbar[data-scrollable="true"] {
+    pointer-events: auto;
+  }
+
+  .coloride-thin-scrollbar--x {
+    left: 8px;
+    right: 8px;
+    bottom: 0;
+    height: 9px;
+  }
+
+  .coloride-thin-scrollbar--y {
+    top: 8px;
+    bottom: 8px;
+    right: 0;
+    width: 9px;
+  }
+
+  *:hover > .coloride-thin-scrollbar[data-scrollable="true"],
+  .coloride-thin-scrollbar[data-dragging="true"] {
+    opacity: 1;
+  }
+
+  .coloride-thin-scrollbar-thumb {
+    position: absolute;
+    border-radius: 9999px;
+    background-color: rgba(255, 255, 255, 0.32);
+  }
+
+  .coloride-thin-scrollbar--x .coloride-thin-scrollbar-thumb {
+    bottom: 1px;
+    height: 2px;
+  }
+
+  .coloride-thin-scrollbar--y .coloride-thin-scrollbar-thumb {
+    right: 1px;
+    width: 2px;
+  }
+}
