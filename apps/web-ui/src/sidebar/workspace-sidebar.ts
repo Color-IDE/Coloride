@@ -254,7 +254,6 @@ export class WorkspaceSidebar {
         const entry = listProjects(state).find((item) => item.path === projectPath);
         const latest = entry?.groups.find((item) => item.id === group.id);
         if (!entry || !latest) return;
-        const expanded = latest.expanded !== false;
         const closable = latest.chatIds.filter((id) => this.canClose(id));
         this.menu.open(anchor, [
           {
@@ -264,12 +263,6 @@ export class WorkspaceSidebar {
               this.withProject(projectPath, () =>
                 row.rename(latest.title, (name) => stores.renameWorkGroup(group.id, name)),
               ),
-          },
-          {
-            label: expanded ? UI_STRINGS.sidebar.collapseGroup : UI_STRINGS.sidebar.expandGroup,
-            icon: expanded ? MENU_CHEVRON_UP_ICON : MENU_CHEVRON_DOWN_ICON,
-            run: () =>
-              this.withProject(projectPath, () => stores.setWorkGroupExpanded(group.id, !expanded)),
           },
           {
             label: UI_STRINGS.sidebar.closeAllSessions,

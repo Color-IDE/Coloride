@@ -116,7 +116,7 @@ describe("Workspace sidebar", () => {
     expect(document.activeElement).toBe(first);
     expect(first.textContent).toBe("Rename group");
     first.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
-    expect((document.activeElement as HTMLElement)?.textContent).toBe("Collapse group");
+    expect((document.activeElement as HTMLElement)?.textContent).toBe("Close all sessions");
     document.activeElement?.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
     );
@@ -441,12 +441,7 @@ describe("Zone 2 option menus", () => {
     const { root, get, stores } = setup();
     stores.createWorkGroup("Other task");
     get('.sidebar-group[data-group-id="initial-group"] .sidebar-row--group .sidebar-more').click();
-    expect(labels(root)).toEqual([
-      "Rename group",
-      "Collapse group",
-      "Close all sessions",
-      "Delete group",
-    ]);
+    expect(labels(root)).toEqual(["Rename group", "Close all sessions", "Delete group"]);
     const del = menuItem(root, "Delete group");
     expect(del.disabled).toBe(true);
     expect(del.title).toBe("Close the group's sessions first");

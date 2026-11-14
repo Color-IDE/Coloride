@@ -148,8 +148,6 @@ export const UI_STRINGS = {
     newGroup: "New group",
     newGroupIn: "New group in",
     renameGroup: "Rename group",
-    expandGroup: "Expand group",
-    collapseGroup: "Collapse group",
     renameSession: "Rename session",
     closeSession: "Close session",
     closeOtherSessions: "Close other sessions",
