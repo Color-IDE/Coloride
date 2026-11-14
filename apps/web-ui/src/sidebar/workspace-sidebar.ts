@@ -31,6 +31,8 @@ export interface WorkspaceSidebarOptions {
    * Without it the sidebar only switches the navigation state.
    */
   readonly switchWorkspace?: (path: string) => Promise<readonly CockpitFileTreeNode[] | null>;
+  /** What the "+" of a group opens: a terminal panel, or an agent session (the default). */
+  readonly newSessionKind?: "terminal" | "agent";
 }
 
 /** Owns sidebar navigation DOM and subscriptions, independent of the editor and streaming. */
@@ -177,7 +179,8 @@ export class WorkspaceSidebar {
       onSelect: () => this.withProject(projectPath, () => stores.selectWorkGroup(group.id)),
       onAdd: () =>
         this.withProject(projectPath, () => {
-          if (stores.createChat({ groupId: group.id }) === null) {
+          const kind = this.options.newSessionKind === "terminal" ? "terminal" : undefined;
+          if (stores.createChat({ groupId: group.id, ...(kind ? { kind } : {}) }) === null) {
             this.showError(null, UI_STRINGS.sidebar.noRoom);
             return;
           }

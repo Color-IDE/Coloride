@@ -140,7 +140,7 @@ export class ChatGrid {
       doc,
       "coloride-group-empty-add",
       UI_STRINGS.chat.newSession,
-      () => this.stores.createChat(),
+      () => this.stores.createChat(this.terminals ? { kind: "terminal" } : undefined),
     );
     this.empty.append(emptyText, this.emptyAdd);
 

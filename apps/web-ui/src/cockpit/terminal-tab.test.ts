@@ -293,4 +293,33 @@ describe("terminal as a Zone 3 panel", () => {
     expect(session?.kind).toBeUndefined();
     expect(session?.modelName).toBe("Codex");
   });
+
+  it("'New session' in the sidebar and in an empty group opens a terminal when the host has one", async () => {
+    const { stores, terminals, opened } = setup();
+    document
+      .querySelector<HTMLButtonElement>(
+        '.sidebar-group[data-group-id="initial-group"] .sidebar-add',
+      )
+      ?.click();
+    await settle();
+    expect(terminals()).toHaveLength(1);
+    expect(opened).toHaveLength(1);
+
+    stores.createWorkGroup("Other");
+    document.querySelector<HTMLButtonElement>(".coloride-group-empty-add")?.click();
+    await settle();
+    expect(terminals()).toHaveLength(2);
+    expect(opened).toHaveLength(2);
+    // The + menu of the header still offers both: Codex > Interface makes an agent session.
+    const before = stores.zone3.getState().chats.length;
+    document.querySelector<HTMLButtonElement>(".coloride-header-tab-add")?.click();
+    Array.from(document.querySelectorAll<HTMLButtonElement>(".coloride-new-panel-item"))
+      .find((item) => item.textContent?.startsWith("Codex"))
+      ?.click();
+    Array.from(document.querySelectorAll<HTMLButtonElement>(".coloride-new-panel-item"))
+      .find((item) => item.textContent?.startsWith("Interface"))
+      ?.click();
+    expect(stores.zone3.getState().chats).toHaveLength(before + 1);
+    expect(terminals()).toHaveLength(2);
+  });
 });

@@ -184,6 +184,8 @@ export class CockpitDomController {
       ...(options.openWorkspace ? { openWorkspace: options.openWorkspace } : {}),
       ...(options.switchWorkspace ? { switchWorkspace: options.switchWorkspace } : {}),
       ...(options.searchWorkspace ? { searchWorkspace: options.searchWorkspace } : {}),
+      // With a terminal host, "New session" opens a terminal, where the user can run an agent.
+      newSessionKind: options.terminalHost ? "terminal" : "agent",
     });
     this.chatGrid = new ChatGrid(
       doc,

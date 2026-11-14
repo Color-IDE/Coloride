@@ -17,6 +17,8 @@ export interface SidebarPanelsOptions {
   readonly switchWorkspace?: (path: string) => Promise<readonly CockpitFileTreeNode[] | null>;
   readonly searchWorkspace?: (query: string) => Promise<readonly CockpitSearchResultItem[]>;
   readonly openFile: (path: string, onError: (message: string) => void) => void;
+  /** What a new session opens from the sidebar: a terminal panel, or an agent session. */
+  readonly newSessionKind?: "terminal" | "agent";
 }
 
 /**
@@ -116,6 +118,7 @@ export class SidebarPanels {
       stores,
       ...(options.openWorkspace ? { openWorkspace: options.openWorkspace } : {}),
       ...(options.switchWorkspace ? { switchWorkspace: options.switchWorkspace } : {}),
+      ...(options.newSessionKind ? { newSessionKind: options.newSessionKind } : {}),
     });
   }
 
