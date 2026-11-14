@@ -8,7 +8,7 @@ export interface SidebarRowOptions {
   readonly onToggle?: () => void;
   readonly onMore: (anchor: HTMLButtonElement) => void;
   /** Adds a "+" next to the options button (shown on hover). */
-  readonly onAdd?: () => void;
+  readonly onAdd?: (anchor: HTMLButtonElement) => void;
   /** Accessible name prefix and tooltip of the "+" (a new session unless told otherwise). */
   readonly addLabel?: { readonly aria: string; readonly title: string };
   readonly icon?: string;
@@ -80,7 +80,8 @@ export class SidebarRow {
     if (options.onAdd) {
       this.add = button(doc, "sidebar-icon-button sidebar-add");
       this.add.innerHTML = PLUS_ICON;
-      this.add.addEventListener("click", options.onAdd);
+      const add = this.add;
+      add.addEventListener("click", () => options.onAdd?.(add));
       this.el.append(this.select, this.add, this.more);
     } else {
       this.el.append(this.select, this.more);

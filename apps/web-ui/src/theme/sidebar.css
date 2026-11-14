@@ -330,24 +330,24 @@
   .coloride-zone-2-scroll::-webkit-scrollbar {
     display: none;
   }
+  /* The three-dots menu shares the look of the menu of the + button (see terminal.css) */
   .sidebar-menu {
     position: absolute;
     right: var(--sidebar-edge);
     z-index: 100;
-    min-width: 160px;
+    min-width: 150px;
     max-width: calc(100% - 6px);
-    padding: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: var(--sidebar-row-radius);
+    padding: 3px;
+    border: 0.5px solid rgba(255, 255, 255, 0.14);
+    border-radius: 8px;
     background: #262626;
-    box-shadow: 0 8px 24px #0006;
   }
   .sidebar-menu-item {
     display: block;
     width: 100%;
-    padding: 6px 8px;
+    padding: 5px 8px;
     border: 0;
-    border-radius: 4px;
+    border-radius: 5px;
     background: transparent;
     color: var(--color-text-primary);
     font: inherit;
@@ -357,7 +357,8 @@
   }
   .sidebar-menu-item:hover:not(:disabled),
   .sidebar-menu-item:focus-visible {
-    background: var(--sidebar-icon-hover);
+    background: rgba(255, 255, 255, 0.08);
+    outline: none;
   }
   .sidebar-menu-item:disabled {
     color: var(--color-text-muted);

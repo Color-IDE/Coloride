@@ -301,9 +301,18 @@ describe("terminal as a Zone 3 panel", () => {
         '.sidebar-group[data-group-id="initial-group"] .sidebar-add',
       )
       ?.click();
+    // The sidebar's "+" offers the same menu as the panels' one: Terminal or Codex.
+    const entries = () =>
+      Array.from(document.querySelectorAll<HTMLButtonElement>(".coloride-new-panel-item"));
+    expect(entries().map((item) => item.textContent)).toEqual([
+      expect.stringMatching(/Terminal/),
+      expect.stringMatching(/Codex/),
+    ]);
+    entries()[0]?.click();
     await settle();
     expect(terminals()).toHaveLength(1);
     expect(opened).toHaveLength(1);
+    expect(document.querySelector(".coloride-new-panel-menu")).toBeNull();
 
     stores.createWorkGroup("Other");
     document.querySelector<HTMLButtonElement>(".coloride-group-empty-add")?.click();
