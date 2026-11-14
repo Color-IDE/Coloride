@@ -1,8 +1,8 @@
+import { PANEL_DIMENSIONS, type PanelSide } from "../panel-geometry.js";
 /** Which side panel a bar resizes: the left one (the sidebar) or the right one (the inspector). */
-export type ResizablePanel = "sidebar" | "inspector";
+export type ResizablePanel = PanelSide;
 
 interface PanelLimits {
-  readonly storageKey: string;
   readonly label: string;
   readonly minPx: number;
   readonly maxPx: number;
@@ -14,19 +14,13 @@ interface PanelLimits {
 
 export const PANEL_LIMITS: Record<ResizablePanel, PanelLimits> = {
   sidebar: {
-    storageKey: "coloride.sidebarWidthPx",
     label: "Resize side panel",
-    minPx: 180,
-    maxPx: 560,
-    maxShare: 0.5,
+    ...PANEL_DIMENSIONS.sidebar,
     edge: "right",
   },
   inspector: {
-    storageKey: "coloride.inspectorWidthPx",
     label: "Resize right panel",
-    minPx: 280,
-    maxPx: 1_000,
-    maxShare: 0.7,
+    ...PANEL_DIMENSIONS.inspector,
     edge: "left",
   },
 };
@@ -45,40 +39,11 @@ export function clampPanelWidth(
   return Math.round(Math.min(max, Math.max(minPx, widthPx)));
 }
 
-/** The width the user chose last time (a per-viewer convenience; null when none or unreadable). */
-export function loadPanelWidth(
-  panel: ResizablePanel,
-  storage: Pick<Storage, "getItem"> | undefined,
-): number | null {
-  try {
-    const raw = storage?.getItem(PANEL_LIMITS[panel].storageKey);
-    const value = raw === null || raw === undefined ? Number.NaN : Number(raw);
-    return Number.isFinite(value) && value > 0 ? value : null;
-  } catch {
-    return null;
-  }
-}
-
-function savePanelWidth(
-  panel: ResizablePanel,
-  storage: Pick<Storage, "setItem" | "removeItem"> | undefined,
-  widthPx: number | null,
-): void {
-  try {
-    const key = PANEL_LIMITS[panel].storageKey;
-    if (widthPx === null) storage?.removeItem(key);
-    else storage?.setItem(key, String(widthPx));
-  } catch {
-    // Not remembering the width is fine.
-  }
-}
-
 export interface PanelResizeHost {
   /** Width the panel has on screen now. */
   currentWidth(): number;
   /** Applies a width live; null goes back to the default one. */
-  setWidth(widthPx: number | null): void;
-  storage?: Storage | undefined;
+  setWidth(widthPx: number | null, remember: boolean): void;
 }
 
 /**
@@ -106,8 +71,7 @@ export class PanelResizeHandle {
     const windowWidth = () => doc.defaultView?.innerWidth ?? 1_200;
     const apply = (widthPx: number, remember: boolean) => {
       const width = clampPanelWidth(panel, widthPx, windowWidth());
-      host.setWidth(width);
-      if (remember) savePanelWidth(panel, host.storage, width);
+      host.setWidth(width, remember);
     };
 
     bar.addEventListener("pointerdown", (event) => {
@@ -137,8 +101,7 @@ export class PanelResizeHandle {
     bar.addEventListener("pointerup", finish);
     bar.addEventListener("pointercancel", finish);
     bar.addEventListener("dblclick", () => {
-      host.setWidth(null);
-      savePanelWidth(panel, host.storage, null);
+      host.setWidth(null, true);
     });
     bar.addEventListener("keydown", (event) => {
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;

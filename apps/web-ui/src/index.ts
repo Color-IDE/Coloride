@@ -1,6 +1,7 @@
 import type { CockpitChatTab, CockpitPersonaMode, InspectorTab } from "./stores/index.js";
 
 export * from "./stores/index.js";
+export { restoreCachedSession } from "./session-cache.js";
 export * from "./stream-renderer.js";
 export * from "./virtualizer.js";
 export * from "./cockpit-dom.js";

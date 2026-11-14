@@ -13,12 +13,19 @@ function setup(openWorkspace?: () => Promise<readonly [] | null>) {
   const stores = createCockpitStoreBundle({
     initialChats: [
       {
+        kind: "agent" as const,
         chatId: "a",
         title: "Implementation",
         modelName: "Codex",
         validationState: "UnchangedBlue",
       },
-      { chatId: "b", title: "Review", modelName: "Claude", validationState: "UnchangedBlue" },
+      {
+        kind: "agent" as const,
+        chatId: "b",
+        title: "Review",
+        modelName: "Claude",
+        validationState: "UnchangedBlue",
+      },
     ],
   });
   stores.setProjectPath("/projects/Coloride");

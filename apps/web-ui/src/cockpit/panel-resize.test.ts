@@ -2,6 +2,7 @@
 import { ColorideEditorView, InMemoryBinaryHostBridge } from "@coloride/editor-cm6";
 import { afterEach, describe, expect, it } from "vitest";
 import { CockpitDomController, createCockpitStoreBundle } from "../index.js";
+import { UI_PREFERENCES_KEY } from "../ui-preferences.js";
 import { PANEL_LIMITS, clampPanelWidth } from "./panel-resize.js";
 
 const cleanups: Array<() => void> = [];
@@ -66,7 +67,9 @@ describe("side panel resize bars", () => {
     expect(bar.dataset.dragging).toBe("true");
     pointer(bar, "pointerup", 380);
     expect(bar.dataset.dragging).toBeUndefined();
-    expect(window.localStorage.getItem("coloride.sidebarWidthPx")).toBe("320");
+    expect(JSON.parse(window.localStorage.getItem(UI_PREFERENCES_KEY) ?? "{}").sidebarWidthPx).toBe(
+      320,
+    );
 
     pointer(bar, "pointerdown", 380);
     pointer(bar, "pointermove", 0);
@@ -75,7 +78,9 @@ describe("side panel resize bars", () => {
 
     bar.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
     expect(columns()).toBe(initial);
-    expect(window.localStorage.getItem("coloride.sidebarWidthPx")).toBeNull();
+    expect(
+      JSON.parse(window.localStorage.getItem(UI_PREFERENCES_KEY) ?? "{}").sidebarWidthPx,
+    ).toBeNull();
   });
 
   it("dragging the inspector bar to the left makes the inspector wider", () => {
@@ -86,7 +91,9 @@ describe("side panel resize bars", () => {
     pointer(bar, "pointermove", 800);
     expect(columns()).toContain("580px");
     pointer(bar, "pointerup", 800);
-    expect(window.localStorage.getItem("coloride.inspectorWidthPx")).toBe("580");
+    expect(
+      JSON.parse(window.localStorage.getItem(UI_PREFERENCES_KEY) ?? "{}").inspectorWidthPx,
+    ).toBe(580);
     // To the right: narrower (the stub measures 480px at the start of each drag, so 200px to
     // the right would give 280px, which is also the limit).
     pointer(bar, "pointerdown", 800);

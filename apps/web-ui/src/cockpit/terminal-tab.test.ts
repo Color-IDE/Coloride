@@ -290,7 +290,7 @@ describe("terminal as a Zone 3 panel", () => {
     );
     const created = stores.createChat({ nextToActive: true });
     const session = stores.zone3.getState().chats.find((chat) => chat.chatId === created);
-    expect(session?.kind).toBeUndefined();
+    expect(session?.kind).toBe("agent");
     expect(session?.modelName).toBe("Codex");
   });
 

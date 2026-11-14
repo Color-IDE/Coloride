@@ -45,6 +45,7 @@ export interface CockpitFileTreeNode {
 }
 
 export interface CockpitSessionSummary {
+  readonly kind: "agent";
   readonly chatId: string;
   readonly title: string;
   readonly modelName: string;
@@ -96,20 +97,28 @@ export interface CockpitChatMessage {
   readonly streaming: boolean;
 }
 
-/** What a Zone 3 panel holds: an agent session, or a shell. Absent means an agent session. */
+/** What a Zone 3 panel holds. Legacy caches are normalized at the desktop boundary. */
 export type CockpitChatKind = "agent" | "terminal";
 
-export interface CockpitChatTab {
+interface SessionBase {
   readonly chatId: string;
-  readonly kind?: CockpitChatKind;
   readonly title: string;
-  readonly modelName: string;
   readonly validationState: ColorideValidationState;
   readonly targetDocumentId?: string;
   readonly targetDocumentContent?: string;
   readonly previewUrl?: string;
+}
+export interface CockpitAgentSession extends SessionBase {
+  readonly kind: "agent";
+  readonly modelName: string;
   readonly agentExecutionStatus?: "Idle" | "Running" | "QueuedSequential";
 }
+export interface CockpitTerminalSession extends SessionBase {
+  readonly kind: "terminal";
+  readonly modelName?: never;
+  readonly agentExecutionStatus?: never;
+}
+export type CockpitChatTab = CockpitAgentSession | CockpitTerminalSession;
 
 export interface Zone3MultiChatState {
   readonly activeChatId: string;
@@ -131,7 +140,7 @@ export interface Zone4InspectorState {
   readonly recoveredFromWal: boolean;
 }
 
-export interface CreateChatOptions {
+interface CreatePanelOptions {
   /** Tab that receives the session. Defaults to the active one. */
   readonly groupId?: string;
   /** Existing panel to split. Without it the new panel goes where there is the most room. */
@@ -139,14 +148,18 @@ export interface CreateChatOptions {
   readonly direction?: SplitDirection;
   readonly position?: SplitPosition;
   readonly title?: string;
-  readonly modelName?: string;
-  readonly kind?: CockpitChatKind;
   /**
    * Opens the panel to the right of the active one, so panels follow the order of the tabs.
    * When that leaves no room it is placed wherever it fits.
    */
   readonly nextToActive?: boolean;
 }
+
+export type CreateChatOptions = CreatePanelOptions &
+  (
+    | { readonly kind?: "agent"; readonly modelName?: string }
+    | { readonly kind: "terminal"; readonly modelName?: never }
+  );
 
 export interface CockpitStoreBundle extends WorkspaceNavigationActions {
   renameChat(id: string, title: string): void;

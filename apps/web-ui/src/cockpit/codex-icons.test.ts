@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { ColorideEditorView, InMemoryBinaryHostBridge } from "@coloride/editor-cm6";
 import { afterEach, describe, expect, it } from "vitest";
-import { CockpitDomController, createCockpitStoreBundle } from "../index.js";
+import { CockpitDomController, createCockpitStoreBundle, restoreCachedSession } from "../index.js";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -13,13 +13,24 @@ describe("Codex mark and session number across the interface", () => {
     const root = document.createElement("div");
     document.body.appendChild(root);
     const chat = (chatId: string, title: string, modelName: string) => ({
+      kind: "agent" as const,
       chatId,
       title,
       modelName,
       validationState: "UnchangedBlue" as const,
     });
     const stores = createCockpitStoreBundle({
-      initialChats: [chat("a", "#16 New session", "Codex"), chat("b", "#17 Other", "Other model")],
+      initialChats: [
+        chat("a", "#16 New session", "Codex"),
+        chat("b", "#17 Other", "Other model"),
+        restoreCachedSession({
+          chatId: "terminal",
+          title: "Codex shell",
+          kind: "terminal",
+          modelName: "Codex",
+          validationState: "UnchangedBlue",
+        }),
+      ],
     });
     const editorView = new ColorideEditorView({
       initialDocumentId: "src/main.ts",
@@ -56,5 +67,12 @@ describe("Codex mark and session number across the interface", () => {
 
     const sidebarRows = Array.from(root.querySelectorAll(".sidebar-row--session"));
     expect(sidebarRows.some((row) => row.querySelector(".coloride-codex-icon"))).toBe(true);
+    // Even a legacy terminal carrying a Codex model must not receive agent branding.
+    expect(tab("terminal")?.querySelector(".coloride-terminal-icon")).not.toBeNull();
+    expect(tab("terminal")?.querySelector(".coloride-codex-icon")).toBeNull();
+    expect(cell("terminal")?.querySelector(".coloride-codex-icon")).toBeNull();
+    const terminalRow = sidebarRows.find((row) => row.textContent?.includes("Codex shell"));
+    expect(terminalRow?.querySelector(".coloride-terminal-icon")).not.toBeNull();
+    expect(terminalRow?.querySelector(".coloride-codex-icon")).toBeNull();
   });
 });

@@ -7,13 +7,17 @@ type AgentQueueActions = Pick<
 >;
 
 /**
- * MVP scope invariant (`LOT-005` §4.2): only 1 agent executes in backend at a time;
- * additional agent tasks are queued sequentially until `LOT-020`.
+ * UI scheduling intent only: records one running slot and a sequential queue.
+ * This module never starts a process. Actual execution requires the future operational
+ * PolicyEngine and sandbox-runner; their health checks currently report unavailable.
  */
 export function createAgentQueueActions(ctx: StoreContext): AgentQueueActions {
   const { zone3 } = ctx;
   return {
     startAgentTaskOnChat(chatId: string): "Running" | "QueuedSequential" {
+      if (!zone3.getState().chats.some((chat) => chat.chatId === chatId && chat.kind === "agent")) {
+        throw new Error("Only agent sessions can enter the agent queue");
+      }
       let assignedStatus: "Running" | "QueuedSequential" = "Running";
       zone3.setState((prev) => {
         if (prev.activeRunningAgentChatId === null || prev.activeRunningAgentChatId === chatId) {
@@ -22,7 +26,9 @@ export function createAgentQueueActions(ctx: StoreContext): AgentQueueActions {
             ...prev,
             activeRunningAgentChatId: chatId,
             chats: prev.chats.map((c) =>
-              c.chatId === chatId ? { ...c, agentExecutionStatus: "Running" } : c,
+              c.kind === "agent" && c.chatId === chatId
+                ? { ...c, agentExecutionStatus: "Running" }
+                : c,
             ),
           };
         }
@@ -34,7 +40,9 @@ export function createAgentQueueActions(ctx: StoreContext): AgentQueueActions {
           ...prev,
           sequentialAgentQueue: nextQueue,
           chats: prev.chats.map((c) =>
-            c.chatId === chatId ? { ...c, agentExecutionStatus: "QueuedSequential" } : c,
+            c.kind === "agent" && c.chatId === chatId
+              ? { ...c, agentExecutionStatus: "QueuedSequential" }
+              : c,
           ),
         };
       });
@@ -52,6 +60,7 @@ export function createAgentQueueActions(ctx: StoreContext): AgentQueueActions {
           activeRunningAgentChatId: nextChatId ?? null,
           sequentialAgentQueue: remainingQueue,
           chats: prev.chats.map((c) => {
+            if (c.kind !== "agent") return c;
             if (c.chatId === chatId) {
               return { ...c, agentExecutionStatus: "Idle" };
             }

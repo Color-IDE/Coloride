@@ -1,4 +1,4 @@
-import { CODEX_ICON, TERMINAL_ICON } from "../cockpit/panel-icons.js";
+import { sessionIcon } from "../cockpit/session-presentation.js";
 import { attribute, button, reconcile, visibility } from "../dom-utils.js";
 import type { CockpitChatTab, CockpitFileTreeNode, CockpitStoreBundle } from "../stores/index.js";
 import { UI_STRINGS } from "../ui-strings.js";
@@ -381,13 +381,7 @@ export class WorkspaceSidebar {
             row = this.createSession(entry.path, group.id, chat);
             nodes.chats.set(id, row);
           }
-          row.setIcon(
-            chat.kind === "terminal"
-              ? TERMINAL_ICON
-              : chat.modelName === "Codex"
-                ? CODEX_ICON
-                : null,
-          );
+          row.setIcon(sessionIcon(chat));
           row.update(chat.title, groupActive && chatState.activeChatId === id);
           nextSessions.push(row.el);
         }

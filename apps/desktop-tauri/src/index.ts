@@ -21,6 +21,7 @@ import {
   createCockpitStoreBundle,
   createInitialCockpitShellState,
   createInitialOnboardingState,
+  restoreCachedSession,
 } from "@coloride/web-ui";
 
 export const WORKSPACE_SESSION_CACHE_FILENAME = "workspace_session_cache.bin";
@@ -66,9 +67,8 @@ export function decodeWorkspaceSessionCacheBinary(
       `Unsupported workspace_session_cache.bin schemaVersion ${parsed.schemaVersion}`,
     );
   }
-  return parsed;
+  return { ...parsed, ...(parsed.chats ? { chats: parsed.chats.map(restoreCachedSession) } : {}) };
 }
-
 export interface LazyBootDesktopOptions {
   readonly rootContainer?: HTMLElement;
   readonly cachedSessionBytes?: Uint8Array;
@@ -219,15 +219,8 @@ export function lazyBootDesktopCockpit(
         bgState = state;
         return state;
       })
-    : Promise.resolve().then(() => {
-        bgState = {
-          vtslsLspReady: true,
-          biomeDaemonReady: true,
-          sqliteFts5Ready: true,
-          sandboxWarmPoolReady: true,
-        };
-        return bgState;
-      });
+    : // No provider was initialized: especially do not advertise a sandbox warm pool.
+      Promise.resolve(bgState);
 
   return {
     appId: "dev.coloride.desktop",

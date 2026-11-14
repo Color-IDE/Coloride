@@ -2,6 +2,7 @@ import type { ColorideEditorView } from "@coloride/editor-cm6";
 import type { CockpitFileTreeNode, CockpitStoreBundle } from "../stores/index.js";
 import { fileTreeIconColor, fileTreeIconSvg } from "../theme/file-tree-icons.js";
 import { type ThinScrollbar, attachThinScrollbar } from "../thin-scrollbar.js";
+import { UiPreferences, browserStorage } from "../ui-preferences.js";
 import { UI_STRINGS, uiText } from "../ui-strings.js";
 import { FileTreePanel } from "./file-tree-panel.js";
 import { type HeaderTabSpec, HeaderTabs } from "./header-tabs.js";
@@ -10,6 +11,7 @@ import { askUnsavedChoice } from "./unsaved-dialog.js";
 
 export interface InspectorOptions {
   readonly stores: CockpitStoreBundle;
+  readonly preferences?: UiPreferences;
   readonly editorView: ColorideEditorView;
   readonly header: HTMLElement;
   readonly readWorkspaceFile?: (path: string) => Promise<string>;
@@ -29,7 +31,6 @@ export interface InspectorOptions {
  * The CodeMirror 6 view is mounted once and only ever hidden, never unmounted.
  * Open tabs belong to a work group (a Zone 3 tab); each project and group remembers its own.
  */
-const TREE_HIDDEN_KEY = "coloride.treeHidden";
 
 export class Inspector {
   readonly element: HTMLElement;
@@ -43,7 +44,8 @@ export class Inspector {
    * The file tree can be hidden: the editor then takes the whole panel and the tree slides in
    * over it while the pointer is on its edge, with a button to keep it visible again.
    */
-  private treeHidden = false;
+  private readonly preferences: UiPreferences;
+  private readonly unsubscribePreferences: () => void;
   private readonly body: HTMLElement;
   private readonly treeEdge: HTMLButtonElement;
   /** Files opened in this group, in opening order. They accumulate until closed. */
@@ -132,7 +134,11 @@ export class Inspector {
     this.body.className = "coloride-zone-4-body";
     this.body.append(editorColumn, this.treeEdge, this.tree.element);
     this.element.append(this.body);
-    this.treeHidden = Inspector.readTreeHidden(doc);
+    this.preferences = options.preferences ?? new UiPreferences(browserStorage(doc));
+    this.unsubscribePreferences = this.preferences.subscribeSelector(
+      (state) => state.treeHidden,
+      () => this.applyTreeHidden(),
+    );
     this.applyTreeHidden();
 
     this.tabs = new HeaderTabs(doc, options.header, {
@@ -146,42 +152,28 @@ export class Inspector {
   }
 
   isTreeHidden(): boolean {
-    return this.treeHidden;
+    return this.preferences.getState().treeHidden;
   }
 
   toggleTree(): void {
-    this.setTreeHidden(!this.treeHidden);
+    this.setTreeHidden(!this.isTreeHidden());
   }
 
   setTreeHidden(hidden: boolean): void {
-    if (this.treeHidden === hidden) return;
-    this.treeHidden = hidden;
-    this.applyTreeHidden();
-    try {
-      this.element.ownerDocument.defaultView?.localStorage.setItem(TREE_HIDDEN_KEY, String(hidden));
-    } catch {
-      // Not remembering the choice is fine.
-    }
-  }
-
-  private static readTreeHidden(doc: Document): boolean {
-    try {
-      return doc.defaultView?.localStorage.getItem(TREE_HIDDEN_KEY) === "true";
-    } catch {
-      return false;
-    }
+    this.preferences.setTreeHidden(hidden);
   }
 
   private applyTreeHidden(): void {
-    this.body.dataset.treeHidden = String(this.treeHidden);
+    const treeHidden = this.isTreeHidden();
+    this.body.dataset.treeHidden = String(treeHidden);
     const action = this.tree.actionButton;
     if (action) {
-      const label = this.treeHidden ? UI_STRINGS.files.pinTree : UI_STRINGS.files.hideTree;
-      action.innerHTML = this.treeHidden ? TREE_SHOW_ICON : TREE_HIDE_ICON;
+      const label = treeHidden ? UI_STRINGS.files.pinTree : UI_STRINGS.files.hideTree;
+      action.innerHTML = treeHidden ? TREE_SHOW_ICON : TREE_HIDE_ICON;
       action.setAttribute("aria-label", label);
       action.title = label;
     }
-    this.treeEdge.hidden = !this.treeHidden;
+    this.treeEdge.hidden = !treeHidden;
   }
 
   /** Mounts the singleton CodeMirror 6 view into its permanent container. */
@@ -371,6 +363,7 @@ export class Inspector {
   }
 
   destroy(): void {
+    this.unsubscribePreferences();
     this.tabs.destroy();
     this.tree.destroy();
     this.editorScrollbar?.destroy();

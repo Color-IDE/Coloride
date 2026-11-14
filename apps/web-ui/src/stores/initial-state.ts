@@ -20,6 +20,7 @@ export function createInitialStores(options?: CockpitStoreOptions) {
   const initialPersona = options?.initialPersona ?? "Develop";
   const initialChats: readonly CockpitChatTab[] = options?.initialChats ?? [
     {
+      kind: "agent" as const,
       chatId: "chat-1",
       title: "#1 Login UI",
       modelName: "Codex",
@@ -85,13 +86,16 @@ export function createInitialStores(options?: CockpitStoreOptions) {
   });
 
   const zone2 = new AtomicStore<Zone2SidebarState>({
-    sessions: initialChats.map((c) => ({
-      chatId: c.chatId,
-      title: c.title,
-      modelName: c.modelName,
-      validationState: c.validationState,
-      targetDocumentId: c.targetDocumentId ?? initialDocId,
-    })),
+    sessions: initialChats
+      .filter((c) => c.kind === "agent")
+      .map((c) => ({
+        kind: "agent" as const,
+        chatId: c.chatId,
+        title: c.title,
+        modelName: c.modelName,
+        validationState: c.validationState,
+        targetDocumentId: c.targetDocumentId ?? initialDocId,
+      })),
     fileTree: initialFileTree,
     fileTreeScrollTop: 0,
     fileTreeViewportHeight: 600,

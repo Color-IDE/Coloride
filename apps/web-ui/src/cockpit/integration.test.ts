@@ -12,6 +12,7 @@ describe("@coloride/web-ui — LOT-003..LOT-008 integration", () => {
       initialActiveDocumentId: "src/auth.ts",
       initialChats: [
         {
+          kind: "agent" as const,
           chatId: "chat-1",
           title: "#1 Auth Service",
           modelName: "Codex",

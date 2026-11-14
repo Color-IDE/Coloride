@@ -92,8 +92,20 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     document.body.appendChild(root);
     const stores = createCockpitStoreBundle({
       initialChats: [
-        { chatId: "a", title: "Implement", modelName: "Codex", validationState: "UnchangedBlue" },
-        { chatId: "b", title: "Review", modelName: "Claude", validationState: "UnchangedBlue" },
+        {
+          kind: "agent" as const,
+          chatId: "a",
+          title: "Implement",
+          modelName: "Codex",
+          validationState: "UnchangedBlue",
+        },
+        {
+          kind: "agent" as const,
+          chatId: "b",
+          title: "Review",
+          modelName: "Claude",
+          validationState: "UnchangedBlue",
+        },
       ],
     });
     const editorView = new ColorideEditorView({
@@ -119,6 +131,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     const root = document.createElement("div");
     document.body.appendChild(root);
     const chats = Array.from({ length: 12 }, (_, i) => ({
+      kind: "agent" as const,
       chatId: `c${i}`,
       title: `Chat ${i}`,
       modelName: "Codex",
@@ -166,6 +179,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
   });
   it("honours a stored layout for a tab and recovers from a corrupted or outdated one", () => {
     const chats = ["a", "b", "c"].map((chatId) => ({
+      kind: "agent" as const,
       chatId,
       title: chatId,
       modelName: "Codex",
@@ -207,6 +221,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     const root = document.createElement("div");
     document.body.appendChild(root);
     const chat = (chatId: string) => ({
+      kind: "agent" as const,
       chatId,
       title: chatId,
       modelName: "Codex",
@@ -428,6 +443,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
       document.body.appendChild(root);
       const stores = createCockpitStoreBundle({
         initialChats: ids.map((chatId) => ({
+          kind: "agent" as const,
           chatId,
           title: chatId,
           modelName: "Codex",
@@ -538,6 +554,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
       document.body.appendChild(root);
       const stores = createCockpitStoreBundle({
         initialChats: ids.map((chatId) => ({
+          kind: "agent" as const,
           chatId,
           title: chatId.toUpperCase(),
           modelName: "Codex",
@@ -664,6 +681,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
       document.body.appendChild(root);
       const stores = createCockpitStoreBundle({
         initialChats: ["a", "b", "c", "d"].map((chatId) => ({
+          kind: "agent" as const,
           chatId,
           title: chatId,
           modelName: "Codex",

@@ -3,7 +3,8 @@ import { ActivityBar } from "./cockpit/activity-bar.js";
 import { ChatGrid } from "./cockpit/chat-grid.js";
 import { type DebugHost, DebugPanel } from "./cockpit/debug-panel.js";
 import { Inspector } from "./cockpit/inspector.js";
-import { PanelResizeHandle, loadPanelWidth } from "./cockpit/panel-resize.js";
+import { ShellLayout } from "./cockpit/shell-layout.js";
+import { bindShellShortcuts } from "./cockpit/shell-shortcuts.js";
 import { SidebarPanels } from "./cockpit/sidebar-panels.js";
 import type { TerminalHost, TerminalViewFactory } from "./cockpit/terminal-pane.js";
 import { TitleBar } from "./cockpit/title-bar.js";
@@ -21,9 +22,9 @@ import type {
   CockpitImpactedTestItem,
   CockpitSearchResultItem,
   CockpitStoreBundle,
-  Zone1ActivityState,
   Zone4InspectorState,
 } from "./stores/index.js";
+import { UiPreferences, browserStorage } from "./ui-preferences.js";
 import { UI_STRINGS, uiText } from "./ui-strings.js";
 
 export type {
@@ -78,23 +79,6 @@ export interface CockpitDomControllerOptions {
   }>;
 }
 
-/** Grid columns shared by the title bar and the shell, so headers stay above their zone. */
-const DEFAULT_SIDEBAR_WIDTH = "clamp(200px, 19vw, 280px)";
-const DEFAULT_INSPECTOR_WIDTH = "clamp(300px, 45%, 640px)";
-
-function cockpitGridColumns(
-  z1: Zone1ActivityState,
-  sidebarWidthPx: number | null,
-  inspectorWidthPx: number | null,
-): string {
-  const sidebarWidth = sidebarWidthPx === null ? DEFAULT_SIDEBAR_WIDTH : `${sidebarWidthPx}px`;
-  const inspectorWidth =
-    inspectorWidthPx === null ? DEFAULT_INSPECTOR_WIDTH : `${inspectorWidthPx}px`;
-  const sidebar = z1.sidebarOpen ? sidebarWidth : "0px";
-  const inspector = z1.inspectorOpen ? inspectorWidth : "0px";
-  return `48px ${sidebar} minmax(0, 1fr) ${inspector}`;
-}
-
 /**
  * 4-Zone Multi-Chat Cockpit: builds the shell, mounts one component per zone and routes store
  * changes to them. The zones live in `./cockpit/`:
@@ -117,11 +101,7 @@ export class CockpitDomController {
   private readonly inspector: Inspector;
   private readonly trustBanner: TrustBanner | null;
   private readonly terminalAvailable: boolean;
-  /** Widths the user gave the side panels; null means the default one. */
-  private sidebarWidthPx: number | null = null;
-  private inspectorWidthPx: number | null = null;
-  private readonly sidebarHandle: PanelResizeHandle;
-  private readonly inspectorHandle: PanelResizeHandle;
+  private readonly layout: ShellLayout;
   private readonly debugPanel: DebugPanel | null;
   /** Breakpoints of every file, keyed by project and document id. */
   private readonly breakpoints = new Map<string, readonly number[]>();
@@ -158,12 +138,14 @@ export class CockpitDomController {
     );
 
     const doc = rootContainer.ownerDocument;
+    const preferences = new UiPreferences(browserStorage(doc));
     rootContainer.replaceChildren();
     this.titleBar = new TitleBar(doc, rootContainer, stores);
     this.activityBar = new ActivityBar(doc, stores);
     this.inspector = new Inspector(doc, {
       stores,
       editorView,
+      preferences,
       header: this.titleBar.zone4Header,
       saveActiveDocument: () => this.saveActiveDocument(),
       onFileShown: (path) => this.requestNativeAnalysis(path),
@@ -213,26 +195,13 @@ export class CockpitDomController {
       this.chatGrid.element,
       this.inspector.element,
     );
-    const storage = doc.defaultView?.localStorage;
-    this.sidebarWidthPx = loadPanelWidth("sidebar", storage);
-    this.inspectorWidthPx = loadPanelWidth("inspector", storage);
-    this.sidebarHandle = new PanelResizeHandle(doc, "sidebar", {
-      currentWidth: () => this.sidebar.element.getBoundingClientRect().width,
-      setWidth: (widthPx) => {
-        this.sidebarWidthPx = widthPx;
-        this.renderLayout();
-      },
-      storage,
-    });
-    this.inspectorHandle = new PanelResizeHandle(doc, "inspector", {
-      currentWidth: () => this.inspector.element.getBoundingClientRect().width,
-      setWidth: (widthPx) => {
-        this.inspectorWidthPx = widthPx;
-        this.renderLayout();
-      },
-      storage,
-    });
-    this.shell.append(this.sidebarHandle.element, this.inspectorHandle.element);
+    this.layout = new ShellLayout(
+      doc,
+      this.shell,
+      this.sidebar.element,
+      this.inspector.element,
+      preferences,
+    );
     rootContainer.append(this.shell);
     this.terminalAvailable = options.terminalHost !== undefined;
     this.debugPanel = options.debugHost
@@ -258,12 +227,17 @@ export class CockpitDomController {
     this.titleBar.recordChatVisit(stores.zone3.getState().activeChatId);
     this.inspector.mountEditor();
 
-    // On the document, not the shell: with nothing focused (after clicking the title bar or an
-    // empty area) key events target `body`, which is outside the shell.
-    const onKeydown = (event: KeyboardEvent) => this.handleShortcut(event);
-    doc.addEventListener("keydown", onKeydown);
     this.unsubscribers.push(
-      () => doc.removeEventListener("keydown", onKeydown),
+      bindShellShortcuts(doc, {
+        stores,
+        debug: this.debugPanel,
+        terminalAvailable: this.terminalAvailable,
+        openTerminal: () => this.openTerminal(),
+        toggleTree: () => this.inspector.toggleTree(),
+        save: () => this.saveActiveDocument(),
+        reportError: (message) => this.inspector.reportError(message),
+      }),
+      preferences.subscribe(() => this.renderLayout()),
       // Each folder has its own trust decision: ask again whenever another one is opened.
       stores.navigation.subscribeSelector(
         (state) => state.projectPath,
@@ -469,24 +443,13 @@ export class CockpitDomController {
 
   private renderLayout(): void {
     const z1 = this.stores.zone1.getState();
-    const columns = cockpitGridColumns(z1, this.sidebarWidthPx, this.inspectorWidthPx);
+    const columns = this.layout.update(z1);
     this.shell.dataset.uiZoomPercent = String(z1.uiZoomPercent);
     this.shell.dataset.activePersona = z1.activePersona;
     this.shell.dataset.sidebarOpen = String(z1.sidebarOpen);
     this.shell.dataset.inspectorOpen = String(z1.inspectorOpen);
     this.shell.style.fontSize = `${(z1.uiZoomPercent / 100).toFixed(2)}rem`;
     this.shell.style.gridTemplateColumns = columns;
-    // The resize bar follows the right edge of the side panel (hidden when it is closed).
-    this.shell.style.setProperty(
-      "--coloride-sidebar-width",
-      this.sidebarWidthPx === null ? DEFAULT_SIDEBAR_WIDTH : `${this.sidebarWidthPx}px`,
-    );
-    this.shell.style.setProperty(
-      "--coloride-inspector-width",
-      this.inspectorWidthPx === null ? DEFAULT_INSPECTOR_WIDTH : `${this.inspectorWidthPx}px`,
-    );
-    this.sidebarHandle.element.hidden = !z1.sidebarOpen;
-    this.inspectorHandle.element.hidden = !z1.inspectorOpen;
     this.titleBar.update(z1, columns);
     this.activityBar.update(z1);
     this.inspector.setOpen(z1.inspectorOpen);
@@ -551,57 +514,6 @@ export class CockpitDomController {
     else this.stores.createChat({ kind: "terminal", nextToActive: true });
   }
 
-  private handleShortcut(event: KeyboardEvent): void {
-    if (this.debugPanel?.handleKey(event)) {
-      event.preventDefault();
-      return;
-    }
-    // Ctrl+` (also on macOS, as in VS Code) or Ctrl/Cmd+J, for keyboards where the backtick is
-    // a dead key: go to the terminal panel, creating it if there is none.
-    const backtick =
-      event.ctrlKey && !event.metaKey && (event.code === "Backquote" || event.key === "`");
-    const panelKey =
-      (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "j";
-    if (this.terminalAvailable && (backtick || panelKey)) {
-      event.preventDefault();
-      this.openTerminal();
-      return;
-    }
-    // Ctrl/Cmd+Shift+E: hide or show the file tree.
-    if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "e") {
-      event.preventDefault();
-      this.inspector.toggleTree();
-      return;
-    }
-    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
-      event.preventDefault();
-      void this.saveActiveDocument().catch((error: unknown) => {
-        this.inspector.reportError(
-          error instanceof Error ? error.message : UI_STRINGS.editor.saveFailed,
-        );
-      });
-      return;
-    }
-    if (this.stores.handleActivityBarShortcut(event.key, event.metaKey || event.ctrlKey)) {
-      event.preventDefault();
-      return;
-    }
-    if (event.altKey && (event.key === "ArrowRight" || event.key === "ArrowLeft")) {
-      // Alt+Arrow also moves the caret by word in the editor and in text fields (macOS): there it
-      // belongs to the text, never to the session switcher.
-      if (event.defaultPrevented || isTextEditingTarget(event.target)) return;
-      const { chats, activeChatId } = this.stores.zone3.getState();
-      const index = chats.findIndex((chat) => chat.chatId === activeChatId);
-      if (index < 0 || chats.length < 2) return;
-      const delta = event.key === "ArrowRight" ? 1 : -1;
-      const next = chats[(index + delta + chats.length) % chats.length];
-      if (next) {
-        this.stores.selectChat(next.chatId);
-        event.preventDefault();
-      }
-    }
-  }
-
   private requestNativeAnalysis(documentId: string): void {
     if (!this.analyzeDocument) return;
     const snapshot = this.editorView.getStoreSnapshot();
@@ -617,12 +529,4 @@ export class CockpitDomController {
         // A newer document switch or edit may invalidate this request; the next host snapshot retries.
       });
   }
-}
-
-/** Whether keys typed at `target` edit text: a field, or the code editor's content. */
-function isTextEditingTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return (
-    target.isContentEditable || target.closest("input, textarea, [contenteditable='true']") !== null
-  );
 }

@@ -22,19 +22,18 @@ import { NewPanelMenu } from "./new-panel-menu.js";
 import { PanelDrag } from "./panel-drag.js";
 import {
   CLOSE_PANEL_ICON,
-  CODEX_ICON,
   MAXIMIZE_ICON,
   RESTORE_ICON,
   SPLIT_DOWN_ICON,
   SPLIT_RIGHT_ICON,
-  TERMINAL_ICON,
 } from "./panel-icons.js";
+import { sessionIcon } from "./session-presentation.js";
 import { type TerminalHost, TerminalPane, type TerminalViewFactory } from "./terminal-pane.js";
 
 /** The icon of a session's header tab: the terminal glyph, the Codex mark, or its state glyph. */
 function tabIcon(chat: CockpitChatTab, stateGlyph: string): { svg: string } | { text: string } {
-  if (chat.kind === "terminal") return { svg: TERMINAL_ICON };
-  if (chat.modelName === "Codex") return { svg: CODEX_ICON };
+  const icon = sessionIcon(chat);
+  if (icon) return { svg: icon };
   return { text: stateGlyph };
 }
 
@@ -387,9 +386,9 @@ export class ChatGrid {
       cell = this.createCell(chat.chatId, chat.kind === "terminal" ? "terminal" : "agent");
       this.cells.set(chat.chatId, cell);
     }
-    if (cell.kind === "terminal" && this.terminals) {
+    if (chat.kind === "terminal") {
       let pane = this.panes.get(chat.chatId);
-      if (!pane) {
+      if (!pane && this.terminals) {
         pane = new TerminalPane(
           this.grid.ownerDocument,
           this.terminals.host,
@@ -397,7 +396,7 @@ export class ChatGrid {
         );
         this.panes.set(chat.chatId, pane);
       }
-      if (pane.element.parentElement !== cell.el) cell.el.append(pane.element);
+      if (pane && pane.element.parentElement !== cell.el) cell.el.append(pane.element);
       cell.el.dataset.kind = "terminal";
       cell.el.dataset.active = String(active);
       cell.el.setAttribute("aria-label", chat.title);
@@ -418,7 +417,7 @@ export class ChatGrid {
     const plainTitle = sessionDisplayTitle(chat.title);
     if (cell.titleText.textContent !== plainTitle) cell.titleText.textContent = plainTitle;
     cell.titleText.title = headerText;
-    const mark = chat.modelName === "Codex" ? CODEX_ICON : "";
+    const mark = sessionIcon(chat) ?? "";
     if (cell.titleIcon.innerHTML !== mark) cell.titleIcon.innerHTML = mark;
     cell.titleIcon.hidden = mark === "";
     this.messageRenderer.renderInto(cell.messages, z3.messagesByChatId[chat.chatId] ?? [], 0, 400);

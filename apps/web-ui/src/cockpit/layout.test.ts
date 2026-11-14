@@ -56,12 +56,14 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
     const stores = createCockpitStoreBundle({
       initialChats: [
         {
+          kind: "agent" as const,
           chatId: "chat-1",
           title: "#1 Auth",
           modelName: "Codex",
           validationState: "ValidatedGreen",
         },
         {
+          kind: "agent" as const,
           chatId: "chat-2",
           title: "#2 Payments",
           modelName: "Claude",
@@ -99,6 +101,7 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
     const stores = createCockpitStoreBundle({
       initialChats: [
         {
+          kind: "agent" as const,
           chatId: "chat-1",
           title: "#1 Login UI",
           modelName: "Codex",
@@ -107,6 +110,7 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
           targetDocumentContent: "export const login = true;\n",
         },
         {
+          kind: "agent" as const,
           chatId: "chat-2",
           title: "#2 Stripe Webhook",
           modelName: "Claude",
@@ -246,8 +250,20 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
     document.body.appendChild(rootContainer);
     const stores = createCockpitStoreBundle({
       initialChats: [
-        { chatId: "chat-1", title: "#1", modelName: "Codex", validationState: "ValidatedGreen" },
-        { chatId: "chat-2", title: "#2", modelName: "Claude", validationState: "ReviewYellow" },
+        {
+          kind: "agent" as const,
+          chatId: "chat-1",
+          title: "#1",
+          modelName: "Codex",
+          validationState: "ValidatedGreen",
+        },
+        {
+          kind: "agent" as const,
+          chatId: "chat-2",
+          title: "#2",
+          modelName: "Claude",
+          validationState: "ReviewYellow",
+        },
       ],
     });
     const editorView = new ColorideEditorView({

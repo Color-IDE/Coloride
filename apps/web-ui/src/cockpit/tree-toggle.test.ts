@@ -2,6 +2,7 @@
 import { ColorideEditorView, InMemoryBinaryHostBridge } from "@coloride/editor-cm6";
 import { afterEach, describe, expect, it } from "vitest";
 import { CockpitDomController, createCockpitStoreBundle } from "../index.js";
+import { UI_PREFERENCES_KEY } from "../ui-preferences.js";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -59,7 +60,9 @@ describe("file tree hide / show", () => {
       new KeyboardEvent("keydown", { key: "E", code: "KeyE", ctrlKey: true, shiftKey: true }),
     );
     expect(body().dataset.treeHidden).toBe("true");
-    expect(window.localStorage.getItem("coloride.treeHidden")).toBe("true");
+    expect(JSON.parse(window.localStorage.getItem(UI_PREFERENCES_KEY) ?? "{}").treeHidden).toBe(
+      true,
+    );
 
     // A new window opens with the tree hidden, as the user left it.
     const again = mount();
@@ -67,6 +70,8 @@ describe("file tree hide / show", () => {
     document.dispatchEvent(
       new KeyboardEvent("keydown", { key: "e", code: "KeyE", metaKey: true, shiftKey: true }),
     );
-    expect(window.localStorage.getItem("coloride.treeHidden")).toBe("false");
+    expect(JSON.parse(window.localStorage.getItem(UI_PREFERENCES_KEY) ?? "{}").treeHidden).toBe(
+      false,
+    );
   });
 });

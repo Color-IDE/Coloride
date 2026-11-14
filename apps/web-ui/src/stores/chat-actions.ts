@@ -169,11 +169,11 @@ export function createChatActions(ctx: StoreContext): ChatActions {
               title:
                 options?.title?.trim() ||
                 `Terminal${z3.chats.filter((item) => item.kind === "terminal").length > 0 ? ` ${z3.chats.filter((item) => item.kind === "terminal").length + 1}` : ""}`,
-              modelName: "Shell",
               validationState: "UnchangedBlue",
             }
           : {
               chatId,
+              kind: "agent",
               title: options?.title?.trim() || `#${z3.chats.length + 1} New session`,
               modelName: options?.modelName ?? sibling?.modelName ?? "Codex",
               validationState: "UnchangedBlue",
@@ -186,12 +186,13 @@ export function createChatActions(ctx: StoreContext): ChatActions {
         terminalLogsByChatId: { ...prev.terminalLogsByChatId, [chatId]: [] },
       }));
       // The sidebar lists agent sessions; a shell is only a panel.
-      if (kind !== "terminal") {
+      if (chat.kind === "agent") {
         zone2.setState((prev) => ({
           ...prev,
           sessions: [
             ...prev.sessions,
             {
+              kind: "agent" as const,
               chatId,
               title: chat.title,
               modelName: chat.modelName,

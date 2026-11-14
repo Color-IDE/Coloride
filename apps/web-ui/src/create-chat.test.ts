@@ -7,6 +7,7 @@ import {
 } from "./stores/index.js";
 
 const chat = (chatId: string, modelName = "Codex") => ({
+  kind: "agent" as const,
   chatId,
   title: chatId,
   modelName,
