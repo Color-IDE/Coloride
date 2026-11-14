@@ -471,7 +471,7 @@ describe("Zone 2 option menus", () => {
     expect(stores.navigation.getState().groups).toHaveLength(1);
   });
 
-  it("a new group is created from the group menu", () => {
+  it("a new session is created from the group menu", () => {
     const { get, root, stores } = setup();
     get(".sidebar-row--group .sidebar-more").click();
     const before = stores.zone3.getState().chats.length;
