@@ -1,7 +1,9 @@
-import { attribute, button, reconcile, visibility } from "../dom-utils.js";
+import { NewPanelMenu } from "../cockpit/panels/new-panel-menu.js";
+import { sessionIcon } from "../cockpit/panels/session-presentation.js";
+import { type WorkGroup, listProjects } from "../state/workspace-navigation.js";
 import type { CockpitChatTab, CockpitFileTreeNode, CockpitStoreBundle } from "../stores/index.js";
-import { UI_STRINGS } from "../ui-strings.js";
-import { type WorkGroup, listProjects } from "../workspace-navigation.js";
+import { attribute, button, reconcile, visibility } from "../ui/dom-utils.js";
+import { UI_STRINGS } from "../ui/ui-strings.js";
 import { FOLDER_ICON, GROUP_ICON } from "./icons.js";
 import { SidebarMenu } from "./sidebar-menu.js";
 import { SidebarRow } from "./sidebar-row.js";
@@ -30,6 +32,8 @@ export interface WorkspaceSidebarOptions {
    * Without it the sidebar only switches the navigation state.
    */
   readonly switchWorkspace?: (path: string) => Promise<readonly CockpitFileTreeNode[] | null>;
+  /** What the "+" of a group opens: a terminal panel, or an agent session (the default). */
+  readonly newSessionKind?: "terminal" | "agent";
 }
 
 /** Owns sidebar navigation DOM and subscriptions, independent of the editor and streaming. */
@@ -39,6 +43,7 @@ export class WorkspaceSidebar {
   private readonly openProjectButton: HTMLButtonElement;
   private readonly error: HTMLElement;
   private readonly menu: SidebarMenu;
+  private readonly newPanelMenu: NewPanelMenu;
   private readonly unsubscribers: Array<() => void> = [];
   private opening = false;
   private switching = false;
@@ -51,6 +56,7 @@ export class WorkspaceSidebar {
     treeHost.className = "sidebar-navigation";
     treeHost.setAttribute("aria-label", UI_STRINGS.sidebar.navigation);
     this.menu = new SidebarMenu(treeHost);
+    this.newPanelMenu = new NewPanelMenu(treeHost.ownerDocument);
     this.openProjectButton = button(
       doc,
       "sidebar-row sidebar-open-project sidebar-open-project-label",
@@ -174,15 +180,24 @@ export class WorkspaceSidebar {
       kind: "group",
       icon: GROUP_ICON,
       onSelect: () => this.withProject(projectPath, () => stores.selectWorkGroup(group.id)),
-      onAdd: () =>
-        this.withProject(projectPath, () => {
-          if (stores.createChat({ groupId: group.id }) === null) {
-            this.showError(null, UI_STRINGS.sidebar.noRoom);
-            return;
-          }
-          this.error.hidden = true;
-          stores.setWorkGroupExpanded(group.id, true);
-        }),
+      onAdd: (anchor) => {
+        const create = (kind?: "terminal") =>
+          this.withProject(projectPath, () => {
+            if (stores.createChat({ groupId: group.id, ...(kind ? { kind } : {}) }) === null) {
+              this.showError(null, UI_STRINGS.sidebar.noRoom);
+              return;
+            }
+            this.error.hidden = true;
+            stores.setWorkGroupExpanded(group.id, true);
+          });
+        // With terminals available the "+" offers the same choices as the one of the panels.
+        if (this.options.newSessionKind === "terminal") {
+          this.newPanelMenu.toggle(anchor, {
+            openTerminal: () => create("terminal"),
+            openAgentInterface: () => create(),
+          });
+        } else create();
+      },
       onToggle: () =>
         this.withProject(projectPath, () => {
           const latest = stores.navigation.getState().groups.find((item) => item.id === group.id);
@@ -377,6 +392,7 @@ export class WorkspaceSidebar {
             row = this.createSession(entry.path, group.id, chat);
             nodes.chats.set(id, row);
           }
+          row.setIcon(sessionIcon(chat));
           row.update(chat.title, groupActive && chatState.activeChatId === id);
           nextSessions.push(row.el);
         }

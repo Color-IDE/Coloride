@@ -4,6 +4,7 @@ import { resolveGroupLayout, resolveGroupMaximized } from "@coloride/web-ui";
 import { describe, expect, it } from "vitest";
 import {
   bootstrapDesktopShell,
+  decodeWorkspaceSessionCacheBinary,
   encodeWorkspaceSessionCacheBinary,
   lazyBootDesktopCockpit,
 } from "./index.js";
@@ -85,12 +86,19 @@ describe("@coloride/desktop-tauri — LOT-005 Lazy Boot & Inspector Sync", () =>
     const first = lazyBootDesktopCockpit({
       initialChats: [
         {
+          kind: "agent" as const,
           chatId: "a",
           title: "Implementation",
           modelName: "Codex",
           validationState: "UnchangedBlue",
         },
-        { chatId: "b", title: "Review", modelName: "Claude", validationState: "UnchangedBlue" },
+        {
+          kind: "agent" as const,
+          chatId: "b",
+          title: "Review",
+          modelName: "Claude",
+          validationState: "UnchangedBlue",
+        },
       ],
     });
     first.setWorkspaceRoot("/projects/Coloride");
@@ -168,6 +176,7 @@ describe("@coloride/desktop-tauri — LOT-005 Lazy Boot & Inspector Sync", () =>
       cachedSessionBytes: cachedBytes,
       initialChats: [
         {
+          kind: "agent" as const,
           chatId: "chat-1",
           title: "#1 Restored Chat",
           modelName: "Codex",
@@ -176,6 +185,7 @@ describe("@coloride/desktop-tauri — LOT-005 Lazy Boot & Inspector Sync", () =>
           targetDocumentContent: "export const boot = 'fast';\n",
         },
         {
+          kind: "agent" as const,
           chatId: "chat-2",
           title: "#2 Secondary Chat",
           modelName: "Claude",
@@ -218,10 +228,10 @@ describe("@coloride/desktop-tauri — LOT-005 Lazy Boot & Inspector Sync", () =>
 
     // Wait for deferred background services to finish initializing
     const bgState = await handle.waitForBackgroundServices();
-    expect(bgState.vtslsLspReady).toBe(true);
-    expect(bgState.biomeDaemonReady).toBe(true);
-    expect(bgState.sqliteFts5Ready).toBe(true);
-    expect(bgState.sandboxWarmPoolReady).toBe(true);
+    expect(bgState.vtslsLspReady).toBe(false);
+    expect(bgState.biomeDaemonReady).toBe(false);
+    expect(bgState.sqliteFts5Ready).toBe(false);
+    expect(bgState.sandboxWarmPoolReady).toBe(false);
 
     // Round-trip export of workspace_session_cache.bin reflects latest layout state
     const exportedBytes = handle.exportSessionCacheBinary();
@@ -230,4 +240,27 @@ describe("@coloride/desktop-tauri — LOT-005 Lazy Boot & Inspector Sync", () =>
     handle.destroy();
     rootContainer.remove();
   });
+});
+
+it("restores legacy sessions as explicit kinds and never gives terminals an agent model", () => {
+  const handle = lazyBootDesktopCockpit();
+  const snapshot = decodeWorkspaceSessionCacheBinary(handle.exportSessionCacheBinary());
+  const legacy = {
+    ...snapshot,
+    chats: [
+      { chatId: "old-agent", title: "Agent", modelName: "Codex", validationState: "UnchangedBlue" },
+      {
+        chatId: "old-terminal",
+        title: "Terminal",
+        modelName: "Shell",
+        validationState: "UnchangedBlue",
+      },
+    ],
+  };
+  const bytes = new TextEncoder().encode(JSON.stringify(legacy));
+  const restored = decodeWorkspaceSessionCacheBinary(bytes);
+  expect(restored.chats?.[0]).toMatchObject({ kind: "agent", modelName: "Codex" });
+  expect(restored.chats?.[1]).toMatchObject({ kind: "terminal" });
+  expect(restored.chats?.[1]).not.toHaveProperty("modelName");
+  handle.destroy();
 });

@@ -41,6 +41,7 @@
   }
   .sidebar-row:hover,
   .sidebar-row:has(.sidebar-more[aria-expanded="true"]),
+  .sidebar-row:has(.sidebar-add[aria-expanded="true"]),
   .sidebar-row--session[data-selected="true"] {
     background-color: var(--color-selected);
   }
@@ -81,6 +82,20 @@
   .sidebar-row--folder .sidebar-more {
     margin-left: auto;
   }
+  /* Small glyph before a session's name (a terminal's), in the colour of the text */
+  .sidebar-row-icon {
+    display: inline-flex;
+    flex: none;
+    color: var(--color-text-secondary);
+  }
+  .sidebar-row-icon svg {
+    width: 12px;
+    height: 12px;
+  }
+  .sidebar-row-icon svg.coloride-codex-icon {
+    width: 14px;
+    height: 14px;
+  }
   .sidebar-row--session {
     padding-left: var(--sidebar-text-indent);
   }
@@ -100,7 +115,8 @@
     cursor: pointer;
   }
   .sidebar-icon-button:hover:not(:disabled),
-  .sidebar-more[aria-expanded="true"] {
+  .sidebar-more[aria-expanded="true"],
+  .sidebar-add[aria-expanded="true"] {
     background: var(--sidebar-icon-hover);
     color: var(--color-text-primary);
   }
@@ -119,7 +135,15 @@
   .sidebar-row:hover .sidebar-add,
   .sidebar-row:focus-within .sidebar-more,
   .sidebar-row:focus-within .sidebar-add,
-  .sidebar-more[aria-expanded="true"] {
+  /* While a menu of the row is open (its anchor is the "+" or the three dots) both stay shown.
+     The group toggle also has aria-expanded, so the selector names the two anchors. */
+    .sidebar-row:has(.sidebar-more[aria-expanded="true"])
+    .sidebar-more,
+  .sidebar-row:has(.sidebar-more[aria-expanded="true"]) .sidebar-add,
+  .sidebar-row:has(.sidebar-add[aria-expanded="true"]) .sidebar-more,
+  .sidebar-row:has(.sidebar-add[aria-expanded="true"]) .sidebar-add,
+  .sidebar-more[aria-expanded="true"],
+  .sidebar-add[aria-expanded="true"] {
     visibility: visible;
   }
   .sidebar-chevron {
@@ -255,24 +279,85 @@
   .sidebar-row--session .sidebar-rename-input {
     font-size: 13px;
   }
+  /* Bars on the inner edge of the side panels (sidebar and inspector): a 9px grab area, with the
+     line shown on hover, focus and drag (the same look as the bars between panels). */
+  .coloride-shell-handle {
+    position: absolute;
+    z-index: 8;
+    top: 0;
+    bottom: 0;
+    width: 9px;
+    margin-left: -4.5px;
+    cursor: col-resize;
+    touch-action: none;
+    outline: none;
+    -webkit-app-region: no-drag;
+  }
+  .coloride-shell-handle[data-panel="sidebar"] {
+    left: calc(48px + var(--coloride-sidebar-width, 240px));
+  }
+  /* The inspector is the last column: its bar is measured from the right edge of the shell. */
+  .coloride-shell-handle[data-panel="inspector"] {
+    right: var(--coloride-inspector-width, 480px);
+    margin-left: 0;
+    margin-right: -4.5px;
+  }
+  .coloride-shell-handle[hidden] {
+    display: none;
+  }
+  .coloride-shell-handle::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 4px;
+    width: 1px;
+    background: transparent;
+    transition: background 120ms ease;
+  }
+  .coloride-shell-handle:hover::after,
+  .coloride-shell-handle:focus-visible::after,
+  .coloride-shell-handle[data-dragging="true"]::after {
+    background: rgba(255, 255, 255, 0.4);
+  }
+  /* The panel's scroller: native scrollbar hidden, a thin overlay one is drawn instead. */
+  .coloride-zone-2-viewport {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    /* Reaches over the panel's right padding (p-2.5 = 10px) so the scrollbar sits on the edge. */
+    margin-right: -10px;
+  }
+  .coloride-zone-2-scroll {
+    /* Filling the viewport with inset rather than height: 100%, which a flex item may not
+       resolve, leaving the list as tall as its content and clipped instead of scrollable. */
+    position: absolute;
+    inset: 0;
+    padding-right: 14px; /* the 10px taken back from the panel plus 4px clear of the scrollbar */
+    overflow: auto;
+    scrollbar-width: none;
+  }
+  .coloride-zone-2-scroll::-webkit-scrollbar {
+    display: none;
+  }
+  /* The three-dots menu shares the look of the menu of the + button (see terminal.css) */
   .sidebar-menu {
     position: absolute;
     right: var(--sidebar-edge);
     z-index: 100;
-    min-width: 160px;
+    min-width: 150px;
     max-width: calc(100% - 6px);
-    padding: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: var(--sidebar-row-radius);
+    padding: 3px;
+    border: 0.5px solid rgba(255, 255, 255, 0.14);
+    border-radius: 8px;
     background: #262626;
-    box-shadow: 0 8px 24px #0006;
   }
   .sidebar-menu-item {
     display: block;
     width: 100%;
-    padding: 6px 8px;
+    padding: 5px 8px;
     border: 0;
-    border-radius: 4px;
+    border-radius: 5px;
     background: transparent;
     color: var(--color-text-primary);
     font: inherit;
@@ -282,7 +367,8 @@
   }
   .sidebar-menu-item:hover:not(:disabled),
   .sidebar-menu-item:focus-visible {
-    background: var(--sidebar-icon-hover);
+    background: rgba(255, 255, 255, 0.08);
+    outline: none;
   }
   .sidebar-menu-item:disabled {
     color: var(--color-text-muted);

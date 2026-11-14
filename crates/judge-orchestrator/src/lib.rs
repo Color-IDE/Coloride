@@ -1,3 +1,6 @@
+//! Authorization/state-machine foundation only; PolicyEngine is not operational.
+//! Health-check targets are configuration, not measured execution guarantees.
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

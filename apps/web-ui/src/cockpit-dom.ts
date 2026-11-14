@@ -1,21 +1,49 @@
 import type { ColorideEditorView } from "@coloride/editor-cm6";
-import { ActivityBar } from "./cockpit/activity-bar.js";
-import { ChatGrid } from "./cockpit/chat-grid.js";
-import { Inspector } from "./cockpit/inspector.js";
-import { SidebarPanels } from "./cockpit/sidebar-panels.js";
-import { TitleBar } from "./cockpit/title-bar.js";
-import { askUnsavedPrompt } from "./cockpit/unsaved-dialog.js";
+import {
+  TrustBanner,
+  type WorkspaceTrustHost,
+  type WorkspaceTrustReport,
+} from "./cockpit/dialogs/trust-banner.js";
+import { askUnsavedPrompt } from "./cockpit/dialogs/unsaved-dialog.js";
+import { type DebugHost, DebugPanel } from "./cockpit/inspector/debug-panel.js";
+import { Inspector } from "./cockpit/inspector/inspector.js";
+import { ChatGrid } from "./cockpit/panels/chat-grid.js";
+import { ActivityBar } from "./cockpit/shell/activity-bar.js";
+import { ShellLayout } from "./cockpit/shell/shell-layout.js";
+import { bindShellShortcuts } from "./cockpit/shell/shell-shortcuts.js";
+import { SidebarPanels } from "./cockpit/shell/sidebar-panels.js";
+import { TitleBar } from "./cockpit/shell/title-bar.js";
+import type { TerminalHost, TerminalViewFactory } from "./cockpit/terminal/terminal-pane.js";
+import { createXtermView } from "./cockpit/terminal/xterm-view.js";
 import { OnboardingModalController, createInitialOnboardingState } from "./onboarding/index.js";
+import { UiPreferences, browserStorage } from "./state/ui-preferences.js";
 import type {
   CockpitAstSymbolItem,
   CockpitFileTreeNode,
   CockpitImpactedTestItem,
   CockpitSearchResultItem,
   CockpitStoreBundle,
-  Zone1ActivityState,
   Zone4InspectorState,
 } from "./stores/index.js";
-import { UI_STRINGS, uiText } from "./ui-strings.js";
+import { UI_STRINGS, uiText } from "./ui/ui-strings.js";
+
+export type {
+  DebugCommandMessage,
+  DebugEventMessage,
+  DebugHost,
+} from "./cockpit/inspector/debug-panel.js";
+export type {
+  TerminalHandle,
+  TerminalHost,
+  TerminalView,
+  TerminalViewFactory,
+} from "./cockpit/terminal/terminal-pane.js";
+export { createXtermView } from "./cockpit/terminal/xterm-view.js";
+export type {
+  WorkspaceTrustHost,
+  WorkspaceTrustReport,
+  WorkspaceTrustState,
+} from "./cockpit/dialogs/trust-banner.js";
 
 export interface CockpitDomControllerOptions {
   readonly rootContainer: HTMLElement;
@@ -30,6 +58,17 @@ export interface CockpitDomControllerOptions {
    * can hold back closing the window while it is above zero.
    */
   readonly onUnsavedCountChange?: (count: number) => void;
+  /**
+   * Workspace Trust decision kept by the host. Without it there is no host able to run anything
+   * from the folder, so no restricted-mode notice is shown.
+   */
+  readonly workspaceTrust?: WorkspaceTrustHost;
+  /** Shells for the integrated terminal (Ctrl+`). Without it the terminal is not offered. */
+  readonly terminalHost?: TerminalHost;
+  /** JavaScript debugging (F5). Without it the debugger is not offered. */
+  readonly debugHost?: DebugHost;
+  /** The terminal emulator; xterm.js by default. */
+  readonly createTerminalView?: TerminalViewFactory;
   readonly searchWorkspace?: (query: string) => Promise<readonly CockpitSearchResultItem[]>;
   readonly analyzeDocument?: (
     documentId: string,
@@ -38,13 +77,6 @@ export interface CockpitDomControllerOptions {
     readonly symbols: readonly CockpitAstSymbolItem[];
     readonly impactedTests: readonly CockpitImpactedTestItem[];
   }>;
-}
-
-/** Grid columns shared by the title bar and the shell, so headers stay above their zone. */
-function cockpitGridColumns(z1: Zone1ActivityState): string {
-  const sidebar = z1.sidebarOpen ? "clamp(200px, 19vw, 280px)" : "0px";
-  const inspector = z1.inspectorOpen ? "clamp(300px, 45%, 640px)" : "0px";
-  return `48px ${sidebar} minmax(0, 1fr) ${inspector}`;
 }
 
 /**
@@ -67,6 +99,14 @@ export class CockpitDomController {
   private readonly sidebar: SidebarPanels;
   private readonly chatGrid: ChatGrid;
   private readonly inspector: Inspector;
+  private readonly trustBanner: TrustBanner | null;
+  private readonly terminalAvailable: boolean;
+  private readonly layout: ShellLayout;
+  private readonly debugPanel: DebugPanel | null;
+  /** Breakpoints of every file, keyed by project and document id. */
+  private readonly breakpoints = new Map<string, readonly number[]>();
+  /** Set while the editor switches file: its breakpoint changes then are not the user's. */
+  private switchingDocument = false;
   private zone4RenderCount = 0;
   private analysisRequestSequence = 0;
   private readonly onUnsavedCountChange: ((count: number) => void) | undefined;
@@ -98,12 +138,14 @@ export class CockpitDomController {
     );
 
     const doc = rootContainer.ownerDocument;
+    const preferences = new UiPreferences(browserStorage(doc));
     rootContainer.replaceChildren();
     this.titleBar = new TitleBar(doc, rootContainer, stores);
     this.activityBar = new ActivityBar(doc, stores);
     this.inspector = new Inspector(doc, {
       stores,
       editorView,
+      preferences,
       header: this.titleBar.zone4Header,
       saveActiveDocument: () => this.saveActiveDocument(),
       onFileShown: (path) => this.requestNativeAnalysis(path),
@@ -124,8 +166,20 @@ export class CockpitDomController {
       ...(options.openWorkspace ? { openWorkspace: options.openWorkspace } : {}),
       ...(options.switchWorkspace ? { switchWorkspace: options.switchWorkspace } : {}),
       ...(options.searchWorkspace ? { searchWorkspace: options.searchWorkspace } : {}),
+      // With a terminal host, "New session" opens a terminal, where the user can run an agent.
+      newSessionKind: options.terminalHost ? "terminal" : "agent",
     });
-    this.chatGrid = new ChatGrid(doc, stores, this.titleBar.zone3Header);
+    this.chatGrid = new ChatGrid(
+      doc,
+      stores,
+      this.titleBar.zone3Header,
+      options.terminalHost
+        ? {
+            host: options.terminalHost,
+            createView: options.createTerminalView ?? createXtermView,
+          }
+        : null,
+    );
 
     this.shell = doc.createElement("div");
     this.shell.className = "coloride-cockpit-shell";
@@ -141,7 +195,29 @@ export class CockpitDomController {
       this.chatGrid.element,
       this.inspector.element,
     );
+    this.layout = new ShellLayout(
+      doc,
+      this.shell,
+      this.sidebar.element,
+      this.inspector.element,
+      preferences,
+    );
     rootContainer.append(this.shell);
+    this.terminalAvailable = options.terminalHost !== undefined;
+    this.debugPanel = options.debugHost
+      ? new DebugPanel(doc, options.debugHost, {
+          currentFile: () =>
+            this.inspector.isShowingFile() ? editorView.getStoreSnapshot().documentId : null,
+          breakpoints: () => this.projectBreakpoints(),
+          projectPath: () => stores.navigation.getState().projectPath,
+        })
+      : null;
+    if (this.debugPanel) this.sidebar.debugSection.prepend(this.debugPanel.element);
+    this.trustBanner = options.workspaceTrust ? new TrustBanner(doc, options.workspaceTrust) : null;
+    if (this.trustBanner) {
+      this.shell.append(this.trustBanner.element);
+      void this.trustBanner.refresh();
+    }
 
     this.onboardingController.mountModal(this.shell);
     this.renderLayout();
@@ -151,12 +227,22 @@ export class CockpitDomController {
     this.titleBar.recordChatVisit(stores.zone3.getState().activeChatId);
     this.inspector.mountEditor();
 
-    // On the document, not the shell: with nothing focused (after clicking the title bar or an
-    // empty area) key events target `body`, which is outside the shell.
-    const onKeydown = (event: KeyboardEvent) => this.handleShortcut(event);
-    doc.addEventListener("keydown", onKeydown);
     this.unsubscribers.push(
-      () => doc.removeEventListener("keydown", onKeydown),
+      bindShellShortcuts(doc, {
+        stores,
+        debug: this.debugPanel,
+        terminalAvailable: this.terminalAvailable,
+        openTerminal: () => this.openTerminal(),
+        toggleTree: () => this.inspector.toggleTree(),
+        save: () => this.saveActiveDocument(),
+        reportError: (message) => this.inspector.reportError(message),
+      }),
+      preferences.subscribe(() => this.renderLayout()),
+      // Each folder has its own trust decision: ask again whenever another one is opened.
+      stores.navigation.subscribeSelector(
+        (state) => state.projectPath,
+        () => void this.trustBanner?.refresh(),
+      ),
       stores.navigation.subscribeSelector(
         (state) => [state.projectPath, state.activeGroupId] as const,
         ([projectPath, groupId]) => this.inspector.changeScope(projectPath, groupId),
@@ -224,6 +310,12 @@ export class CockpitDomController {
         if (snap.lastIpcError) this.inspector.reportError(snap.lastIpcError);
         if (snap.lastAckSnapshot) this.requestNativeAnalysis(snap.documentId);
       }),
+      editorView.onBreakpointsChange((lines) => {
+        if (this.switchingDocument || !this.inspector.isShowingFile()) return;
+        const documentId = editorView.getStoreSnapshot().documentId;
+        this.breakpoints.set(this.breakpointKey(documentId), lines);
+        this.debugPanel?.breakpointsChanged(documentId, lines);
+      }),
       this.onboardingController.store.subscribe(() => {
         if (stores.zone1.getState().activeSection === "mcp") this.sidebar.update();
       }),
@@ -232,6 +324,22 @@ export class CockpitDomController {
 
   getOnboardingController(): OnboardingModalController {
     return this.onboardingController;
+  }
+
+  /** Trust decision last reported by the host; null when the cockpit has no trust host. */
+  getWorkspaceTrust(): WorkspaceTrustReport | null {
+    return this.trustBanner?.getReport() ?? null;
+  }
+
+  /** Re-reads the trust decision from the host (after it changed outside the banner). */
+  async refreshWorkspaceTrust(): Promise<void> {
+    await this.trustBanner?.refresh();
+  }
+
+  /** Shows a project file in Zone 4 (opened from "go to definition", for example). */
+  async openWorkspaceFile(path: string): Promise<void> {
+    this.stores.toggleInspector(true);
+    await this.inspector.openFile(path);
   }
 
   async saveActiveDocument(): Promise<void> {
@@ -326,6 +434,7 @@ export class CockpitDomController {
   destroy(): void {
     for (const unsubscribe of this.unsubscribers) unsubscribe();
     this.unsubscribers.length = 0;
+    this.trustBanner?.destroy();
     this.chatGrid.destroy();
     this.inspector.destroy();
     this.sidebar.destroy();
@@ -334,7 +443,7 @@ export class CockpitDomController {
 
   private renderLayout(): void {
     const z1 = this.stores.zone1.getState();
-    const columns = cockpitGridColumns(z1);
+    const columns = this.layout.update(z1);
     this.shell.dataset.uiZoomPercent = String(z1.uiZoomPercent);
     this.shell.dataset.activePersona = z1.activePersona;
     this.shell.dataset.sidebarOpen = String(z1.sidebarOpen);
@@ -361,44 +470,48 @@ export class CockpitDomController {
       .chats.find((chat) => chat.chatId === z4.syncedChatId);
     const content =
       storedContent ?? targetChat?.targetDocumentContent ?? this.editorView.getDocumentText();
-    this.editorView.switchDocument(z4.activeDocumentId, content, [
-      {
-        fromLine: 1,
-        toLine: 1,
-        state: z4.activeValidationState,
-        snapshotHash: `sync-${z4.syncedChatId}`,
-      },
-    ]);
+    // Read before switching: the switch clears the editor's breakpoints.
+    const breakpoints = this.breakpoints.get(this.breakpointKey(z4.activeDocumentId)) ?? [];
+    this.switchingDocument = true;
+    try {
+      this.editorView.switchDocument(z4.activeDocumentId, content, [
+        {
+          fromLine: 1,
+          toLine: 1,
+          state: z4.activeValidationState,
+          snapshotHash: `sync-${z4.syncedChatId}`,
+        },
+      ]);
+      if (breakpoints.length > 0) this.editorView.setBreakpointLines(breakpoints);
+    } finally {
+      this.switchingDocument = false;
+    }
   }
 
-  private handleShortcut(event: KeyboardEvent): void {
-    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
-      event.preventDefault();
-      void this.saveActiveDocument().catch((error: unknown) => {
-        this.inspector.reportError(
-          error instanceof Error ? error.message : UI_STRINGS.editor.saveFailed,
-        );
-      });
-      return;
+  private breakpointKey(documentId: string): string {
+    return `${this.stores.navigation.getState().projectPath}\n${documentId}`;
+  }
+
+  /** The open project's breakpoints, by document id. */
+  private projectBreakpoints(): Map<string, readonly number[]> {
+    const prefix = `${this.stores.navigation.getState().projectPath}\n`;
+    const result = new Map<string, readonly number[]>();
+    for (const [key, lines] of this.breakpoints) {
+      if (key.startsWith(prefix) && lines.length > 0) result.set(key.slice(prefix.length), lines);
     }
-    if (this.stores.handleActivityBarShortcut(event.key, event.metaKey || event.ctrlKey)) {
-      event.preventDefault();
-      return;
-    }
-    if (event.altKey && (event.key === "ArrowRight" || event.key === "ArrowLeft")) {
-      // Alt+Arrow also moves the caret by word in the editor and in text fields (macOS): there it
-      // belongs to the text, never to the session switcher.
-      if (event.defaultPrevented || isTextEditingTarget(event.target)) return;
-      const { chats, activeChatId } = this.stores.zone3.getState();
-      const index = chats.findIndex((chat) => chat.chatId === activeChatId);
-      if (index < 0 || chats.length < 2) return;
-      const delta = event.key === "ArrowRight" ? 1 : -1;
-      const next = chats[(index + delta + chats.length) % chats.length];
-      if (next) {
-        this.stores.selectChat(next.chatId);
-        event.preventDefault();
-      }
-    }
+    return result;
+  }
+
+  /** The debugger panel; null when the host offers none. */
+  getDebugPanel(): DebugPanel | null {
+    return this.debugPanel;
+  }
+
+  /** Shows the shell panel, creating it the first time (Ctrl+` / Ctrl+J). */
+  openTerminal(): void {
+    const existing = this.stores.zone3.getState().chats.find((chat) => chat.kind === "terminal");
+    if (existing) this.stores.selectChat(existing.chatId);
+    else this.stores.createChat({ kind: "terminal", nextToActive: true });
   }
 
   private requestNativeAnalysis(documentId: string): void {
@@ -416,12 +529,4 @@ export class CockpitDomController {
         // A newer document switch or edit may invalidate this request; the next host snapshot retries.
       });
   }
-}
-
-/** Whether keys typed at `target` edit text: a field, or the code editor's content. */
-function isTextEditingTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return (
-    target.isContentEditable || target.closest("input, textarea, [contenteditable='true']") !== null
-  );
 }

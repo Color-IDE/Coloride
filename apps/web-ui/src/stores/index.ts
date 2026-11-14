@@ -1,4 +1,4 @@
-import { createWorkspaceNavigation } from "../workspace-navigation.js";
+import { createWorkspaceNavigation } from "../state/workspace-navigation.js";
 import { createActivityActions } from "./activity-actions.js";
 import { createAgentQueueActions } from "./agent-queue.js";
 import { createChatActions } from "./chat-actions.js";
@@ -12,12 +12,12 @@ import type { CockpitStoreBundle, CockpitStoreOptions } from "./types.js";
 export {
   extractSymbolsHeuristically as extractAstSymbolsFromSource,
   inferImpactedTestsHeuristically as computeImpactedTestsForBuffer,
-} from "../cockpit-analysis.js";
-export { AtomicStore, type StoreListener } from "../atomic-store.js";
-export { COLORIDE_DESIGN_TOKENS, type DesignStateTokens } from "../design-state-tokens.js";
-export type { AreaSize } from "../layout-tree.js";
-export type { WorkGroup, WorkspaceNavigationState } from "../workspace-navigation.js";
-export { resolveGroupLayout, resolveGroupMaximized } from "../workspace-navigation.js";
+} from "../analysis/cockpit-analysis.js";
+export { AtomicStore, type StoreListener } from "../state/atomic-store.js";
+export { COLORIDE_DESIGN_TOKENS, type DesignStateTokens } from "../ui/design-state-tokens.js";
+export type { AreaSize } from "../layout/layout-tree.js";
+export type { WorkGroup, WorkspaceNavigationState } from "../state/workspace-navigation.js";
+export { resolveGroupLayout, resolveGroupMaximized } from "../state/workspace-navigation.js";
 export type * from "./types.js";
 
 /**

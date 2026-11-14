@@ -1,6 +1,6 @@
 import type { Extension, Text } from "@codemirror/state";
 import { RectangleMarker, type ViewUpdate, layer } from "@codemirror/view";
-import { indentGuideColumns } from "./indent-guide-columns.js";
+import { detectIndentSize, indentGuideColumns } from "./indent-guide-columns.js";
 import { rowVertical } from "./line-geometry.js";
 
 /** Indentation scope guides drawn as a CodeMirror layer; the active scope is highlighted. */
@@ -10,7 +10,10 @@ const columnsCache = new WeakMap<Text, { tabSize: number; columns: number[][] }>
 function guideColumns(doc: Text, tabSize: number): number[][] {
   const cached = columnsCache.get(doc);
   if (cached?.tabSize === tabSize) return cached.columns;
-  const columns = indentGuideColumns(doc.toString().split("\n"), tabSize);
+  const lines = doc.toString().split("\n");
+  // The guide step follows the file's own indentation (3 spaces in a LICENSE, 2 in this code);
+  // tab-indented lines still count `tabSize` columns per tab.
+  const columns = indentGuideColumns(lines, detectIndentSize(lines), tabSize);
   columnsCache.set(doc, { tabSize, columns });
   return columns;
 }

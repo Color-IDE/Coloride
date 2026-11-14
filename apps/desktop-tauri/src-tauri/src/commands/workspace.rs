@@ -30,7 +30,13 @@ fn collect_workspace_nodes(
         .map_err(|error| format!("Failed to read {}: {error}", current.display()))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| format!("Failed to enumerate {}: {error}", current.display()))?;
-    entries.sort_by_key(|entry| entry.file_name().to_string_lossy().to_lowercase());
+    // Folders first, then files; each group alphabetical without regard to case (as in the
+    // usual editors), with the original name as the tie-break so the order is stable.
+    entries.sort_by_cached_key(|entry| {
+        let is_directory = entry.file_type().is_ok_and(|kind| kind.is_dir());
+        let name = entry.file_name().to_string_lossy().into_owned();
+        (!is_directory, name.to_lowercase(), name)
+    });
 
     for entry in entries {
         let path = entry.path();
@@ -94,6 +100,40 @@ pub(crate) fn load_workspace(
         .context_engine
         .lock()
         .map_err(|_| "context engine lock poisoned".to_string())?;
+    // The previous workspace's gate is closed first: anything still holding it (a language
+    // server supervisor, a pending trust prompt) can no longer launch a process. The new
+    // workspace starts from its persisted decision, untrusted by default.
+    let mut trust_gate = state
+        .trust_gate
+        .lock()
+        .map_err(|_| "workspace trust lock poisoned".to_string())?;
+    if let Some(previous) = trust_gate.take() {
+        previous.close();
+    }
+    *trust_gate = host_core::WorkspaceTrustGate::open(state.trust_store_path(), &canonical)
+        .map_err(|error| tracing::warn!(%error, "workspace stays untrusted"))
+        .ok();
+    // Same for its language servers: stopping them kills their processes. The new workspace
+    // gets its own set, which stays idle until it is trusted.
+    let mut language_services = state
+        .language_services
+        .lock()
+        .map_err(|_| "language services lock poisoned".to_string())?;
+    if let Some(previous) = language_services.take() {
+        previous.stop();
+    }
+    state.latest_diagnostics.clear();
+    // Terminals ran in the previous folder, under its trust: they go with it.
+    crate::commands::terminal::close_all_terminals(state);
+    crate::commands::debug::stop_debugging(state);
+    *language_services = trust_gate.as_ref().map(|gate| {
+        std::sync::Arc::new(host_core::LanguageServices::new(
+            gate.clone(),
+            state.diagnostics_sink.clone(),
+        ))
+    });
+    drop(language_services);
+    drop(trust_gate);
     *state
         .workspace_root
         .lock()
@@ -174,6 +214,39 @@ mod tests {
         assert_eq!(state.workspace_generation.load(Ordering::SeqCst), 1);
         assert!(ensure_context_engine(&state));
         assert!(state.context_engine.lock().unwrap().is_some());
+    }
+
+    #[test]
+    fn the_tree_lists_folders_first_then_files_alphabetically_ignoring_case() {
+        let data = tempfile::tempdir().unwrap();
+        let workspace = tempfile::tempdir().unwrap();
+        for dir in ["zeta", "Apps", "crates", ".github"] {
+            std::fs::create_dir(workspace.path().join(dir)).unwrap();
+        }
+        for file in ["README.md", "biome.json", "AGENTS.md", ".gitignore"] {
+            std::fs::write(workspace.path().join(file), "x\n").unwrap();
+        }
+        std::fs::write(workspace.path().join("Apps/main.ts"), "x\n").unwrap();
+        let state = test_state(data.path());
+
+        let nodes = load_workspace(&state, workspace.path().to_str().unwrap()).unwrap();
+        assert_eq!(
+            nodes
+                .iter()
+                .map(|node| node.path.as_str())
+                .collect::<Vec<_>>(),
+            [
+                ".github",
+                "Apps",
+                "Apps/main.ts",
+                "crates",
+                "zeta",
+                ".gitignore",
+                "AGENTS.md",
+                "biome.json",
+                "README.md"
+            ]
+        );
     }
 
     #[test]

@@ -89,10 +89,25 @@ pub fn search_workspace_command(
 
 #[tauri::command]
 pub fn analyze_document_command(
+    app: tauri::AppHandle,
     state: tauri::State<'_, DesktopAppState>,
     document_id: String,
     session_generation: u32,
 ) -> Result<DesktopAstAnalysis, String> {
+    // Confirming import edges asks vtsls: never on this (main) thread. The next analysis shows
+    // the result.
+    {
+        let app = app.clone();
+        let document_id = document_id.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            use tauri::Manager;
+            crate::commands::semantic::enrich_import_edges(
+                &app.state::<DesktopAppState>(),
+                &document_id,
+                session_generation,
+            )
+        });
+    }
     let bridge = state
         .bridge
         .lock()

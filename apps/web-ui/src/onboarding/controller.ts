@@ -5,8 +5,8 @@ import {
   type DeclarativeVsixBundle,
   type KeymapPresetId,
 } from "@coloride/editor-cm6";
-import { AtomicStore } from "../atomic-store.js";
-import { UI_STRINGS } from "../ui-strings.js";
+import { AtomicStore } from "../state/atomic-store.js";
+import { UI_STRINGS } from "../ui/ui-strings.js";
 import {
   type ImportedEditorSettings,
   defaultEditorSettings,

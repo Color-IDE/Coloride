@@ -281,6 +281,91 @@ export type DiagnosticEntry = {
   message: string;
 };
 
+export type DocumentDiagnostics = {
+  schema_version: number;
+  document_id: string;
+  session_generation: number;
+  base_revision: number;
+  content_blake3_hash: string;
+  source: DiagnosticSource;
+  items: Array<DiagnosticEntry>;
+};
+
+export type LanguageFeature =
+  | "Completion"
+  | "Definition"
+  | "References"
+  | { Rename: { new_name: string } }
+  | "Formatting";
+
+export type LanguageFeatureRequest = {
+  document_id: string;
+  session_generation: number;
+  revision: number;
+  position_utf16: Utf16CodeUnitOffset;
+  feature: LanguageFeature;
+};
+
+export type LanguageLocation = {
+  file_path: string;
+  inside_workspace: boolean;
+  start: LineCol;
+  end: LineCol;
+  span_utf16: Utf16Span | null;
+};
+
+export type LanguageTextEdit = {
+  span_utf16: Utf16Span;
+  new_text: string;
+};
+
+export type LanguageCompletionItem = {
+  label: string;
+  kind: string;
+  detail: string | null;
+  sort_text: string;
+  filter_text: string;
+  insert_text: string;
+  replace_span_utf16: Utf16Span | null;
+};
+
+export type LanguageFileEdit = {
+  start: LineCol;
+  end: LineCol;
+  new_text: string;
+};
+
+export type LanguageFileEdits = {
+  file_path: string;
+  inside_workspace: boolean;
+  edits: Array<LanguageFileEdit>;
+};
+
+export type LanguageFeatureResult =
+  | {
+      Completions: {
+        items: Array<LanguageCompletionItem>;
+        is_incomplete: boolean;
+      };
+    }
+  | { Locations: { locations: Array<LanguageLocation> } }
+  | { Edits: { edits: Array<LanguageTextEdit> } }
+  | {
+      Rename: {
+        edits: Array<LanguageTextEdit>;
+        other_files: Array<LanguageFileEdits>;
+      };
+    };
+
+export type LanguageFeatureResponse = {
+  schema_version: number;
+  document_id: string;
+  session_generation: number;
+  base_revision: number;
+  content_blake3_hash: string;
+  result: LanguageFeatureResult;
+};
+
 export type QualityDiagnosticsSummary = {
   vtsls_error_count: number;
   vtsls_warning_count: number;

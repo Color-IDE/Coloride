@@ -1,0 +1,30 @@
+/*
+ * Text can not be selected anywhere in the app, as in a native one, except where reading or
+ * copying it is the point: the code editor, inputs, file previews, the messages and logs of a
+ * session, and the debugger's stack, variables and output. (The terminal selects through its own
+ * emulator.) `-webkit-` is needed for the macOS web view.
+ */
+@layer base {
+  html,
+  body {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  input,
+  textarea,
+  [contenteditable="true"],
+  .cm-editor,
+  .cm-editor .cm-content,
+  .coloride-zone-4-preview-host,
+  .coloride-chat-cell-messages,
+  .coloride-chat-cell-logs,
+  .coloride-debug-stack,
+  .coloride-debug-variables,
+  .coloride-debug-output,
+  .coloride-global-search-results {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+}

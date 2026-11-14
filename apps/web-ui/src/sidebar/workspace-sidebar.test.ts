@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createCockpitStoreBundle } from "../stores/index.js";
-import { FrameBatchedStreamRenderer } from "../stream-renderer.js";
+import { FrameBatchedStreamRenderer } from "../ui/stream-renderer.js";
 import { WorkspaceSidebar } from "./workspace-sidebar.js";
 
 const cleanup: Array<() => void> = [];
@@ -13,12 +13,19 @@ function setup(openWorkspace?: () => Promise<readonly [] | null>) {
   const stores = createCockpitStoreBundle({
     initialChats: [
       {
+        kind: "agent" as const,
         chatId: "a",
         title: "Implementation",
         modelName: "Codex",
         validationState: "UnchangedBlue",
       },
-      { chatId: "b", title: "Review", modelName: "Claude", validationState: "UnchangedBlue" },
+      {
+        kind: "agent" as const,
+        chatId: "b",
+        title: "Review",
+        modelName: "Claude",
+        validationState: "UnchangedBlue",
+      },
     ],
   });
   stores.setProjectPath("/projects/Coloride");

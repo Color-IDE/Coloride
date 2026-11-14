@@ -1,5 +1,5 @@
 import type { KeymapPresetId } from "@coloride/editor-cm6";
-import { UI_STRINGS } from "../ui-strings.js";
+import { UI_STRINGS } from "../ui/ui-strings.js";
 import type { NativeMigrationReport, OnboardingState, QuarantinedMcpServerEntry } from "./types.js";
 
 export interface OnboardingModalActions {

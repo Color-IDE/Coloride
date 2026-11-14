@@ -133,6 +133,9 @@ pub(super) fn resolve_import_specifier(
 pub struct ImpactAnalyzer {
     files: BTreeMap<String, IndexedWorkspaceFile>,
     edges: Vec<DependencyEdge>,
+    /// `(importer, target)` resolutions confirmed by a language server (`LOT-010`). They outlive
+    /// edge rebuilds, and are dropped when the importer's imports change.
+    semantic_confirmations: BTreeSet<(String, String)>,
 }
 
 impl ImpactAnalyzer {
@@ -146,6 +149,17 @@ impl ImpactAnalyzer {
         let normalized_path = normalize_repo_path(path);
         let symbols = tree.symbols();
         let imports = tree.imports();
+        let same_imports = self.files.get(&normalized_path).is_some_and(|previous| {
+            previous.imports.len() == imports.len()
+                && previous.imports.iter().zip(&imports).all(|(a, b)| {
+                    a.source_specifier == b.source_specifier
+                        && a.imported_symbols == b.imported_symbols
+                })
+        });
+        if !same_imports {
+            self.semantic_confirmations
+                .retain(|(importer, _)| importer != &normalized_path);
+        }
         let referenced_identifiers = tree.all_referenced_identifiers(rope);
 
         self.files.insert(
@@ -172,19 +186,39 @@ impl ImpactAnalyzer {
         &self.edges
     }
 
-    /// Upgrade an existing edge's confidence level to `ExactSemantic` (e.g. when enriched by `vtsls` in `LOT-010`).
+    /// Sets the confidence of the edge `importer_file → target_file`. `ExactSemantic` is
+    /// remembered as a confirmation (see `semantic_confirmations`); any other level withdraws
+    /// it. Returns whether such an edge exists.
     pub fn upgrade_edge_confidence(
         &mut self,
         importer_file: &str,
         target_file: &str,
         confidence: GraphEdgeConfidence,
-    ) {
-        let imp = normalize_repo_path(importer_file);
-        let tgt = normalize_repo_path(target_file);
+    ) -> bool {
+        let key = (
+            normalize_repo_path(importer_file),
+            normalize_repo_path(target_file),
+        );
+        let mut found = false;
         for edge in &mut self.edges {
-            if edge.importer_file == imp && edge.target_file == tgt {
+            if edge.importer_file == key.0 && edge.target_file == key.1 {
                 edge.confidence = confidence;
+                found = true;
             }
+        }
+        if found && confidence == GraphEdgeConfidence::ExactSemantic {
+            self.semantic_confirmations.insert(key);
+        } else {
+            self.semantic_confirmations.remove(&key);
+        }
+        found
+    }
+
+    /// Keeps the confirmations of `previous` whose edge still exists here (after the analyzer
+    /// was rebuilt from scratch).
+    pub fn carry_semantic_confirmations(&mut self, previous: &Self) {
+        for (importer, target) in &previous.semantic_confirmations {
+            self.upgrade_edge_confidence(importer, target, GraphEdgeConfidence::ExactSemantic);
         }
     }
 
@@ -241,6 +275,15 @@ impl ImpactAnalyzer {
                         }
                     }
                 }
+            }
+        }
+        for edge in &mut next_edges {
+            if self
+                .semantic_confirmations
+                .contains(&(edge.importer_file.clone(), edge.target_file.clone()))
+                && edge.confidence == GraphEdgeConfidence::SyntacticAst
+            {
+                edge.confidence = GraphEdgeConfidence::ExactSemantic;
             }
         }
         self.edges = next_edges;

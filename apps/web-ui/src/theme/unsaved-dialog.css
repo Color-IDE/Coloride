@@ -1,0 +1,66 @@
+/* Unsaved-changes dialog */
+@layer components {
+  /* Confirmation shown when closing a tab that has unsaved changes */
+  .coloride-unsaved-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* No dimming (a dark layer made the editor behind look darker for no reason): only a very
+       light blur of what is behind, and clicks outside the dialog land here. */
+    background: transparent;
+    backdrop-filter: blur(1px);
+    -webkit-backdrop-filter: blur(1px);
+  }
+  .coloride-unsaved-dialog {
+    width: min(300px, calc(100% - 32px));
+    padding: 10px 12px;
+    border: 0.5px solid rgba(255, 255, 255, 0.14);
+    border-radius: 12px;
+    background: var(--color-card);
+    color: var(--color-text-primary);
+  }
+  .coloride-unsaved-dialog h3 {
+    margin: 0 0 2px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .coloride-unsaved-dialog p {
+    margin: 0 0 8px;
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+  }
+  .coloride-unsaved-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+  .coloride-unsaved-actions button {
+    height: 26px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 6px;
+    background: var(--color-selected);
+    color: var(--color-text-primary);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .coloride-unsaved-actions button:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.5);
+    outline-offset: 2px;
+  }
+  .coloride-unsaved-actions button:hover {
+    background: rgba(255, 255, 255, 0.14);
+  }
+  .coloride-unsaved-actions .coloride-unsaved-primary {
+    background: #e8e8e8;
+    color: #1a1a1a;
+  }
+  .coloride-unsaved-actions .coloride-unsaved-primary:hover {
+    background: #fff;
+  }
+}

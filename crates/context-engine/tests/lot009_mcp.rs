@@ -317,3 +317,56 @@ fn exact_symbol_lookup_is_not_truncated_by_lexical_candidate_limit() {
         .add_colorideignore_rules("src/duplicate1.ts");
     assert_eq!(engine.get_symbol_definition("commonSymbol").len(), 268);
 }
+
+/// LOT-010: the Host's revision-tagged batches reach `get_diagnostics`, bound to their content.
+#[test]
+fn host_diagnostics_batches_are_published_for_their_content_hash() {
+    let (_dir, mut server) = fixture();
+    initialize(&mut server);
+    let path = "src/money0.ts";
+    let hash = server.engine.files_table()[path]
+        .content_blake3_hash
+        .clone();
+    let entry = |source| host_core::DiagnosticEntry {
+        file_path: path.into(),
+        span_utf16: host_core::Utf16Span::new(
+            host_core::Utf16CodeUnitOffset::new(0),
+            host_core::Utf16CodeUnitOffset::new(6),
+        ),
+        line_col: host_core::LineCol::new(0, 0),
+        source,
+        severity: host_core::DiagnosticSeverity::Error,
+        code: "2304".into(),
+        message: "Cannot find name 'x'.".into(),
+    };
+    let batch = |source, hash: &str| host_core::DocumentDiagnostics {
+        schema_version: host_core::CONTRACT_SCHEMA_VERSION,
+        document_id: path.into(),
+        session_generation: 1,
+        base_revision: 3,
+        content_blake3_hash: hash.into(),
+        source,
+        items: vec![entry(source)],
+    };
+    let both = [
+        batch(host_core::DiagnosticSource::Vtsls, &hash),
+        batch(host_core::DiagnosticSource::Biome, &hash),
+    ];
+    server.publish_document_diagnostics(&both).unwrap();
+    let answer = call(&mut server, "get_diagnostics", json!({"file_path": path}));
+    assert_eq!(answer["status"], "Available");
+    assert_eq!(answer["items"].as_array().unwrap().len(), 2);
+
+    // Mixed contents are refused; diagnostics for other content are reported as stale.
+    assert!(server
+        .publish_document_diagnostics(&[
+            both[0].clone(),
+            batch(host_core::DiagnosticSource::Biome, "other")
+        ])
+        .is_err());
+    server
+        .publish_document_diagnostics(&[batch(host_core::DiagnosticSource::Vtsls, "other")])
+        .unwrap();
+    let answer = call(&mut server, "get_diagnostics", json!({"file_path": path}));
+    assert_eq!(answer["status"], "Stale");
+}

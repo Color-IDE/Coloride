@@ -1,0 +1,111 @@
+/* Restricted-mode notice */
+@layer components {
+  /* Restricted-mode notice of an untrusted folder: floats over the shell, moves no zone */
+  .coloride-trust-banner {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    z-index: 15;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    width: 300px;
+    max-width: calc(100% - 24px);
+    padding: 10px 12px;
+    border: 0.5px solid rgba(255, 255, 255, 0.14);
+    border-radius: 12px;
+    background: var(--color-card);
+    color: var(--color-text-secondary);
+    font-size: 11px;
+  }
+  .coloride-trust-banner[hidden] {
+    display: none;
+  }
+  .coloride-trust-banner-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .coloride-trust-banner-icon {
+    display: inline-flex;
+    color: #ffb450;
+  }
+  .coloride-trust-banner strong {
+    color: #ffb450;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .coloride-trust-banner p {
+    margin: 0;
+    text-align: justify;
+    hyphens: auto;
+    line-height: 1.4;
+  }
+  .coloride-trust-banner-more[hidden] {
+    display: none;
+  }
+  .coloride-trust-banner-more {
+    font-size: 10.5px;
+    color: var(--color-text-secondary);
+  }
+  .coloride-trust-banner button {
+    border: 0;
+    cursor: pointer;
+  }
+  .coloride-trust-banner-close {
+    display: inline-flex;
+    margin-left: auto;
+    padding: 4px;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-text-secondary);
+  }
+  .coloride-trust-banner-close:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--color-text-primary);
+  }
+  .coloride-trust-banner-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 0;
+    padding-top: 8px;
+    border-top: 0.5px solid rgba(255, 255, 255, 0.14);
+  }
+  .coloride-trust-banner-learn {
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .coloride-trust-banner-learn:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--color-text-primary);
+  }
+  .coloride-trust-banner-action {
+    height: 24px;
+    padding: 0 10px;
+    border-radius: 6px;
+    background: #e8b83f;
+    color: #1a1a1a;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .coloride-trust-banner-action:hover {
+    background: #f1c458;
+  }
+  .coloride-trust-banner-action:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+  .coloride-trust-banner button:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.5);
+    outline-offset: 2px;
+  }
+}

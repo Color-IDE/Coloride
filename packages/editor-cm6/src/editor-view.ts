@@ -1,26 +1,15 @@
-import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
-import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { indentUnit } from "@codemirror/language";
+import { history } from "@codemirror/commands";
+
 import {
   Annotation,
   EditorSelection as CmSelection,
   Compartment,
-  EditorState,
   Transaction,
 } from "@codemirror/state";
-import {
-  EditorView,
-  drawSelection,
-  dropCursor,
-  highlightActiveLine,
-  highlightActiveLineGutter,
-  highlightSpecialChars,
-  keymap,
-  lineNumbers,
-  rectangularSelection,
-} from "@codemirror/view";
+import { EditorView } from "@codemirror/view";
 import {
   CONTRACT_SCHEMA_VERSION,
+  type DocumentDiagnostics,
   type EditorSnapshot,
   type EditorTransaction,
   type TextChange,
@@ -31,14 +20,29 @@ import {
   decodeEditorSnapshotBinary,
   encodeEditorTransactionBinary,
 } from "./binary-ipc.js";
+import { breakpointLines, breakpointsField, setBreakpointsEffect } from "./breakpoints.js";
 import {
   type EditorRangeDecoration,
-  colorideStateDecorations,
   colorideStateField,
   setColorideDecorationsEffect,
   suppressLocalInvalidationAnnotation,
 } from "./decorations.js";
-import { createLezerHighlightingExtensions } from "./languages.js";
+import {
+  type DiagnosticsApplyResult,
+  type EditorDiagnostic,
+  RevisionHistory,
+  clearDiagnosticsEffect,
+  diagnosticsField,
+  diagnosticsFromBatch,
+  setSourceDiagnosticsEffect,
+} from "./diagnostics.js";
+import { createEditorState } from "./editor-state.js";
+import {
+  LanguageFeatureClient,
+  type LanguageFeatureProvider,
+  type NavigateToLocation,
+} from "./language-features.js";
+import { createLezerHighlightingExtensions, detectLanguageFromPath } from "./languages.js";
 import {
   type Cm6TranslatedKeybinding,
   DEFAULT_COLORIDE_CM6_THEME,
@@ -47,14 +51,10 @@ import {
   type DeclarativeVsixTheme,
   KEYMAP_PRESET_BINDINGS,
   type KeymapPresetId,
-  createKeymapCompartmentExtension,
   createKeymapExtension,
-  createThemeCompartmentExtension,
   createThemeExtension,
   renderSnippetTemplate,
 } from "./onboarding-vsix.js";
-import { scopeGuides } from "./scope-guides.js";
-import { highlightSelectedLineGutter, textOnlySelection } from "./selection.js";
 
 const documentSwitchAnnotation = Annotation.define<boolean>();
 const transactionOriginAnnotation = Annotation.define<TransactionOrigin>();
@@ -66,6 +66,10 @@ export interface ColorideEditorStoreSnapshot {
   readonly imeComposing: boolean;
   readonly lastAckSnapshot: EditorSnapshot | null;
   readonly droppedStaleIpcPackets: number;
+  /** Diagnostics refused or dropped because the text had changed since they were computed. */
+  readonly discardedStaleDiagnostics: number;
+  /** Language server answers (completions, edits, locations) dropped for the same reason. */
+  readonly discardedStaleLanguageAnswers: number;
   readonly mountCount: number;
   readonly activeKeymapPreset: KeymapPresetId;
   readonly activeThemeLabel: string;
@@ -99,6 +103,22 @@ export class ColorideEditorView {
   private lastAckSnapshot: EditorSnapshot | null = null;
   private lastIpcError: string | null = null;
   private droppedStaleIpcPackets = 0;
+  private discardedStaleDiagnostics = 0;
+  private readonly revisionHistory = new RevisionHistory();
+  private readonly languageFeatures = new LanguageFeatureClient({
+    current: () => ({
+      documentId: this.documentId,
+      sessionGeneration: this.sessionGeneration,
+      revision: this.localRevision,
+    }),
+    view: () => this.getEditorView(),
+    discardStale: () => {
+      this.discardedStaleLanguageAnswers += 1;
+      this.notifyStoreListeners();
+    },
+  });
+  private discardedStaleLanguageAnswers = 0;
+  private readonly breakpointListeners = new Set<(lines: readonly number[]) => void>();
   private mountCount = 0;
   private activeKeymapPreset: KeymapPresetId;
   private customKeybindings: Cm6TranslatedKeybinding[] = [];
@@ -109,6 +129,8 @@ export class ColorideEditorView {
   private readonly keymapCompartment = new Compartment();
   private readonly themeCompartment = new Compartment();
   private readonly historyCompartment = new Compartment();
+  /** Grammar + highlighting of the file shown; swapped in place when another file is opened. */
+  private readonly languageCompartment = new Compartment();
   private unsubscribeIpc: (() => void) | null = null;
   private readonly storeListeners = new Set<() => void>();
   private readonly ipcChannel: BinaryIpcChannel;
@@ -126,7 +148,21 @@ export class ColorideEditorView {
       this.handleIncomingBinarySnapshot(payload);
     });
 
-    const state = this.createEditorState(
+    const state = createEditorState(
+      {
+        historyCompartment: this.historyCompartment,
+        languageCompartment: this.languageCompartment,
+        keymapCompartment: this.keymapCompartment,
+        themeCompartment: this.themeCompartment,
+        activeKeymapPreset: this.activeKeymapPreset,
+        customKeybindings: this.customKeybindings,
+        activeTheme: this.activeTheme,
+        languageFeatures: this.languageFeatures,
+        hostDeltaSync: this.createHostDeltaSyncExtension(),
+        onKeyCommand: (command) => {
+          this.lastTriggeredKeyCommand = command;
+        },
+      },
       options.initialDocumentId,
       options.initialContent,
       options.initialDecorations ?? [],
@@ -173,6 +209,78 @@ export class ColorideEditorView {
   }
 
   /**
+   * Shows the diagnostics one tool computed for one revision of this document (`LOT-010`).
+   *
+   * The batch replaces that tool's previous diagnostics. It is refused as a whole if it was
+   * computed for another document, an earlier opening of this one, or a revision the editor
+   * cannot map from. If the text has changed since `base_revision`, each diagnostic is either
+   * shifted by the edits made around it or, when its line was edited, discarded: a diagnostic
+   * is never drawn at offsets that no longer hold the code it was computed for.
+   */
+  applyDocumentDiagnostics(batch: DocumentDiagnostics): DiagnosticsApplyResult {
+    const reject = (rejected: NonNullable<DiagnosticsApplyResult["rejected"]>) => {
+      this.discardedStaleDiagnostics += batch.items.length;
+      this.notifyStoreListeners();
+      return { applied: 0, discarded: batch.items.length, rejected };
+    };
+    if (
+      batch.document_id !== this.documentId ||
+      batch.session_generation !== this.sessionGeneration
+    ) {
+      return reject("stale-session");
+    }
+    const rebased = this.revisionHistory.rebase(
+      diagnosticsFromBatch(batch),
+      batch.base_revision,
+      this.localRevision,
+    );
+    if (!rebased) return reject("unknown-revision");
+    this.discardedStaleDiagnostics += rebased.discarded;
+    this.getEditorView().dispatch({
+      effects: setSourceDiagnosticsEffect.of({ source: batch.source, diagnostics: rebased.kept }),
+    });
+    this.notifyStoreListeners();
+    return { applied: rebased.kept.length, discarded: rebased.discarded };
+  }
+
+  /**
+   * Connects the host's language servers: completions, F12 go to definition, Shift+Alt+F
+   * formatting. `navigate` is called when a definition is in another file.
+   */
+  setLanguageFeatureProvider(
+    provider: LanguageFeatureProvider | null,
+    navigate?: NavigateToLocation,
+  ): void {
+    this.languageFeatures.setProvider(provider, navigate);
+  }
+
+  /** Language features of the current revision; answers that arrive late are dropped. */
+  getLanguageFeatures(): LanguageFeatureClient {
+    return this.languageFeatures;
+  }
+
+  /** Breakpoints of the shown document (1-based lines), as moved by the edits since. */
+  getBreakpointLines(): number[] {
+    return breakpointLines(this.getEditorView().state);
+  }
+
+  /** Shows these breakpoints (another document's, after a switch). */
+  setBreakpointLines(lines: readonly number[]): void {
+    this.getEditorView().dispatch({ effects: setBreakpointsEffect.of(lines) });
+  }
+
+  /** Called with the lines whenever the user (or an edit) changes the breakpoints. */
+  onBreakpointsChange(listener: (lines: readonly number[]) => void): () => void {
+    this.breakpointListeners.add(listener);
+    return () => this.breakpointListeners.delete(listener);
+  }
+
+  /** Diagnostics currently shown, at offsets of the current text. */
+  getDiagnostics(): readonly EditorDiagnostic[] {
+    return this.getEditorView().state.field(diagnosticsField).diagnostics;
+  }
+
+  /**
    * Switch to another file inside the existing `EditorView` instance without remounting DOM.
    * Increments `sessionGeneration` so any delayed IPC event from the previous file is dropped.
    */
@@ -182,9 +290,12 @@ export class ColorideEditorView {
     decorations: readonly EditorRangeDecoration[] = [],
   ): void {
     const view = this.getEditorView();
+    const languageChanged =
+      detectLanguageFromPath(nextDocumentId) !== detectLanguageFromPath(this.documentId);
     this.sessionGeneration += 1;
     this.documentId = nextDocumentId;
     this.localRevision = 0;
+    this.revisionHistory.clear();
     this.imeComposing = false;
     this.imeBasePos = null;
     this.imePreviewLength = 0;
@@ -201,6 +312,16 @@ export class ColorideEditorView {
       selection: CmSelection.cursor(0),
       effects: [
         this.historyCompartment.reconfigure([]),
+        ...(languageChanged
+          ? [
+              this.languageCompartment.reconfigure(
+                createLezerHighlightingExtensions(nextDocumentId),
+              ),
+            ]
+          : []),
+        clearDiagnosticsEffect.of(null),
+        // Breakpoints belong to the previous file (the cockpit restores this one's).
+        setBreakpointsEffect.of([]),
         setColorideDecorationsEffect.of(decorations),
         suppressLocalInvalidationAnnotation.of(true),
       ],
@@ -321,6 +442,8 @@ export class ColorideEditorView {
       imeComposing: this.imeComposing,
       lastAckSnapshot: this.lastAckSnapshot,
       droppedStaleIpcPackets: this.droppedStaleIpcPackets,
+      discardedStaleDiagnostics: this.discardedStaleDiagnostics,
+      discardedStaleLanguageAnswers: this.discardedStaleLanguageAnswers,
       mountCount: this.mountCount,
       activeKeymapPreset: this.activeKeymapPreset,
       activeThemeLabel: this.activeTheme.label,
@@ -454,56 +577,6 @@ export class ColorideEditorView {
     this.storeListeners.clear();
   }
 
-  private createEditorState(
-    documentId: string,
-    initialContent: string,
-    initialDecorations: readonly EditorRangeDecoration[],
-  ): EditorState {
-    const baseState = EditorState.create({
-      doc: initialContent,
-      extensions: [
-        EditorState.tabSize.of(2),
-        indentUnit.of("  "),
-        ...colorideStateDecorations(),
-        highlightSelectedLineGutter(),
-        scopeGuides(),
-        textOnlySelection(),
-        lineNumbers({
-          formatNumber: (lineNo) => String(lineNo).padStart(4, " "),
-        }),
-        highlightActiveLineGutter(),
-        highlightSpecialChars(),
-        this.historyCompartment.of(history()),
-        drawSelection(),
-        dropCursor(),
-        EditorState.allowMultipleSelections.of(true),
-        rectangularSelection(),
-        closeBrackets(),
-        highlightActiveLine(),
-        keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
-        ...createLezerHighlightingExtensions(documentId),
-        createKeymapCompartmentExtension(
-          this.keymapCompartment,
-          this.activeKeymapPreset,
-          this.customKeybindings,
-          (cmd) => {
-            this.lastTriggeredKeyCommand = cmd;
-          },
-        ),
-        createThemeCompartmentExtension(this.themeCompartment, this.activeTheme),
-        this.createHostDeltaSyncExtension(),
-      ],
-    });
-
-    if (initialDecorations.length === 0) {
-      return baseState;
-    }
-
-    return baseState.update({
-      effects: setColorideDecorationsEffect.of(initialDecorations),
-    }).state;
-  }
-
   private createHostDeltaSyncExtension() {
     return [
       EditorView.domEventHandlers({
@@ -523,6 +596,10 @@ export class ColorideEditorView {
         },
       }),
       EditorView.updateListener.of((update) => {
+        if (update.state.field(breakpointsField) !== update.startState.field(breakpointsField)) {
+          const lines = breakpointLines(update.state);
+          for (const listener of this.breakpointListeners) listener(lines);
+        }
         if (!update.docChanged) {
           return;
         }
@@ -558,6 +635,9 @@ export class ColorideEditorView {
         const sel = update.state.selection.main;
         const headLine = update.state.doc.lineAt(sel.head);
         const baseRevision = this.localRevision;
+        // Kept so that diagnostics computed for this revision can still be placed, or refused,
+        // if they arrive after the text has moved on.
+        this.revisionHistory.record(baseRevision, update.startState.doc, update.changes.desc);
         this.localRevision += 1;
         this.opSequence += 1;
 

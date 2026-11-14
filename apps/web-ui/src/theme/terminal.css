@@ -1,0 +1,103 @@
+/* Terminal panels of Zone 3 and the menu of the + button */
+@layer components {
+  /* A shell shown in a Zone 3 panel */
+  .coloride-terminal-pane {
+    position: relative;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    /* Transparent: the hairline between panels is an inset shadow of the cell behind it. */
+    background: transparent;
+  }
+  .coloride-terminal-screen {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  /* The margin around the text goes here, on xterm's own element, never on the screen: the fit
+     (addon and `xterm-view.ts`) subtracts this padding, so padding on the screen would push the
+     last row out of view. */
+  .coloride-terminal-screen > .xterm {
+    height: 100%;
+    padding: 5px;
+    background: var(--color-main);
+  }
+  /* xterm.css paints its scroll viewport black and it covers the padding: the panel's colour
+     must show there (the text area itself is painted with the theme of `xterm-view.ts`). */
+  .coloride-terminal-screen .xterm-viewport {
+    background-color: transparent !important;
+  }
+  .coloride-terminal-status {
+    position: absolute;
+    right: 12px;
+    bottom: 8px;
+    color: #ffb450;
+    font-size: 11px;
+  }
+  .coloride-terminal-status:empty {
+    display: none;
+  }
+  /* Menu of the + button of Zone 3 (and its second level for agents) */
+  .coloride-new-panel-menu {
+    position: fixed;
+    z-index: 100;
+    min-width: 150px;
+    padding: 3px;
+    border: 0.5px solid rgba(255, 255, 255, 0.14);
+    border-radius: 8px;
+    background: #262626;
+  }
+  .coloride-new-panel-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    padding: 5px 8px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--color-text-primary);
+    font: inherit;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+  }
+  .coloride-new-panel-item:hover:not(:disabled),
+  .coloride-new-panel-item:focus-visible,
+  .coloride-new-panel-item[aria-expanded="true"] {
+    background: rgba(255, 255, 255, 0.08);
+    outline: none;
+  }
+  .coloride-new-panel-item:disabled {
+    color: var(--color-text-muted);
+    cursor: default;
+  }
+  .coloride-new-panel-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .coloride-new-panel-icon {
+    display: inline-flex;
+    color: var(--color-text-secondary);
+  }
+  .coloride-new-panel-icon svg {
+    width: 12px;
+    height: 12px;
+  }
+  /* The Codex mark is denser than the terminal glyph: a little larger to read */
+  .coloride-new-panel-icon svg.coloride-codex-icon {
+    width: 14px;
+    height: 14px;
+  }
+  .coloride-new-panel-hint {
+    font-size: 10.5px;
+    color: var(--color-text-muted);
+  }
+  .coloride-new-panel-chevron {
+    display: inline-flex;
+    color: var(--color-text-secondary);
+  }
+}

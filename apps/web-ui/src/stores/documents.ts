@@ -2,7 +2,7 @@ import type { ColorideValidationState } from "@coloride/protocol-types";
 import {
   extractSymbolsHeuristically,
   inferImpactedTestsHeuristically,
-} from "../cockpit-analysis.js";
+} from "../analysis/cockpit-analysis.js";
 import type { StoreContext } from "./context.js";
 import type { CockpitStoreBundle } from "./types.js";
 

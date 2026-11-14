@@ -82,6 +82,31 @@ impl LocalMcpServer {
         Ok(())
     }
 
+    /// Publishes the Host's revision-tagged batches for one document (`LOT-010`), typically
+    /// `LatestDiagnostics::current`: every tool's diagnostics for one content hash, together.
+    /// Batches for different contents, or different documents, are refused.
+    pub fn publish_document_diagnostics(
+        &mut self,
+        batches: &[host_core::DocumentDiagnostics],
+    ) -> Result<(), String> {
+        let first = batches.first().ok_or("No diagnostics to publish")?;
+        if batches.iter().any(|batch| {
+            batch.document_id != first.document_id
+                || batch.content_blake3_hash != first.content_blake3_hash
+        }) {
+            return Err("Diagnostics batches describe different contents".into());
+        }
+        let entries = batches
+            .iter()
+            .flat_map(|batch| batch.items.iter().cloned())
+            .collect();
+        self.publish_diagnostics(
+            first.document_id.clone(),
+            first.content_blake3_hash.clone(),
+            entries,
+        )
+    }
+
     /// Host-only opt-in. Downloads and index construction never block the MCP hot path.
     #[cfg(feature = "vector")]
     pub fn enable_vectors(&mut self, cache: std::path::PathBuf) {

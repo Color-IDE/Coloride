@@ -1,10 +1,11 @@
-import { invoke } from "@tauri-apps/api/core";
+import type { DocumentDiagnostics, LanguageFeatureResponse } from "@coloride/protocol-types";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { StrictMode, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import "@coloride/web-ui/theme.css";
-import type { NativeMigrationReport } from "@coloride/web-ui";
+import type { NativeMigrationReport, WorkspaceTrustReport } from "@coloride/web-ui";
 import {
   type BackgroundServicesState,
   decodeWorkspaceSessionCacheBinary,
@@ -13,6 +14,8 @@ import {
 } from "./index.js";
 import "./shell.css";
 import { TauriBinaryHostBridge } from "./tauri-binary-host-bridge.js";
+import { createTauriDebugHost } from "./tauri-debug-host.js";
+import { createTauriTerminalHost } from "./tauri-terminal-host.js";
 
 interface NativeWorkspaceNode {
   readonly path: string;
@@ -45,6 +48,9 @@ interface NativeAstAnalysis {
   }>;
 }
 
+/** Carries one tool's diagnostics for one revision of one document (see `lsp/session.rs`). */
+const DOCUMENT_DIAGNOSTICS_EVENT = "coloride-document-diagnostics";
+
 /** Sent by the Rust side when closing or quitting was held back because of unsaved changes. */
 const CLOSE_REQUESTED_EVENT = "coloride-close-requested";
 
@@ -65,6 +71,7 @@ function ColorideDesktopApp() {
     let desktop: ReturnType<typeof lazyBootDesktopCockpit> | undefined;
     let sessionPersistenceTimer: number | undefined;
     let stopListeningForClose: (() => void) | undefined;
+    let stopListeningForDiagnostics: (() => void) | undefined;
     const persistSession = () => {
       if (!desktop) return;
       const payload = Array.from(desktop.exportSessionCacheBinary());
@@ -137,6 +144,20 @@ function ColorideDesktopApp() {
           onUnsavedCountChange: (count) => {
             void invoke("report_unsaved_buffers_command", { count });
           },
+          // Ctrl+`: shells in the trusted workspace, streamed over a binary channel.
+          terminalHost: createTauriTerminalHost(invoke, () => new Channel<ArrayBuffer>()),
+          // F5: debug the shown JavaScript file (vscode-js-debug, trusted workspaces only).
+          debugHost: createTauriDebugHost(invoke, () => new Channel<ArrayBuffer>()),
+          // The decision is taken in a native dialog owned by the Rust side (commands/trust.rs).
+          workspaceTrust: {
+            getTrust: () => invoke<WorkspaceTrustReport>("workspace_trust_command"),
+            requestTrust: async () => {
+              const report = await invoke<WorkspaceTrustReport>("request_workspace_trust_command");
+              // Services that were held back (language servers, linters) may start now.
+              if (report.state === "Trusted") void invoke("initialize_background_services_command");
+              return report;
+            },
+          },
           searchWorkspace: (query) =>
             invoke<NativeSearchResult[]>("search_workspace_command", { query, limit: 100 }),
           analyzeDocument: async (documentId, sessionGeneration) => {
@@ -151,7 +172,23 @@ function ColorideDesktopApp() {
           loadNativeMigrationReport: () =>
             invoke<NativeMigrationReport>("run_native_migration_command"),
         });
+        // Completions, F12 and Shift+Alt+F, answered by vtsls/Biome about one exact revision.
+        desktop.editorView.setLanguageFeatureProvider(
+          (request) => invoke<LanguageFeatureResponse>("language_feature_command", { request }),
+          (location) => {
+            if (location.inside_workspace) {
+              void desktop?.domController?.openWorkspaceFile(location.file_path);
+            }
+          },
+        );
         sessionPersistenceTimer = window.setInterval(persistSession, 2_000);
+        // The editor places each batch by its revision, and drops what its text has moved past.
+        void listen<DocumentDiagnostics>(DOCUMENT_DIAGNOSTICS_EVENT, (event) => {
+          desktop?.editorView.applyDocumentDiagnostics(event.payload);
+        }).then((stopListening) => {
+          if (cancelled) stopListening();
+          else stopListeningForDiagnostics = stopListening;
+        });
         // Closing or quitting with unsaved changes: ask here, then tell Rust to go ahead.
         void listen(CLOSE_REQUESTED_EVENT, async () => {
           const allowed = (await desktop?.domController?.confirmClose()) ?? true;
@@ -168,6 +205,7 @@ function ColorideDesktopApp() {
       cancelled = true;
       if (sessionPersistenceTimer !== undefined) window.clearInterval(sessionPersistenceTimer);
       stopListeningForClose?.();
+      stopListeningForDiagnostics?.();
       if (desktop) {
         persistSession();
         desktop.destroy();

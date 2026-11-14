@@ -9,10 +9,13 @@ use host_core::HostHealthStatus;
 use judge_orchestrator::JudgeHealthStatus;
 use sandbox_runner::SandboxCapabilities;
 use serde::{Deserialize, Serialize};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 pub use bridge::DesktopBinaryEditorBridge;
 use state::DesktopAppState;
+
+/// Event carrying a `DocumentDiagnostics` batch to the UI.
+pub(crate) const DOCUMENT_DIAGNOSTICS_EVENT: &str = "coloride-document-diagnostics";
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -34,7 +37,13 @@ pub fn run() {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
             let bridge = DesktopBinaryEditorBridge::with_journal(data_dir.join("documents.wal"))?;
-            app.manage(DesktopAppState::new(bridge, data_dir));
+            // Diagnostics reach the UI tagged with the revision they were computed for; the
+            // editor discards the ones its text has moved past.
+            let handle = app.handle().clone();
+            let diagnostics_sink: host_core::DiagnosticsSink = std::sync::Arc::new(move |batch| {
+                let _ = handle.emit(DOCUMENT_DIAGNOSTICS_EVENT, batch);
+            });
+            app.manage(DesktopAppState::new(bridge, data_dir, diagnostics_sink));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -49,6 +58,18 @@ pub fn run() {
             commands::search::search_workspace_command,
             commands::search::analyze_document_command,
             commands::migration::run_native_migration_command,
+            commands::debug::debug_start_command,
+            commands::debug::debug_request_command,
+            commands::debug::debug_set_breakpoints_command,
+            commands::debug::debug_stop_command,
+            commands::language::language_feature_command,
+            commands::terminal::terminal_open_command,
+            commands::terminal::terminal_write_command,
+            commands::terminal::terminal_resize_command,
+            commands::terminal::terminal_close_command,
+            commands::trust::workspace_trust_command,
+            commands::trust::request_workspace_trust_command,
+            commands::trust::revoke_workspace_trust_command,
             commands::window::report_unsaved_buffers_command,
             commands::window::confirm_exit_command
         ])

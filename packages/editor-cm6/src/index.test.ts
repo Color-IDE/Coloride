@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { redo, undo } from "@codemirror/commands";
+import { language } from "@codemirror/language";
 import { EditorSelection, EditorState } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
 import {
@@ -240,6 +241,16 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
     }
     lezerSamplesMs.sort((a, b) => a - b);
     expect(tokens.length).toBeGreaterThan(5);
+    console.info(
+      "COLORIDE_PERFORMANCE",
+      JSON.stringify({
+        scenario: "lezer-highlight",
+        medianMs: lezerSamplesMs[Math.floor(lezerSamplesMs.length / 2)],
+        budgetMs: 2,
+        sampleCount: lezerSamplesMs.length,
+        samplesMs: lezerSamplesMs,
+      }),
+    );
     expect(lezerSamplesMs[Math.floor(lezerSamplesMs.length / 2)] ?? 0).toBeLessThan(2);
 
     // 2. Continuous typing in a 2,000-line TypeScript file (p95 <= 16 ms)
@@ -273,6 +284,16 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
     }
     keystrokeSamplesMs.sort((a, b) => a - b);
     const p95KeystrokeMs = keystrokeSamplesMs[Math.floor(keystrokeSamplesMs.length * 0.95)] ?? 0;
+    console.info(
+      "COLORIDE_PERFORMANCE",
+      JSON.stringify({
+        scenario: "editor-typing-2000-lines",
+        p95Ms: p95KeystrokeMs,
+        budgetMs: 16,
+        sampleCount: keystrokeSamplesMs.length,
+        samplesMs: keystrokeSamplesMs,
+      }),
+    );
     expect(p95KeystrokeMs).toBeLessThanOrEqual(16);
 
     // 3. Open and render a 1 MB local file in p95 <= 150 ms
@@ -289,6 +310,16 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
     }
     openSamplesMs.sort((a, b) => a - b);
     const p95OpenMs = openSamplesMs[Math.floor(openSamplesMs.length * 0.95)] ?? 0;
+    console.info(
+      "COLORIDE_PERFORMANCE",
+      JSON.stringify({
+        scenario: "editor-open-1mb",
+        p95Ms: p95OpenMs,
+        budgetMs: 150,
+        sampleCount: openSamplesMs.length,
+        samplesMs: openSamplesMs,
+      }),
+    );
     expect(p95OpenMs).toBeLessThanOrEqual(150);
     expect(editor.getDocumentText().length).toBe(oneMegabyteContent.length);
 
@@ -384,6 +415,21 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
     expect(undo(view)).toBe(true);
     expect(editor.getDocumentText()).toBe("const b = 1;\n");
     expect(ipcChannel.getHostText("src/b.ts", 2)).toBe("const b = 1;\n");
+    editor.destroy();
+  });
+
+  it("highlights each file with its own grammar when another file is opened in place", () => {
+    const editor = new ColorideEditorView({
+      initialDocumentId: "notes.md",
+      initialContent: "# notes\n",
+      ipcChannel: new InMemoryBinaryHostBridge(),
+    });
+    const view = editor.getEditorView();
+    expect(view.state.facet(language)?.name).toBe("markdown");
+    editor.switchDocument("src/a.ts", "const a: number = 1;\n");
+    expect(view.state.facet(language)?.name).toBe("typescript");
+    editor.switchDocument("src/b.css", "a { color: red; }\n");
+    expect(view.state.facet(language)?.name).toBe("css");
     editor.destroy();
   });
 });

@@ -1,5 +1,5 @@
-import { attribute, button, label, visibility } from "../dom-utils.js";
-import { UI_STRINGS } from "../ui-strings.js";
+import { attribute, button, label, visibility } from "../ui/dom-utils.js";
+import { UI_STRINGS } from "../ui/ui-strings.js";
 import { CHEVRON_ICON, MORE_ICON, PLUS_ICON } from "./icons.js";
 
 export interface SidebarRowOptions {
@@ -8,10 +8,24 @@ export interface SidebarRowOptions {
   readonly onToggle?: () => void;
   readonly onMore: (anchor: HTMLButtonElement) => void;
   /** Adds a "+" next to the options button (shown on hover). */
-  readonly onAdd?: () => void;
+  readonly onAdd?: (anchor: HTMLButtonElement) => void;
   /** Accessible name prefix and tooltip of the "+" (a new session unless told otherwise). */
   readonly addLabel?: { readonly aria: string; readonly title: string };
   readonly icon?: string;
+}
+
+/** A session's number ("#16") and its name, when the title starts with one. */
+export function splitSessionNumber(title: string): { number: string | null; name: string } {
+  const match = /^(#\d+)\s+(.+)$/.exec(title);
+  return match
+    ? { number: match[1] ?? null, name: match[2] ?? title }
+    : { number: null, name: title };
+}
+
+/** How a session's title reads on screen: "#16 New session" becomes "New session #16". */
+export function sessionDisplayTitle(title: string): string {
+  const { number, name } = splitSessionNumber(title);
+  return number ? `${name} ${number}` : title;
 }
 
 /** All row controls are siblings: options never activate selection or expansion. */
@@ -22,6 +36,7 @@ export class SidebarRow {
   readonly add: HTMLButtonElement | undefined;
   readonly toggle: HTMLButtonElement | undefined;
   private readonly title: HTMLSpanElement;
+  private readonly kind: SidebarRowOptions["kind"];
   private readonly arrow: HTMLSpanElement;
   private renameInput: HTMLInputElement | undefined;
   private readonly addLabel: { readonly aria: string; readonly title: string };
@@ -31,6 +46,7 @@ export class SidebarRow {
       aria: UI_STRINGS.chat.newSessionIn,
       title: UI_STRINGS.chat.newSession,
     };
+    this.kind = options.kind;
     this.el = doc.createElement("div");
     this.el.className = `sidebar-row sidebar-row--${options.kind}`;
     this.select = button(doc, "sidebar-row-select");
@@ -64,15 +80,36 @@ export class SidebarRow {
     if (options.onAdd) {
       this.add = button(doc, "sidebar-icon-button sidebar-add");
       this.add.innerHTML = PLUS_ICON;
-      this.add.addEventListener("click", options.onAdd);
+      const add = this.add;
+      add.addEventListener("click", () => options.onAdd?.(add));
       this.el.append(this.select, this.add, this.more);
     } else {
       this.el.append(this.select, this.more);
     }
   }
 
+  /** A small icon before the title of a session row (a terminal's, for instance); null removes it. */
+  setIcon(svg: string | null): void {
+    let icon = this.select.querySelector<HTMLElement>(".sidebar-row-icon");
+    if (svg === null) {
+      icon?.remove();
+      return;
+    }
+    if (!icon) {
+      icon = this.el.ownerDocument.createElement("span");
+      icon.className = "sidebar-row-icon";
+      icon.setAttribute("aria-hidden", "true");
+      this.select.insertBefore(icon, this.select.firstChild);
+    }
+    if (icon.dataset.svg !== svg) {
+      icon.dataset.svg = svg;
+      icon.innerHTML = svg;
+    }
+  }
+
   update(title: string, selected: boolean, expanded?: boolean): void {
-    label(this.title, title);
+    // A session titled "#16 New session" reads "New session #16", all in the same text.
+    label(this.title, this.kind === "session" ? sessionDisplayTitle(title) : title);
     attribute(this.select, "title", title);
     attribute(this.more, "aria-label", `Options for ${title}`);
     if (this.add) {

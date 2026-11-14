@@ -14,7 +14,9 @@
   },
   "dependencies": {
     "@coloride/editor-cm6": "workspace:*",
-    "@coloride/protocol-types": "workspace:*"
+    "@coloride/protocol-types": "workspace:*",
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.11",
@@ -24,6 +26,6 @@
     "build": "tsc -p tsconfig.json && tailwindcss -i ./src/theme/tailwind.css -o ./dist/tailwind.css",
     "build:css": "tailwindcss -i ./src/theme/tailwind.css -o ./dist/tailwind.css",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run src"
+    "test": "vitest run src --exclude src/cockpit/performance.test.ts && vitest run src/cockpit/performance.test.ts --maxWorkers=1 --no-file-parallelism"
   }
 }

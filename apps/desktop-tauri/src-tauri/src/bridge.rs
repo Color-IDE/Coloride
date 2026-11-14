@@ -12,6 +12,15 @@ use host_core::{
     LazyBootReadySnapshot,
 };
 
+/// See [`DesktopBinaryEditorBridge::document_imports`].
+#[derive(Debug, Clone)]
+pub struct DocumentImports {
+    pub disk_path: PathBuf,
+    pub revision: u32,
+    pub rope: host_core::ropey::Rope,
+    pub imports: Vec<context_engine::ImportDeclaration>,
+}
+
 /// Binary IPC bridge connecting the Tauri v2 shell and CodeMirror 6 (`LOT-004`, `LOT-005`)
 /// to `host_core::DocumentService` and `LazyBootOrchestrator`.
 #[derive(Debug)]
@@ -110,6 +119,43 @@ impl DesktopBinaryEditorBridge {
         })
     }
 
+    /// Like `apply_binary_transaction`, then hands the applied delta to `observe`: the text
+    /// before the transaction, its changes, and the session after it. This is how language
+    /// servers are fed from the `ropey` buffer without re-reading the document.
+    pub fn apply_binary_transaction_observed(
+        &mut self,
+        tx_bytes: &[u8],
+        observe: impl FnOnce(
+            &host_core::ropey::Rope,
+            &[host_core::TextChange],
+            &host_core::DocumentSession,
+        ),
+    ) -> Result<Vec<u8>, DocumentError> {
+        let tx = decode_editor_transaction_ipc(tx_bytes).map_err(|error| {
+            DocumentError::EditorIpc(format!("EditorTransaction IPC decode failed: {error}"))
+        })?;
+        let rope_before = self
+            .documents
+            .session(&tx.document_id, tx.session_generation)
+            .ok()
+            .map(|session| session.rope().clone());
+        let (document_id, session_generation, changes) = (
+            tx.document_id.clone(),
+            tx.session_generation,
+            tx.changes.clone(),
+        );
+        let snapshot = self.documents.apply_transaction(tx)?;
+        if let (Some(rope_before), Ok(session)) = (
+            rope_before,
+            self.documents.session(&document_id, session_generation),
+        ) {
+            observe(&rope_before, &changes, session);
+        }
+        encode_editor_snapshot_ipc(&snapshot).map_err(|error| {
+            DocumentError::EditorIpc(format!("EditorSnapshot IPC encode failed: {error}"))
+        })
+    }
+
     #[must_use]
     pub const fn document_service(&self) -> &DocumentService {
         &self.documents
@@ -142,6 +188,31 @@ impl DesktopBinaryEditorBridge {
         analyzer.index_file(document_id, session.rope(), &tree);
         let impacted = analyzer.find_impacted_tests(&pairs, 4);
         Some((symbols, impacted))
+    }
+
+    /// The imports of a live buffer with the text, revision and file they were read from.
+    pub fn document_imports(
+        &self,
+        document_id: &str,
+        session_generation: u32,
+    ) -> Option<DocumentImports> {
+        let session = self
+            .documents
+            .session(document_id, session_generation)
+            .ok()?;
+        let mut parser = IncrementalAstParser::new();
+        let provider = RopeTextProvider::new(session.rope());
+        let tree = parser.parse_with(
+            SupportedAstLanguage::from_path(document_id),
+            &provider,
+            None,
+        );
+        Some(DocumentImports {
+            disk_path: session.disk_path()?.to_path_buf(),
+            revision: session.interactive_revision(),
+            rope: session.rope().clone(),
+            imports: tree.imports(),
+        })
     }
 
     /// Query `SqliteWalContextEngine` (`LOT-008`) after synchronizing `UnsavedBufferOverlay`

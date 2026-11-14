@@ -18,9 +18,65 @@
 
   .coloride-zone-4-body {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) clamp(150px, 30%, 240px);
+    grid-template-columns: minmax(0, 1fr) clamp(170px, 34%, 280px);
     flex: 1;
     min-height: 0;
+  }
+  /* Hidden file tree: the editor takes the whole panel; the tree waits behind its right edge
+     and slides in over the editor while the pointer is on the edge strip or on the tree. */
+  .coloride-zone-4-body {
+    position: relative;
+    overflow: hidden;
+  }
+  .coloride-zone-4-body[data-tree-hidden="true"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .coloride-zone-4-tree-edge {
+    position: absolute;
+    z-index: 9;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #858585;
+    cursor: pointer;
+    transition: color 120ms ease, background 120ms ease;
+  }
+  .coloride-zone-4-tree-edge[hidden] {
+    display: none;
+  }
+  .coloride-zone-4-tree-edge:hover,
+  .coloride-zone-4-tree-edge:focus-visible {
+    color: var(--color-text-primary);
+    background: var(--color-selected);
+    outline: none;
+  }
+  .coloride-zone-4-body[data-tree-hidden="true"] .coloride-zone-4-tree-column {
+    position: absolute;
+    z-index: 10;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: clamp(170px, 34%, 280px); /* the width it has when it is kept visible */
+    background: var(--color-main);
+    transform: translateX(100%);
+    visibility: hidden;
+    transition: transform 140ms ease, visibility 0s linear 140ms;
+  }
+  .coloride-zone-4-body[data-tree-hidden="true"]
+    .coloride-zone-4-tree-edge:hover
+    + .coloride-zone-4-tree-column,
+  .coloride-zone-4-body[data-tree-hidden="true"] .coloride-zone-4-tree-column:hover,
+  .coloride-zone-4-body[data-tree-hidden="true"] .coloride-zone-4-tree-column:focus-within {
+    transform: none;
+    visibility: visible;
+    transition: transform 140ms ease;
   }
   .coloride-zone-4-editor-column {
     display: flex;
@@ -35,6 +91,43 @@
     min-height: 0;
     padding: 8px 0 8px 4px; /* no right padding: the scrollbar sits against the panel edge */
     border-left: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  /* Filter and the button that hides the tree */
+  .coloride-file-tree-header {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 4px;
+    margin: 0 8px 8px 4px; /* same right spacing as before the scrollbar moved */
+  }
+  .coloride-file-tree-header .coloride-file-tree-filter {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+  }
+  .coloride-file-tree-action {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: #858585; /* same as the panel toggles of the header */
+    cursor: pointer;
+  }
+  /* Same size as the header's panel icons */
+  .coloride-file-tree-action svg,
+  .coloride-zone-4-tree-edge svg {
+    width: 16px;
+    height: 16px;
+  }
+  .coloride-file-tree-action:hover {
+    background: var(--color-selected);
+    color: var(--color-text-primary);
   }
   .coloride-file-tree-filter {
     flex: none;
@@ -201,63 +294,56 @@
   .filetree-color-muted {
     color: #8a8a8a;
   }
-  /* Confirmation shown when closing a tab that has unsaved changes */
-  .coloride-unsaved-overlay {
-    position: absolute;
-    inset: 0;
-    z-index: 20;
+  /* JavaScript debugger, in the sidebar's Debug section */
+  .coloride-debug-panel {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.45);
-  }
-  .coloride-unsaved-dialog {
-    width: min(320px, calc(100% - 32px));
-    padding: 16px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 12px;
-    background: var(--color-card);
-    color: var(--color-text-primary);
-    box-shadow: 0 8px 24px #0006;
-  }
-  .coloride-unsaved-dialog h3 {
-    margin: 0 0 6px;
-    font-size: 13px;
-    font-weight: 600;
-  }
-  .coloride-unsaved-dialog p {
-    margin: 0 0 14px;
-    color: var(--color-text-secondary);
-    font-size: 12px;
-    overflow-wrap: anywhere;
-  }
-  .coloride-unsaved-actions {
-    display: flex;
-    justify-content: flex-end;
+    flex-direction: column;
     gap: 6px;
+    font-size: 12px;
+    color: var(--color-text-secondary);
   }
-  .coloride-unsaved-actions button {
-    height: 26px;
-    padding: 0 10px;
+  .coloride-debug-panel h4 {
+    margin: 6px 0 0;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .coloride-debug-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .coloride-debug-toolbar button {
+    height: 24px;
+    padding: 0 8px;
     border: 0;
-    border-radius: 6px;
+    border-radius: 5px;
     background: var(--color-selected);
     color: var(--color-text-primary);
-    font-size: 12px;
+    font-size: 11px;
     cursor: pointer;
   }
-  .coloride-unsaved-actions button:focus-visible {
-    outline: 2px solid rgba(255, 255, 255, 0.5);
-    outline-offset: 2px;
+  .coloride-debug-toolbar button:disabled {
+    opacity: 0.45;
+    cursor: default;
   }
-  .coloride-unsaved-actions button:hover {
-    background: rgba(255, 255, 255, 0.14);
+  .coloride-debug-status {
+    min-height: 16px;
+    color: #ffb450;
+    overflow-wrap: anywhere;
   }
-  .coloride-unsaved-actions .coloride-unsaved-primary {
-    background: #e8e8e8;
-    color: #1a1a1a;
+  .coloride-debug-stack,
+  .coloride-debug-variables {
+    font-family: Menlo, "SF Mono", Consolas, monospace;
+    font-size: 11px;
+    overflow-wrap: anywhere;
   }
-  .coloride-unsaved-actions .coloride-unsaved-primary:hover {
-    background: #fff;
+  .coloride-debug-output {
+    max-height: 200px;
+    margin: 0;
+    overflow: auto;
+    font-size: 11px;
+    white-space: pre-wrap;
   }
 }

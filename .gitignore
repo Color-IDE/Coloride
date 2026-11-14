@@ -31,3 +31,8 @@ coverage/
 # Local notes
 docs/
 
+# Downloaded developer tools (scripts/fetch-js-debug.mjs), verified by pinned SHA-256
+/tools/
+
+# Local interaction performance reports (uploaded by CI)
+/artifacts/performance/

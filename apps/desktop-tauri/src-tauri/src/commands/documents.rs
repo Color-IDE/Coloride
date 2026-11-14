@@ -16,6 +16,15 @@ pub fn open_document_binary_command(
     session_generation: u32,
     initial_text: String,
 ) -> Result<Vec<u8>, String> {
+    open_document(&state, document_id, session_generation, &initial_text)
+}
+
+pub(crate) fn open_document(
+    state: &DesktopAppState,
+    document_id: String,
+    session_generation: u32,
+    initial_text: &str,
+) -> Result<Vec<u8>, String> {
     let workspace_root = state
         .workspace_root
         .lock()
@@ -25,9 +34,10 @@ pub fn open_document_binary_command(
         .bridge
         .lock()
         .map_err(|_| "desktop document bridge lock poisoned".to_string())?;
-    match workspace_root {
+    let opened_id = document_id.clone();
+    let encoded = match workspace_root {
         _ if document_id.starts_with("untitled:") => {
-            bridge.open_document_binary(document_id, session_generation, &initial_text)
+            bridge.open_document_binary(document_id, session_generation, initial_text)
         }
         Some(root) => {
             let path = resolve_authorized_workspace_file(&root, &document_id)?;
@@ -35,12 +45,22 @@ pub fn open_document_binary_command(
                 document_id,
                 session_generation,
                 path,
-                &initial_text,
+                initial_text,
             )
         }
-        None => bridge.open_document_binary(document_id, session_generation, &initial_text),
+        None => bridge.open_document_binary(document_id, session_generation, initial_text),
     }
-    .map_err(|error| error.to_string())
+    .map_err(|error| error.to_string())?;
+    // Language servers follow the buffer from here on (they only run in a trusted workspace).
+    if let Some(services) = state.language_services() {
+        if let Ok(session) = bridge
+            .document_service()
+            .session(&opened_id, session_generation)
+        {
+            services.document_opened(session);
+        }
+    }
+    Ok(encoded)
 }
 
 #[tauri::command]
@@ -48,11 +68,25 @@ pub fn apply_binary_transaction_command(
     state: tauri::State<'_, DesktopAppState>,
     payload: Vec<u8>,
 ) -> Result<Vec<u8>, String> {
+    apply_transaction(&state, &payload)
+}
+
+/// Applies an editor transaction to the authoritative rope and forwards the delta to the
+/// language servers. Forwarding only enqueues messages: it never waits for a server.
+pub(crate) fn apply_transaction(
+    state: &DesktopAppState,
+    payload: &[u8],
+) -> Result<Vec<u8>, String> {
+    let services = state.language_services();
     state
         .bridge
         .lock()
         .map_err(|_| "desktop document bridge lock poisoned".to_string())?
-        .apply_binary_transaction(&payload)
+        .apply_binary_transaction_observed(payload, |rope_before, changes, session| {
+            if let Some(services) = &services {
+                services.transaction_applied(rope_before, changes, session);
+            }
+        })
         .map_err(|error| error.to_string())
 }
 

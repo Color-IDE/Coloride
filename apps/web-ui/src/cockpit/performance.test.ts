@@ -49,6 +49,7 @@ describe("@coloride/web-ui — LOT-005 virtualization and typing under load", ()
     document.body.appendChild(rootContainer);
 
     const chats: readonly CockpitChatTab[] = Array.from({ length: 8 }, (_, idx) => ({
+      kind: "agent" as const,
       chatId: `chat-${idx + 1}`,
       title: `#${idx + 1} Agent Task`,
       modelName: idx % 2 === 0 ? "Codex" : "Claude",
@@ -143,6 +144,17 @@ describe("@coloride/web-ui — LOT-005 virtualization and typing under load", ()
     }
 
     const p95KeystrokeMs = percentile95(keystrokeLatenciesMs);
+    console.info(
+      "COLORIDE_PERFORMANCE",
+      JSON.stringify({
+        scenario: "lot005-cockpit",
+        sampleCount: keystrokeLatenciesMs.length,
+        p95Ms: p95KeystrokeMs,
+        budgetMs: 16,
+        samplesMs: keystrokeLatenciesMs,
+        mountCount: editorView.getStoreSnapshot().mountCount,
+      }),
+    );
     expect(p95KeystrokeMs).toBeLessThanOrEqual(16);
 
     // Zero remounts of CodeMirror 6 and zero spurious Zone 4 re-renders during streaming & layout rebuilds

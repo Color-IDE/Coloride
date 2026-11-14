@@ -1,0 +1,35 @@
+@layer components {
+  .coloride-zone-4-inspector {
+    @apply bg-main border border-white/8 rounded-tr-[16px] rounded-br-[16px] flex flex-col h-full overflow-hidden;
+  }
+
+  .coloride-zone-4-editor-host,
+  .coloride-zone-4-preview-host {
+    @apply flex-1 w-full h-full overflow-hidden p-0 m-0 bg-main;
+  }
+
+  .coloride-zone-4-editor-host,
+  .coloride-zone-4-preview-host,
+  .cm-editor,
+  .cm-scroller,
+  .cm-content,
+  .cm-line,
+  .cm-line * {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+  }
+
+  .cm-gutters,
+  .cm-gutters * {
+    user-select: none !important;
+    -webkit-user-select: none !important;
+  }
+
+  .cm-editor {
+    @apply w-full h-full !bg-main font-mono text-[13px];
+  }
+
+  .cm-gutters {
+    @apply !bg-main !border-0;
+  }
+}
