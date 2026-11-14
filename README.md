@@ -40,6 +40,38 @@ cargo test --workspace
 - [`crates/judge-orchestrator`](./crates/judge-orchestrator) — Foundation for the later deterministic state machine, `PolicyEngine`, and `Evidence` verification lots.
 - [`crates/sandbox-runner`](./crates/sandbox-runner) — Capability model for later fail-closed OS sandbox implementations (`Seatbelt`, `Landlock`, `AppContainer`).
 
+### Frontend boundaries and performance checks
+
+`cockpit-dom.ts` composes zones and routes store subscriptions; document-scoped
+shortcuts live in `cockpit/shell-shortcuts.ts`, and column geometry/resizing in
+`cockpit/shell-layout.ts`. `ui-preferences.ts` owns the versioned UI snapshot
+(widths and hidden tree), validates persisted data, and migrates the old keys.
+Document text still belongs to Rust host-core; UI preferences contain no document text.
+
+Sessions are a discriminated union: `kind: "agent"` requires `modelName`, while
+`kind: "terminal"` has neither a model nor agent execution state. Cache restoration
+normalizes legacy sessions once, and `session-presentation.ts` owns session icons.
+CodeMirror's controller retains its singleton lifecycle and IPC/revision handling;
+`editor-state.ts` owns the extension recipe, with no view creation or remounting.
+Theme tokens/base rules stay in `tailwind.css`; component styles are split into
+shell, header, panels, scrollbar, editor, and onboarding stylesheets.
+
+`pnpm test` runs timing-sensitive specs separately from other test files.
+`pnpm test:performance` runs the editor and LOT-005 fixtures serially, with the
+original thresholds (typing p95 <= 16 ms, highlighting < 2 ms, file open <= 150 ms)
+and no retries. It writes `artifacts/performance/vitest.json` for test outcomes and
+`samples.json` alongside it for raw timing samples, budgets, machine metadata and
+missing scenarios, including on failures. CI has a separate performance job and retains reports for 30 days.
+Run this check without concurrent builds; happy-dom results are a fixture measurement,
+not a claim about physical input latency on all machines. Investigate failed runs
+before classifying them as machine contention; do not raise budgets to make them pass.
+
+`judge-orchestrator` and `sandbox-runner` remain foundations: health checks report
+`policy_engine_operational: false` and `execution_available: false`. The agent queue
+models UI intent, not actual execution. Desktop boot reports no background service
+ready unless an initialization provider supplies that result. Implementing policy
+and OS isolation belongs to later lots, before agent execution can be enabled.
+
 ### Local context MCP server (LOT-009)
 
 Run the read-only JSON-RPC 2.0 server over newline-delimited stdio with an existing

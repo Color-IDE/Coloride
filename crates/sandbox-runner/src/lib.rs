@@ -1,3 +1,6 @@
+//! Capability skeleton only; no OS sandbox runner can execute commands yet.
+//! Health-check targets are configuration, not measured execution guarantees.
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
