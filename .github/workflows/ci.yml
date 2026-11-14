@@ -44,6 +44,31 @@ jobs:
       - name: Build packages & web-ui
         run: pnpm build
 
+  interaction-performance:
+    name: LOT-005 isolated interaction budgets
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.24.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - name: Measure without parallel test files or build processes
+        run: pnpm test:performance
+      - name: Retain samples and failures for regression review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: interaction-performance-${{ github.run_id }}
+          path: artifacts/performance/
+          retention-days: 30
+          if-no-files-found: warn
+
   rust-matrix:
     name: Rust Host & Sandbox (${{ matrix.os }})
     strategy:

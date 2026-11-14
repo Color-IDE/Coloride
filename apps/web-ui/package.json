@@ -26,6 +26,6 @@
     "build": "tsc -p tsconfig.json && tailwindcss -i ./src/theme/tailwind.css -o ./dist/tailwind.css",
     "build:css": "tailwindcss -i ./src/theme/tailwind.css -o ./dist/tailwind.css",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run src"
+    "test": "vitest run src --exclude src/cockpit/performance.test.ts && vitest run src/cockpit/performance.test.ts --maxWorkers=1 --no-file-parallelism"
   }
 }
