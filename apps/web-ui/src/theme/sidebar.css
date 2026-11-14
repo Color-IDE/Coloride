@@ -137,7 +137,8 @@
   .sidebar-row:focus-within .sidebar-add,
   /* While a menu of the row is open (its anchor is the "+" or the three dots) both stay shown.
      The group toggle also has aria-expanded, so the selector names the two anchors. */
-  .sidebar-row:has(.sidebar-more[aria-expanded="true"]) .sidebar-more,
+    .sidebar-row:has(.sidebar-more[aria-expanded="true"])
+    .sidebar-more,
   .sidebar-row:has(.sidebar-more[aria-expanded="true"]) .sidebar-add,
   .sidebar-row:has(.sidebar-add[aria-expanded="true"]) .sidebar-more,
   .sidebar-row:has(.sidebar-add[aria-expanded="true"]) .sidebar-add,
