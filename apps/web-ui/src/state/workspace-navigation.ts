@@ -92,6 +92,8 @@ export interface WorkspaceNavigationActions {
   readonly navigation: AtomicStore<WorkspaceNavigationState>;
   createWorkGroup(title: string): void;
   renameWorkGroup(id: string, title: string): void;
+  /** Deletes an empty group. The only group, and a group that still has sessions, stay. */
+  removeWorkGroup(id: string): void;
   setWorkGroupExpanded(id: string, expanded: boolean): void;
   setAllWorkGroupsExpanded(expanded: boolean): void;
   setProjectExpanded(expanded: boolean, path?: string): void;
@@ -157,6 +159,20 @@ export function createWorkspaceNavigation(
         groups: prev.groups.map((group) =>
           group.id === id ? { ...group, title: trimmed } : group,
         ),
+      }));
+    },
+    removeWorkGroup(id: string): void {
+      const current = navigation.getState();
+      const index = current.groups.findIndex((group) => group.id === id);
+      const group = current.groups[index];
+      if (!group || group.chatIds.length > 0 || current.groups.length <= 1) return;
+      const groups = current.groups.filter((item) => item.id !== id);
+      // The group on screen was deleted: show its neighbour (the one before, else the next).
+      const next = groups[Math.max(0, index - 1)] ?? groups[0];
+      navigation.setState((prev) => ({
+        ...prev,
+        groups,
+        activeGroupId: prev.activeGroupId === id && next ? next.id : prev.activeGroupId,
       }));
     },
     setWorkGroupLayout(id: string, layout: LayoutNode | null): void {

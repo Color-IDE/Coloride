@@ -86,6 +86,46 @@ export class WorkspaceSidebar {
     );
   }
 
+  /** A session can be closed unless an agent is running in it or waiting its turn. */
+  private canClose(chatId: string): boolean {
+    const state = this.options.stores.zone3.getState();
+    return (
+      state.chats.length > 1 &&
+      state.activeRunningAgentChatId !== chatId &&
+      !state.sequentialAgentQueue.includes(chatId)
+    );
+  }
+
+  /** Closes sessions one by one; the store keeps the last session of the app open. */
+  private closeSessions(chatIds: readonly string[]): void {
+    for (const id of chatIds) this.options.stores.closeChat(id);
+  }
+
+  /** A new session (or terminal) in a group, next to `from` when given. */
+  private addSession(projectPath: string, groupId: string, kind?: "terminal", from?: string): void {
+    const { stores } = this.options;
+    this.withProject(projectPath, () => {
+      const created = stores.createChat({
+        groupId,
+        ...(kind ? { kind } : {}),
+        ...(from ? { from } : {}),
+      });
+      if (created === null) {
+        this.showError(null, UI_STRINGS.sidebar.noRoom);
+        return;
+      }
+      this.error.hidden = true;
+      stores.setWorkGroupExpanded(groupId, true);
+    });
+  }
+
+  private copyPath(path: string): void {
+    const doc = this.options.treeHost.ownerDocument;
+    void doc.defaultView?.navigator.clipboard?.writeText(path).catch(() => {
+      // The clipboard can be refused (no permission or focus): there is nothing to recover.
+    });
+  }
+
   private expandAll(expanded: boolean): void {
     this.options.stores.setAllWorkGroupsExpanded(expanded);
   }
@@ -181,22 +221,13 @@ export class WorkspaceSidebar {
       icon: GROUP_ICON,
       onSelect: () => this.withProject(projectPath, () => stores.selectWorkGroup(group.id)),
       onAdd: (anchor) => {
-        const create = (kind?: "terminal") =>
-          this.withProject(projectPath, () => {
-            if (stores.createChat({ groupId: group.id, ...(kind ? { kind } : {}) }) === null) {
-              this.showError(null, UI_STRINGS.sidebar.noRoom);
-              return;
-            }
-            this.error.hidden = true;
-            stores.setWorkGroupExpanded(group.id, true);
-          });
         // With terminals available the "+" offers the same choices as the one of the panels.
         if (this.options.newSessionKind === "terminal") {
           this.newPanelMenu.toggle(anchor, {
-            openTerminal: () => create("terminal"),
-            openAgentInterface: () => create(),
+            openTerminal: () => this.addSession(projectPath, group.id, "terminal"),
+            openAgentInterface: () => this.addSession(projectPath, group.id),
           });
-        } else create();
+        } else this.addSession(projectPath, group.id);
       },
       onToggle: () =>
         this.withProject(projectPath, () => {
@@ -205,27 +236,55 @@ export class WorkspaceSidebar {
         }),
       onMore: (anchor) => {
         const state = stores.navigation.getState();
-        const latest = listProjects(state)
-          .find((entry) => entry.path === projectPath)
-          ?.groups.find((item) => item.id === group.id);
-        if (!latest) return;
+        const entry = listProjects(state).find((item) => item.path === projectPath);
+        const latest = entry?.groups.find((item) => item.id === group.id);
+        if (!entry || !latest) return;
+        const expanded = latest.expanded !== false;
+        const closable = latest.chatIds.filter((id) => this.canClose(id));
+        const terminals = this.options.newSessionKind === "terminal";
         this.menu.open(anchor, [
+          ...(terminals
+            ? [
+                {
+                  label: UI_STRINGS.sidebar.newTerminal,
+                  run: () => this.addSession(projectPath, group.id, "terminal"),
+                },
+              ]
+            : []),
+          {
+            label: UI_STRINGS.chat.newSession,
+            run: () => this.addSession(projectPath, group.id),
+          },
           {
             label: UI_STRINGS.sidebar.renameGroup,
+            separatorBefore: true,
             run: () =>
               this.withProject(projectPath, () =>
                 row.rename(latest.title, (name) => stores.renameWorkGroup(group.id, name)),
               ),
           },
           {
-            label:
-              latest.expanded === false
-                ? UI_STRINGS.sidebar.expandGroup
-                : UI_STRINGS.sidebar.collapseGroup,
+            label: expanded ? UI_STRINGS.sidebar.collapseGroup : UI_STRINGS.sidebar.expandGroup,
             run: () =>
-              this.withProject(projectPath, () =>
-                stores.setWorkGroupExpanded(group.id, latest.expanded === false),
-              ),
+              this.withProject(projectPath, () => stores.setWorkGroupExpanded(group.id, !expanded)),
+          },
+          {
+            label: UI_STRINGS.sidebar.closeAllSessions,
+            separatorBefore: true,
+            danger: true,
+            disabled: closable.length === 0,
+            ...(closable.length === 0 ? { reason: UI_STRINGS.sidebar.noSessionToClose } : {}),
+            run: () => this.closeSessions(closable),
+          },
+          {
+            label: UI_STRINGS.sidebar.deleteGroup,
+            danger: true,
+            disabled: latest.chatIds.length > 0 || entry.groups.length <= 1,
+            reason:
+              entry.groups.length <= 1
+                ? UI_STRINGS.sidebar.deleteLastGroup
+                : UI_STRINGS.sidebar.deleteGroupNeedsEmpty,
+            run: () => this.withProject(projectPath, () => stores.removeWorkGroup(group.id)),
           },
         ]);
       },
@@ -269,21 +328,47 @@ export class WorkspaceSidebar {
         this.withProject(projectPath, () => stores.selectChat(chat.chatId));
       },
       onMore: (anchor) => {
-        const latest = stores.zone3.getState().chats.find((item) => item.chatId === chat.chatId);
-        if (!latest) return;
         const state = stores.zone3.getState();
+        const latest = state.chats.find((item) => item.chatId === chat.chatId);
+        if (!latest) return;
+        const group = stores.navigation.getState().groups.find((item) => item.id === groupId);
+        const alone = group?.maximizedChatId === chat.chatId;
+        const others = (group?.chatIds ?? []).filter(
+          (id) => id !== chat.chatId && this.canClose(id),
+        );
         this.menu.open(anchor, [
           {
             label: UI_STRINGS.sidebar.renameSession,
             run: () => row.rename(latest.title, (name) => stores.renameChat(chat.chatId, name)),
           },
           {
+            label: UI_STRINGS.sidebar.duplicateSession,
+            run: () =>
+              this.addSession(
+                projectPath,
+                groupId,
+                latest.kind === "terminal" ? "terminal" : undefined,
+                chat.chatId,
+              ),
+          },
+          {
+            label: alone ? UI_STRINGS.sidebar.restoreSession : UI_STRINGS.sidebar.maximizeSession,
+            run: () => this.withProject(projectPath, () => stores.toggleMaximizeChat(chat.chatId)),
+          },
+          {
             label: UI_STRINGS.sidebar.closeSession,
-            disabled:
-              state.chats.length <= 1 ||
-              state.activeRunningAgentChatId === chat.chatId ||
-              state.sequentialAgentQueue.includes(chat.chatId),
+            separatorBefore: true,
+            danger: true,
+            disabled: !this.canClose(chat.chatId),
+            ...(this.canClose(chat.chatId) ? {} : { reason: UI_STRINGS.sidebar.noSessionToClose }),
             run: () => stores.closeChat(chat.chatId),
+          },
+          {
+            label: UI_STRINGS.sidebar.closeOtherSessions,
+            danger: true,
+            disabled: others.length === 0,
+            ...(others.length === 0 ? { reason: UI_STRINGS.sidebar.noSessionToClose } : {}),
+            run: () => this.closeSessions(others),
           },
         ]);
       },
@@ -310,9 +395,16 @@ export class WorkspaceSidebar {
         const entry = listProjects(stores.navigation.getState()).find((item) => item.path === path);
         stores.setProjectExpanded(!(entry?.expanded ?? true), path);
       },
-      onMore: (anchor) =>
+      onMore: (anchor) => {
+        const entry = listProjects(stores.navigation.getState()).find((item) => item.path === path);
+        const expanded = entry?.expanded ?? true;
         this.menu.open(anchor, [
           { label: UI_STRINGS.sidebar.newGroup, run: () => this.addGroup(path) },
+          {
+            label: expanded ? UI_STRINGS.sidebar.collapseProject : UI_STRINGS.sidebar.expandProject,
+            separatorBefore: true,
+            run: () => stores.setProjectExpanded(!expanded, path),
+          },
           {
             label: UI_STRINGS.sidebar.expandAll,
             run: () => this.withProject(path, () => this.expandAll(true)),
@@ -320,6 +412,12 @@ export class WorkspaceSidebar {
           {
             label: UI_STRINGS.sidebar.collapseAll,
             run: () => this.withProject(path, () => this.expandAll(false)),
+          },
+          {
+            label: UI_STRINGS.sidebar.copyPath,
+            separatorBefore: true,
+            disabled: path === "",
+            run: () => this.copyPath(path),
           },
           {
             label: UI_STRINGS.sidebar.openProjectMenu,
@@ -330,12 +428,15 @@ export class WorkspaceSidebar {
           },
           {
             label: UI_STRINGS.sidebar.removeProject,
+            separatorBefore: true,
+            danger: true,
             disabled: path === "",
             run: () => {
               void this.removeProject(path);
             },
           },
-        ]),
+        ]);
+      },
     });
     el.append(folder.el, tree);
     return { el, folder, tree, groups: new Map() };

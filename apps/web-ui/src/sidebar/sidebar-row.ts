@@ -77,6 +77,12 @@ export class SidebarRow {
     this.more.setAttribute("aria-haspopup", "menu");
     this.more.setAttribute("aria-expanded", "false");
     this.more.addEventListener("click", () => options.onMore(this.more));
+    // The same menu as the three dots opens on a right click, except while renaming.
+    this.el.addEventListener("contextmenu", (event) => {
+      if (this.renameInput) return;
+      event.preventDefault();
+      options.onMore(this.more);
+    });
     if (options.onAdd) {
       this.add = button(doc, "sidebar-icon-button sidebar-add");
       this.add.innerHTML = PLUS_ICON;

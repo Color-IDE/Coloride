@@ -52,6 +52,15 @@ function setup(openWorkspace?: () => Promise<readonly [] | null>) {
   return { root, stores, sidebar, get, treeHost };
 }
 
+/** The open menu's entry with this label. */
+function menuItem(root: ParentNode, label: string): HTMLButtonElement {
+  const item = Array.from(root.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find(
+    (entry) => entry.textContent === label,
+  );
+  if (!item) throw new Error(`Missing menu entry: ${label}`);
+  return item;
+}
+
 describe("Workspace sidebar", () => {
   it("preserves row nodes and focus through selection, collapse, rename and adding another group", () => {
     const { stores, get } = setup();
@@ -103,10 +112,11 @@ describe("Workspace sidebar", () => {
     expect(stores.navigation.getState().activeGroupId).not.toBe("initial-group");
     expect(stores.navigation.getState().groups[0]?.expanded).not.toBe(false);
     expect(more.getAttribute("aria-expanded")).toBe("true");
-    const rename = get('[role="menuitem"]');
-    expect(document.activeElement).toBe(rename);
-    rename.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
-    expect((document.activeElement as HTMLElement)?.textContent).toBe("Collapse group");
+    const first = get('[role="menuitem"]');
+    expect(document.activeElement).toBe(first);
+    expect(first.textContent).toBe("New session");
+    first.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    expect((document.activeElement as HTMLElement)?.textContent).toBe("Rename group");
     document.activeElement?.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
     );
@@ -119,7 +129,7 @@ describe("Workspace sidebar", () => {
     const { stores, get, root } = setup();
     const row = get('button[data-group-id="initial-group"]');
     get(".sidebar-row--group .sidebar-more").click();
-    get('[role="menuitem"]').click();
+    menuItem(root, "Rename group").click();
     const input = root.querySelector<HTMLInputElement>('input[aria-label="Name"]');
     if (!input) throw new Error("Missing rename input");
     input.value = "Authentication";
@@ -224,7 +234,7 @@ describe("Workspace sidebar", () => {
     get(".sidebar-row--folder .sidebar-row-select").click();
     expect(stores.navigation.getState().groups[0]?.expanded).toBe(false);
     get(".sidebar-row--group .sidebar-more").click();
-    get('[role="menuitem"]').click();
+    menuItem(root, "Rename group").click();
     const input = root.querySelector<HTMLInputElement>("input");
     if (!input) throw new Error("Missing input");
     input.value = "Discard this";
@@ -379,5 +389,174 @@ describe("Workspace sidebar", () => {
       expect(groupTitles(root, "/projects/Coloride")).toEqual(["Workspace", "New group"]);
       expect(groupTitles(root, "/projects/Website")).toEqual(["Workspace"]);
     });
+  });
+});
+
+describe("Zone 2 option menus", () => {
+  const labels = (root: ParentNode) =>
+    Array.from(root.querySelectorAll('[role="menuitem"]')).map((item) => item.textContent);
+
+  it("offers every folder action, with the destructive one last and in red", () => {
+    const { root, get } = setup();
+    get(".sidebar-row--folder .sidebar-more").click();
+    expect(labels(root)).toEqual([
+      "New group",
+      "Collapse project",
+      "Expand all groups",
+      "Collapse all groups",
+      "Copy path",
+      "Open project…",
+      "Remove from list",
+    ]);
+    expect(root.querySelectorAll(".sidebar-menu-separator")).toHaveLength(3);
+    expect(menuItem(root, "Remove from list").classList.contains("sidebar-menu-item--danger")).toBe(
+      true,
+    );
+  });
+
+  it("collapses and expands the project from its menu", () => {
+    const { root, get, stores } = setup();
+    get(".sidebar-row--folder .sidebar-more").click();
+    menuItem(root, "Collapse project").click();
+    expect(stores.navigation.getState().expanded).toBe(false);
+    get(".sidebar-row--folder .sidebar-more").click();
+    expect(labels(root)).toContain("Expand project");
+  });
+
+  it("copies the project path", async () => {
+    const { root, get } = setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(window.navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    get(".sidebar-row--folder .sidebar-more").click();
+    menuItem(root, "Copy path").click();
+    expect(writeText).toHaveBeenCalledWith("/projects/Coloride");
+  });
+
+  it("offers every group action; the group with sessions cannot be deleted", () => {
+    const { root, get, stores } = setup();
+    stores.createWorkGroup("Other task");
+    get('.sidebar-group[data-group-id="initial-group"] .sidebar-row--group .sidebar-more').click();
+    expect(labels(root)).toEqual([
+      "New session",
+      "Rename group",
+      "Collapse group",
+      "Close all sessions",
+      "Delete group",
+    ]);
+    const del = menuItem(root, "Delete group");
+    expect(del.disabled).toBe(true);
+    expect(del.title).toBe("Close the group's sessions first");
+    expect(menuItem(root, "Close all sessions").disabled).toBe(false);
+  });
+
+  it("deletes an empty group and moves the selection to a neighbour", () => {
+    const { root, get, stores } = setup();
+    stores.createWorkGroup("Other task");
+    const other = stores.navigation.getState().groups[1]?.id ?? "";
+    expect(stores.navigation.getState().activeGroupId).toBe(other);
+    get(`.sidebar-group[data-group-id="${other}"] .sidebar-row--group .sidebar-more`).click();
+    menuItem(root, "Delete group").click();
+    expect(stores.navigation.getState().groups.map((group) => group.id)).toEqual(["initial-group"]);
+    expect(stores.navigation.getState().activeGroupId).toBe("initial-group");
+  });
+
+  it("never deletes the only group", () => {
+    const { get, root, stores } = setup();
+    get(".sidebar-row--group .sidebar-more").click();
+    expect(menuItem(root, "Delete group").disabled).toBe(true);
+    stores.removeWorkGroup("initial-group");
+    expect(stores.navigation.getState().groups).toHaveLength(1);
+  });
+
+  it("a new group is created from the group menu", () => {
+    const { get, root, stores } = setup();
+    get(".sidebar-row--group .sidebar-more").click();
+    const before = stores.zone3.getState().chats.length;
+    menuItem(root, "New session").click();
+    expect(stores.zone3.getState().chats).toHaveLength(before + 1);
+  });
+
+  it("offers every session action and closes the others without touching this one", () => {
+    const { root, get, stores } = setup();
+    get('.sidebar-row--session[data-chat-id="a"] .sidebar-more').click();
+    expect(labels(root)).toEqual([
+      "Rename session",
+      "Duplicate session",
+      "Maximize",
+      "Close session",
+      "Close other sessions",
+    ]);
+    menuItem(root, "Close other sessions").click();
+    expect(stores.zone3.getState().chats.map((chat) => chat.chatId)).toEqual(["a"]);
+  });
+
+  it("duplicates a session next to it and maximizes then restores it", () => {
+    const { root, get, stores } = setup();
+    get('.sidebar-row--session[data-chat-id="b"] .sidebar-more').click();
+    menuItem(root, "Duplicate session").click();
+    const chats = stores.zone3.getState().chats;
+    expect(chats).toHaveLength(3);
+    expect(chats.at(-1)?.modelName).toBe("Claude");
+    get('.sidebar-row--session[data-chat-id="b"] .sidebar-more').click();
+    menuItem(root, "Maximize").click();
+    expect(stores.navigation.getState().groups[0]?.maximizedChatId).toBe("b");
+    get('.sidebar-row--session[data-chat-id="b"] .sidebar-more').click();
+    menuItem(root, "Restore layout").click();
+    expect(stores.navigation.getState().groups[0]?.maximizedChatId).toBeNull();
+  });
+
+  it("cannot close the last session or one with a running agent", () => {
+    const { root, get, stores } = setup();
+    stores.closeChat("b");
+    get(".sidebar-row--session .sidebar-more").click();
+    const close = menuItem(root, "Close session");
+    expect(close.disabled).toBe(true);
+    expect(close.title).toBe("No session can be closed right now");
+  });
+
+  it("opens the same menu on a right click, but not while renaming", () => {
+    const { root, get } = setup();
+    const row = get(".sidebar-row--folder");
+    const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+    row.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(labels(root)).toContain("New group");
+  });
+
+  it("jumps to an entry by typing its first letter", () => {
+    const { root, get } = setup();
+    get(".sidebar-row--folder .sidebar-more").click();
+    const menu = root.querySelector('[role="menu"]') as HTMLElement;
+    menu.dispatchEvent(new KeyboardEvent("keydown", { key: "c", bubbles: true }));
+    expect(document.activeElement?.textContent).toBe("Collapse project");
+    menu.dispatchEvent(new KeyboardEvent("keydown", { key: "c", bubbles: true }));
+    expect(document.activeElement?.textContent).toBe("Collapse all groups");
+  });
+
+  it("closes when the sidebar scrolls or the window resizes", () => {
+    const { root, get } = setup();
+    get(".sidebar-row--folder .sidebar-more").click();
+    expect(root.querySelector('[role="menu"]')).not.toBeNull();
+    window.dispatchEvent(new Event("resize"));
+    expect(root.querySelector('[role="menu"]')).toBeNull();
+    get(".sidebar-row--folder .sidebar-more").click();
+    document.body.dispatchEvent(new Event("scroll"));
+    expect(root.querySelector('[role="menu"]')).toBeNull();
+  });
+
+  it("opens above its button when there is no room below", () => {
+    const { root, get } = setup();
+    const more = get(".sidebar-row--group .sidebar-more");
+    vi.spyOn(more, "getBoundingClientRect").mockReturnValue({
+      top: window.innerHeight - 40,
+      bottom: window.innerHeight - 20,
+    } as DOMRect);
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(200);
+    more.click();
+    expect(root.querySelector<HTMLElement>('[role="menu"]')?.dataset.placement).toBe("above");
+    vi.restoreAllMocks();
   });
 });

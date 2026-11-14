@@ -353,7 +353,10 @@
     background: #262626;
   }
   .sidebar-menu-item {
-    display: block;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
     width: 100%;
     padding: 5px 8px;
     border: 0;
@@ -373,6 +376,22 @@
   .sidebar-menu-item:disabled {
     color: var(--color-text-muted);
     cursor: default;
+  }
+  .sidebar-menu-item--danger:not(:disabled) {
+    color: #e5645a;
+  }
+  .sidebar-menu-item--danger:hover:not(:disabled),
+  .sidebar-menu-item--danger:focus-visible {
+    background: rgba(229, 100, 90, 0.14);
+  }
+  .sidebar-menu-hint {
+    font-size: 10.5px;
+    color: var(--color-text-muted);
+  }
+  .sidebar-menu-separator {
+    height: 1px;
+    margin: 3px 4px;
+    background: rgba(255, 255, 255, 0.1);
   }
   .sidebar-icon-button:focus-visible {
     outline: 1px solid var(--color-text-secondary);
