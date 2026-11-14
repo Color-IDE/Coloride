@@ -1,29 +1,12 @@
-import {
-  autocompletion,
-  closeBrackets,
-  closeBracketsKeymap,
-  completionKeymap,
-} from "@codemirror/autocomplete";
-import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { indentUnit } from "@codemirror/language";
+import { history } from "@codemirror/commands";
+
 import {
   Annotation,
   EditorSelection as CmSelection,
   Compartment,
-  EditorState,
   Transaction,
 } from "@codemirror/state";
-import {
-  EditorView,
-  drawSelection,
-  dropCursor,
-  highlightActiveLine,
-  highlightActiveLineGutter,
-  highlightSpecialChars,
-  keymap,
-  lineNumbers,
-  rectangularSelection,
-} from "@codemirror/view";
+import { EditorView } from "@codemirror/view";
 import {
   CONTRACT_SCHEMA_VERSION,
   type DocumentDiagnostics,
@@ -37,16 +20,9 @@ import {
   decodeEditorSnapshotBinary,
   encodeEditorTransactionBinary,
 } from "./binary-ipc.js";
-import {
-  breakpointKeyBindings,
-  breakpointLines,
-  breakpointsField,
-  colorideBreakpoints,
-  setBreakpointsEffect,
-} from "./breakpoints.js";
+import { breakpointLines, breakpointsField, setBreakpointsEffect } from "./breakpoints.js";
 import {
   type EditorRangeDecoration,
-  colorideStateDecorations,
   colorideStateField,
   setColorideDecorationsEffect,
   suppressLocalInvalidationAnnotation,
@@ -56,11 +32,11 @@ import {
   type EditorDiagnostic,
   RevisionHistory,
   clearDiagnosticsEffect,
-  colorideDiagnostics,
   diagnosticsField,
   diagnosticsFromBatch,
   setSourceDiagnosticsEffect,
 } from "./diagnostics.js";
+import { createEditorState } from "./editor-state.js";
 import {
   LanguageFeatureClient,
   type LanguageFeatureProvider,
@@ -75,14 +51,10 @@ import {
   type DeclarativeVsixTheme,
   KEYMAP_PRESET_BINDINGS,
   type KeymapPresetId,
-  createKeymapCompartmentExtension,
   createKeymapExtension,
-  createThemeCompartmentExtension,
   createThemeExtension,
   renderSnippetTemplate,
 } from "./onboarding-vsix.js";
-import { scopeGuides } from "./scope-guides.js";
-import { highlightSelectedLineGutter, textOnlySelection } from "./selection.js";
 
 const documentSwitchAnnotation = Annotation.define<boolean>();
 const transactionOriginAnnotation = Annotation.define<TransactionOrigin>();
@@ -176,7 +148,21 @@ export class ColorideEditorView {
       this.handleIncomingBinarySnapshot(payload);
     });
 
-    const state = this.createEditorState(
+    const state = createEditorState(
+      {
+        historyCompartment: this.historyCompartment,
+        languageCompartment: this.languageCompartment,
+        keymapCompartment: this.keymapCompartment,
+        themeCompartment: this.themeCompartment,
+        activeKeymapPreset: this.activeKeymapPreset,
+        customKeybindings: this.customKeybindings,
+        activeTheme: this.activeTheme,
+        languageFeatures: this.languageFeatures,
+        hostDeltaSync: this.createHostDeltaSyncExtension(),
+        onKeyCommand: (command) => {
+          this.lastTriggeredKeyCommand = command;
+        },
+      },
       options.initialDocumentId,
       options.initialContent,
       options.initialDecorations ?? [],
@@ -589,67 +575,6 @@ export class ColorideEditorView {
       this.view = null;
     }
     this.storeListeners.clear();
-  }
-
-  private createEditorState(
-    documentId: string,
-    initialContent: string,
-    initialDecorations: readonly EditorRangeDecoration[],
-  ): EditorState {
-    const baseState = EditorState.create({
-      doc: initialContent,
-      extensions: [
-        EditorState.tabSize.of(2),
-        indentUnit.of("  "),
-        ...colorideStateDecorations(),
-        colorideDiagnostics(),
-        colorideBreakpoints(),
-        highlightSelectedLineGutter(),
-        scopeGuides(),
-        textOnlySelection(),
-        lineNumbers({
-          formatNumber: (lineNo) => String(lineNo).padStart(4, " "),
-        }),
-        highlightActiveLineGutter(),
-        highlightSpecialChars(),
-        this.historyCompartment.of(history()),
-        drawSelection(),
-        dropCursor(),
-        EditorState.allowMultipleSelections.of(true),
-        rectangularSelection(),
-        closeBrackets(),
-        highlightActiveLine(),
-        autocompletion({ override: [this.languageFeatures.completionSource] }),
-        keymap.of([
-          ...this.languageFeatures.keyBindings(),
-          ...breakpointKeyBindings,
-          ...closeBracketsKeymap,
-          ...completionKeymap,
-          ...defaultKeymap,
-          ...historyKeymap,
-          indentWithTab,
-        ]),
-        this.languageCompartment.of(createLezerHighlightingExtensions(documentId)),
-        createKeymapCompartmentExtension(
-          this.keymapCompartment,
-          this.activeKeymapPreset,
-          this.customKeybindings,
-          (cmd) => {
-            this.lastTriggeredKeyCommand = cmd;
-          },
-        ),
-        createThemeCompartmentExtension(this.themeCompartment, this.activeTheme),
-        this.createHostDeltaSyncExtension(),
-      ],
-    });
-
-    if (initialDecorations.length === 0) {
-      return baseState;
-    }
-
-    return baseState.update({
-      effects: setColorideDecorationsEffect.of(initialDecorations),
-    }).state;
   }
 
   private createHostDeltaSyncExtension() {
