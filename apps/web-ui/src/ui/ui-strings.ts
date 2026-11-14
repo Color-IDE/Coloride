@@ -159,7 +159,7 @@ export const UI_STRINGS = {
     restoreSession: "Restore layout",
     deleteGroup: "Delete group",
     deleteGroupNeedsEmpty: "Close the group's sessions first",
-    deleteLastGroup: "A project keeps at least one group",
+    deleteLastGroup: "Create another group first",
     newTerminal: "New terminal",
     expandProject: "Expand project",
     collapseProject: "Collapse project",

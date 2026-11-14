@@ -114,9 +114,9 @@ describe("Workspace sidebar", () => {
     expect(more.getAttribute("aria-expanded")).toBe("true");
     const first = get('[role="menuitem"]');
     expect(document.activeElement).toBe(first);
-    expect(first.textContent).toBe("New session");
+    expect(first.textContent).toBe("Rename group");
     first.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
-    expect((document.activeElement as HTMLElement)?.textContent).toBe("Rename group");
+    expect((document.activeElement as HTMLElement)?.textContent).toBe("Collapse group");
     document.activeElement?.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
     );
@@ -362,16 +362,19 @@ describe("Workspace sidebar", () => {
       ]);
     });
 
-    it("is also in the project's menu, and expands a collapsed project to show the group", () => {
+    it("expands a collapsed project to show the new group, and is not in the options menu", () => {
       const { stores, root, get } = setup();
       get(".sidebar-row--folder .sidebar-row-select").click();
       expect(stores.navigation.getState().expanded).toBe(false);
       get(".sidebar-row--folder .sidebar-more").click();
-      const item = Array.from(root.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find(
-        (el) => el.textContent === "New group",
-      );
-      if (!item) throw new Error("Missing menu item");
-      item.click();
+      // Adding is done with the "+": the options menu does not repeat it.
+      expect(
+        Array.from(root.querySelectorAll('[role="menuitem"]')).some(
+          (el) => el.textContent === "New group",
+        ),
+      ).toBe(false);
+      get(".sidebar-row--folder .sidebar-more").click();
+      get(".sidebar-row--folder .sidebar-add").click();
       expect(stores.navigation.getState().groups).toHaveLength(2);
       expect(stores.navigation.getState().expanded).toBe(true);
       expect(renameInput(root)).not.toBeNull();
@@ -400,7 +403,6 @@ describe("Zone 2 option menus", () => {
     const { root, get } = setup();
     get(".sidebar-row--folder .sidebar-more").click();
     expect(labels(root)).toEqual([
-      "New group",
       "Collapse project",
       "Expand all groups",
       "Collapse all groups",
@@ -408,7 +410,7 @@ describe("Zone 2 option menus", () => {
       "Open project…",
       "Remove from list",
     ]);
-    expect(root.querySelectorAll(".sidebar-menu-separator")).toHaveLength(3);
+    expect(root.querySelectorAll(".sidebar-menu-separator")).toHaveLength(2);
     expect(menuItem(root, "Remove from list").classList.contains("sidebar-menu-item--danger")).toBe(
       true,
     );
@@ -440,7 +442,6 @@ describe("Zone 2 option menus", () => {
     stores.createWorkGroup("Other task");
     get('.sidebar-group[data-group-id="initial-group"] .sidebar-row--group .sidebar-more').click();
     expect(labels(root)).toEqual([
-      "New session",
       "Rename group",
       "Collapse group",
       "Close all sessions",
@@ -469,14 +470,6 @@ describe("Zone 2 option menus", () => {
     expect(menuItem(root, "Delete group").disabled).toBe(true);
     stores.removeWorkGroup("initial-group");
     expect(stores.navigation.getState().groups).toHaveLength(1);
-  });
-
-  it("a new session is created from the group menu", () => {
-    const { get, root, stores } = setup();
-    get(".sidebar-row--group .sidebar-more").click();
-    const before = stores.zone3.getState().chats.length;
-    menuItem(root, "New session").click();
-    expect(stores.zone3.getState().chats).toHaveLength(before + 1);
   });
 
   it("offers every session action and closes the others without touching this one", () => {
@@ -523,17 +516,20 @@ describe("Zone 2 option menus", () => {
     const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
     row.dispatchEvent(event);
     expect(event.defaultPrevented).toBe(true);
-    expect(labels(root)).toContain("New group");
+    expect(labels(root)).toContain("Collapse project");
   });
 
   it("jumps to an entry by typing its first letter", () => {
     const { root, get } = setup();
     get(".sidebar-row--folder .sidebar-more").click();
     const menu = root.querySelector('[role="menu"]') as HTMLElement;
-    menu.dispatchEvent(new KeyboardEvent("keydown", { key: "c", bubbles: true }));
-    expect(document.activeElement?.textContent).toBe("Collapse project");
+    // The first entry has the focus; typing "c" moves on to the next one starting with it.
     menu.dispatchEvent(new KeyboardEvent("keydown", { key: "c", bubbles: true }));
     expect(document.activeElement?.textContent).toBe("Collapse all groups");
+    menu.dispatchEvent(new KeyboardEvent("keydown", { key: "c", bubbles: true }));
+    expect(document.activeElement?.textContent).toBe("Copy path");
+    menu.dispatchEvent(new KeyboardEvent("keydown", { key: "c", bubbles: true }));
+    expect(document.activeElement?.textContent).toBe("Collapse project");
   });
 
   it("closes when the sidebar scrolls or the window resizes", () => {

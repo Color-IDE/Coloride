@@ -241,23 +241,9 @@ export class WorkspaceSidebar {
         if (!entry || !latest) return;
         const expanded = latest.expanded !== false;
         const closable = latest.chatIds.filter((id) => this.canClose(id));
-        const terminals = this.options.newSessionKind === "terminal";
         this.menu.open(anchor, [
-          ...(terminals
-            ? [
-                {
-                  label: UI_STRINGS.sidebar.newTerminal,
-                  run: () => this.addSession(projectPath, group.id, "terminal"),
-                },
-              ]
-            : []),
-          {
-            label: UI_STRINGS.chat.newSession,
-            run: () => this.addSession(projectPath, group.id),
-          },
           {
             label: UI_STRINGS.sidebar.renameGroup,
-            separatorBefore: true,
             run: () =>
               this.withProject(projectPath, () =>
                 row.rename(latest.title, (name) => stores.renameWorkGroup(group.id, name)),
@@ -399,10 +385,8 @@ export class WorkspaceSidebar {
         const entry = listProjects(stores.navigation.getState()).find((item) => item.path === path);
         const expanded = entry?.expanded ?? true;
         this.menu.open(anchor, [
-          { label: UI_STRINGS.sidebar.newGroup, run: () => this.addGroup(path) },
           {
             label: expanded ? UI_STRINGS.sidebar.collapseProject : UI_STRINGS.sidebar.expandProject,
-            separatorBefore: true,
             run: () => stores.setProjectExpanded(!expanded, path),
           },
           {
