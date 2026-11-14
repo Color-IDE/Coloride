@@ -98,6 +98,27 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev
 
+      # LOT-010 tests drive the real vtsls and Biome (node_modules/.bin) and the pinned js-debug
+      # adapter (tools/). They are Unix-only, so Windows does not need them.
+      - name: Install pnpm
+        if: runner.os != 'Windows'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.24.0
+
+      - name: Install Node.js
+        if: runner.os != 'Windows'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install language servers and the js-debug adapter used by the tests
+        if: runner.os != 'Windows'
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm fetch:js-debug
+
       - name: Setup Rust stable toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
