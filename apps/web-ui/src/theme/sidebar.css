@@ -384,6 +384,32 @@
   .sidebar-menu-item--danger:focus-visible {
     background: rgba(229, 100, 90, 0.14);
   }
+  .sidebar-menu-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .sidebar-menu-icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    color: var(--color-text-secondary);
+  }
+  .sidebar-menu-icon svg {
+    width: 14px;
+    height: 14px;
+  }
+  .sidebar-menu-item:hover:not(:disabled) .sidebar-menu-icon,
+  .sidebar-menu-item:focus-visible .sidebar-menu-icon {
+    color: var(--color-text-primary);
+  }
+  .sidebar-menu-item--danger:not(:disabled) .sidebar-menu-icon {
+    color: inherit;
+  }
+  .sidebar-menu-item:disabled .sidebar-menu-icon {
+    color: inherit;
+  }
   .sidebar-menu-hint {
     font-size: 10.5px;
     color: var(--color-text-muted);

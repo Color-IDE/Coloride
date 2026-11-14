@@ -5,6 +5,21 @@ import type { CockpitChatTab, CockpitFileTreeNode, CockpitStoreBundle } from "..
 import { attribute, button, reconcile, visibility } from "../ui/dom-utils.js";
 import { UI_STRINGS } from "../ui/ui-strings.js";
 import { FOLDER_ICON, GROUP_ICON } from "./icons.js";
+import {
+  MENU_CHEVRONS_DOWN_ICON,
+  MENU_CHEVRONS_UP_ICON,
+  MENU_CHEVRON_DOWN_ICON,
+  MENU_CHEVRON_UP_ICON,
+  MENU_CLOSE_ICON,
+  MENU_CLOSE_MANY_ICON,
+  MENU_COPY_ICON,
+  MENU_FOLDER_ICON,
+  MENU_FOLDER_MINUS_ICON,
+  MENU_MAXIMIZE_ICON,
+  MENU_RENAME_ICON,
+  MENU_RESTORE_ICON,
+  MENU_TRASH_ICON,
+} from "./menu-icons.js";
 import { SidebarMenu } from "./sidebar-menu.js";
 import { SidebarRow } from "./sidebar-row.js";
 
@@ -244,6 +259,7 @@ export class WorkspaceSidebar {
         this.menu.open(anchor, [
           {
             label: UI_STRINGS.sidebar.renameGroup,
+            icon: MENU_RENAME_ICON,
             run: () =>
               this.withProject(projectPath, () =>
                 row.rename(latest.title, (name) => stores.renameWorkGroup(group.id, name)),
@@ -251,11 +267,13 @@ export class WorkspaceSidebar {
           },
           {
             label: expanded ? UI_STRINGS.sidebar.collapseGroup : UI_STRINGS.sidebar.expandGroup,
+            icon: expanded ? MENU_CHEVRON_UP_ICON : MENU_CHEVRON_DOWN_ICON,
             run: () =>
               this.withProject(projectPath, () => stores.setWorkGroupExpanded(group.id, !expanded)),
           },
           {
             label: UI_STRINGS.sidebar.closeAllSessions,
+            icon: MENU_CLOSE_MANY_ICON,
             separatorBefore: true,
             danger: true,
             disabled: closable.length === 0,
@@ -264,6 +282,7 @@ export class WorkspaceSidebar {
           },
           {
             label: UI_STRINGS.sidebar.deleteGroup,
+            icon: MENU_TRASH_ICON,
             danger: true,
             disabled: latest.chatIds.length > 0 || entry.groups.length <= 1,
             reason:
@@ -325,10 +344,12 @@ export class WorkspaceSidebar {
         this.menu.open(anchor, [
           {
             label: UI_STRINGS.sidebar.renameSession,
+            icon: MENU_RENAME_ICON,
             run: () => row.rename(latest.title, (name) => stores.renameChat(chat.chatId, name)),
           },
           {
             label: UI_STRINGS.sidebar.duplicateSession,
+            icon: MENU_COPY_ICON,
             run: () =>
               this.addSession(
                 projectPath,
@@ -339,10 +360,12 @@ export class WorkspaceSidebar {
           },
           {
             label: alone ? UI_STRINGS.sidebar.restoreSession : UI_STRINGS.sidebar.maximizeSession,
+            icon: alone ? MENU_RESTORE_ICON : MENU_MAXIMIZE_ICON,
             run: () => this.withProject(projectPath, () => stores.toggleMaximizeChat(chat.chatId)),
           },
           {
             label: UI_STRINGS.sidebar.closeSession,
+            icon: MENU_CLOSE_ICON,
             separatorBefore: true,
             danger: true,
             disabled: !this.canClose(chat.chatId),
@@ -351,6 +374,7 @@ export class WorkspaceSidebar {
           },
           {
             label: UI_STRINGS.sidebar.closeOtherSessions,
+            icon: MENU_CLOSE_MANY_ICON,
             danger: true,
             disabled: others.length === 0,
             ...(others.length === 0 ? { reason: UI_STRINGS.sidebar.noSessionToClose } : {}),
@@ -387,24 +411,29 @@ export class WorkspaceSidebar {
         this.menu.open(anchor, [
           {
             label: expanded ? UI_STRINGS.sidebar.collapseProject : UI_STRINGS.sidebar.expandProject,
+            icon: expanded ? MENU_CHEVRON_UP_ICON : MENU_CHEVRON_DOWN_ICON,
             run: () => stores.setProjectExpanded(!expanded, path),
           },
           {
             label: UI_STRINGS.sidebar.expandAll,
+            icon: MENU_CHEVRONS_DOWN_ICON,
             run: () => this.withProject(path, () => this.expandAll(true)),
           },
           {
             label: UI_STRINGS.sidebar.collapseAll,
+            icon: MENU_CHEVRONS_UP_ICON,
             run: () => this.withProject(path, () => this.expandAll(false)),
           },
           {
             label: UI_STRINGS.sidebar.copyPath,
+            icon: MENU_COPY_ICON,
             separatorBefore: true,
             disabled: path === "",
             run: () => this.copyPath(path),
           },
           {
             label: UI_STRINGS.sidebar.openProjectMenu,
+            icon: MENU_FOLDER_ICON,
             disabled: !openWorkspace || this.opening,
             run: () => {
               void this.openProject();
@@ -412,6 +441,7 @@ export class WorkspaceSidebar {
           },
           {
             label: UI_STRINGS.sidebar.removeProject,
+            icon: MENU_FOLDER_MINUS_ICON,
             separatorBefore: true,
             danger: true,
             disabled: path === "",

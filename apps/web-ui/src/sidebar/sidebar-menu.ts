@@ -12,6 +12,8 @@ export interface SidebarMenuAction {
   readonly danger?: boolean;
   /** Draws a line above this entry, to group the entries that belong together. */
   readonly separatorBefore?: boolean;
+  /** An icon (14 px SVG markup) shown before the label. */
+  readonly icon?: string;
   /** A shortcut or other short note, shown at the end of the row. */
   readonly hint?: string;
 }
@@ -53,6 +55,7 @@ export class SidebarMenu {
     this.anchor = anchor;
     this.menu = menu;
     anchor.setAttribute("aria-expanded", "true");
+    const hasIcons = actions.some((action) => action.icon);
     for (const action of actions) {
       if (action.separatorBefore) {
         const line = doc.createElement("div");
@@ -62,9 +65,18 @@ export class SidebarMenu {
       }
       const item = button(doc, "sidebar-menu-item");
       if (action.danger) item.classList.add("sidebar-menu-item--danger");
-      const label = doc.createElement("span");
-      label.textContent = action.label;
-      item.appendChild(label);
+      const main = doc.createElement("span");
+      main.className = "sidebar-menu-label";
+      // Entries without an icon keep the same gap when the others have one, so labels line up.
+      if (hasIcons) {
+        const icon = doc.createElement("span");
+        icon.className = "sidebar-menu-icon";
+        icon.setAttribute("aria-hidden", "true");
+        if (action.icon) icon.innerHTML = action.icon;
+        main.appendChild(icon);
+      }
+      main.append(action.label);
+      item.appendChild(main);
       if (action.hint) {
         const hint = doc.createElement("span");
         hint.className = "sidebar-menu-hint";
