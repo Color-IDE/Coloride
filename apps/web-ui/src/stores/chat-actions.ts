@@ -157,7 +157,9 @@ export function createChatActions(ctx: StoreContext): ChatActions {
       const plan = planNewPanel(options, chatId);
       if (!plan) return null;
       const z3 = zone3.getState();
-      const sibling = z3.chats.find((chat) => chat.chatId === (options?.from ?? z3.activeChatId));
+      const neighbour = z3.chats.find((chat) => chat.chatId === (options?.from ?? z3.activeChatId));
+      // A new session takes the model of the one next to it, but a shell has no model to share.
+      const sibling = neighbour?.kind === "terminal" ? undefined : neighbour;
       const kind = options?.kind ?? "agent";
       const chat: CockpitChatTab =
         kind === "terminal"

@@ -279,4 +279,18 @@ describe("terminal as a Zone 3 panel", () => {
     expect(selected?.getAttribute("aria-selected")).toBe("true");
     expect(opened).toHaveLength(1);
   });
+
+  it("a session created while a terminal is selected is a Codex session, not a 'Shell' one", async () => {
+    const { press, stores } = setup();
+    press();
+    await settle();
+    const active = stores.zone3.getState().activeChatId;
+    expect(stores.zone3.getState().chats.find((chat) => chat.chatId === active)?.kind).toBe(
+      "terminal",
+    );
+    const created = stores.createChat({ nextToActive: true });
+    const session = stores.zone3.getState().chats.find((chat) => chat.chatId === created);
+    expect(session?.kind).toBeUndefined();
+    expect(session?.modelName).toBe("Codex");
+  });
 });
