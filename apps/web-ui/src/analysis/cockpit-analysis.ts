@@ -2,7 +2,7 @@ import type {
   CockpitAstSymbolItem,
   CockpitFileTreeNode,
   CockpitImpactedTestItem,
-} from "./stores/index.js";
+} from "../stores/index.js";
 
 /**
  * Lightweight lexical symbol discovery for immediate UI feedback while the authoritative

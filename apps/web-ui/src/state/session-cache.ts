@@ -1,5 +1,5 @@
-import { COLORIDE_DESIGN_TOKENS } from "./design-state-tokens.js";
-import type { CockpitChatTab } from "./stores/types.js";
+import type { CockpitChatTab } from "../stores/types.js";
+import { COLORIDE_DESIGN_TOKENS } from "../ui/design-state-tokens.js";
 
 /** Upgrade old JSON sessions once; live stores never infer kind from a model label. */
 export function restoreCachedSession(value: unknown): CockpitChatTab {

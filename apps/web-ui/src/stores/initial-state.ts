@@ -1,8 +1,8 @@
-import { AtomicStore } from "../atomic-store.js";
 import {
   extractSymbolsHeuristically,
   inferImpactedTestsHeuristically,
-} from "../cockpit-analysis.js";
+} from "../analysis/cockpit-analysis.js";
+import { AtomicStore } from "../state/atomic-store.js";
 import type { DocumentBuffers } from "./documents.js";
 import { ACTIVITY_BAR_SECTIONS } from "./types.js";
 import type {

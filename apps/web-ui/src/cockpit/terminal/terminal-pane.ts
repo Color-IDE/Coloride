@@ -1,4 +1,4 @@
-import { UI_STRINGS } from "../../ui-strings.js";
+import { UI_STRINGS } from "../../ui/ui-strings.js";
 
 /** A running shell on the host side. */
 export interface TerminalHandle {

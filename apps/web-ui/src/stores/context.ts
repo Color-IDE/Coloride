@@ -1,5 +1,5 @@
-import type { AtomicStore } from "../atomic-store.js";
-import type { WorkspaceNavigationState } from "../workspace-navigation.js";
+import type { AtomicStore } from "../state/atomic-store.js";
+import type { WorkspaceNavigationState } from "../state/workspace-navigation.js";
 import type { DocumentBuffers } from "./documents.js";
 import type {
   CockpitStoreBundle,

@@ -1,4 +1,4 @@
-import { attachThinScrollbar } from "../../thin-scrollbar.js";
+import { attachThinScrollbar } from "../../ui/thin-scrollbar.js";
 
 /**
  * Edge shadows for a header tab strip (state exposed as data attributes, drawn in CSS) plus the

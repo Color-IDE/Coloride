@@ -3,10 +3,10 @@ import {
   type ExplorerTreeOptions,
   ExplorerTreeRenderer,
   visibleExplorerNodes,
-} from "../../explorer-tree.js";
+} from "../../explorer/explorer-tree.js";
 import type { CockpitFileTreeNode } from "../../stores/index.js";
-import { type ThinScrollbar, attachThinScrollbar } from "../../thin-scrollbar.js";
-import { UI_STRINGS } from "../../ui-strings.js";
+import { type ThinScrollbar, attachThinScrollbar } from "../../ui/thin-scrollbar.js";
+import { UI_STRINGS } from "../../ui/ui-strings.js";
 
 const DEFAULT_VIEWPORT_HEIGHT_PX = 600;
 

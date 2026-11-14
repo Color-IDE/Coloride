@@ -3,12 +3,12 @@ import type {
   ConfidenceLevel,
   ExcerptFreshness,
 } from "@coloride/protocol-types";
-import type { AtomicStore } from "../atomic-store.js";
-import type { AreaSize, SplitDirection, SplitPosition } from "../layout-tree.js";
+import type { AreaSize, SplitDirection, SplitPosition } from "../layout/layout-tree.js";
+import type { AtomicStore } from "../state/atomic-store.js";
 import type {
   WorkspaceNavigationActions,
   WorkspaceNavigationState,
-} from "../workspace-navigation.js";
+} from "../state/workspace-navigation.js";
 
 export type CockpitPersonaMode = "Create" | "Learn" | "Develop" | "Infrastructure" | "Data";
 

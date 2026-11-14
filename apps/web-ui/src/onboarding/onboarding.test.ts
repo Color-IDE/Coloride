@@ -1,8 +1,12 @@
 // @vitest-environment happy-dom
 import { ColorideEditorView, InMemoryBinaryHostBridge } from "@coloride/editor-cm6";
 import { describe, expect, it } from "vitest";
-import { OnboardingModalController, REDACTED_ENV_VALUE, resolveExternalIdePaths } from "./index.js";
-import { UI_STRINGS } from "./ui-strings.js";
+import {
+  OnboardingModalController,
+  REDACTED_ENV_VALUE,
+  resolveExternalIdePaths,
+} from "../index.js";
+import { UI_STRINGS } from "../ui/ui-strings.js";
 
 describe("@coloride/web-ui — LOT-006 onboarding and migration", () => {
   it("LOT-006 BLOCKING: parses multi-OS JSONC configs, loads declarative .vsix themes/snippets into CM6, and switches VS Code / Vim / JetBrains keymaps with 0 remounts", () => {

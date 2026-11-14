@@ -5,8 +5,8 @@ import {
   type SplitPosition,
   addPanel,
   placePanel,
-} from "../layout-tree.js";
-import { resolveGroupLayout, resolveGroupMaximized } from "../workspace-navigation.js";
+} from "../layout/layout-tree.js";
+import { resolveGroupLayout, resolveGroupMaximized } from "../state/workspace-navigation.js";
 import type { StoreContext } from "./context.js";
 import type { CockpitChatTab, CockpitStoreBundle, CreateChatOptions } from "./types.js";
 

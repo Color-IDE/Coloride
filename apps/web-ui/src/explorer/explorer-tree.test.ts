@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
+import type { CockpitFileTreeNode } from "../stores/index.js";
+import { fileTreeIconColor, fileTreeIconSvg } from "../theme/file-tree-icons.js";
 import {
   EXPLORER_ROW_HEIGHT_PX,
   stickyAncestorIndices,
   visibleExplorerNodes,
 } from "./explorer-tree.js";
-import type { CockpitFileTreeNode } from "./stores/index.js";
-import { fileTreeIconColor, fileTreeIconSvg } from "./theme/file-tree-icons.js";
 
 function node(path: string, depth: number, isDirectory = false): CockpitFileTreeNode {
   return {

@@ -1,5 +1,5 @@
 import type { ColorideValidationState } from "@coloride/protocol-types";
-import type { CockpitChatMessage, CockpitFileTreeNode } from "./stores/index.js";
+import type { CockpitChatMessage, CockpitFileTreeNode } from "../stores/index.js";
 
 export interface VirtualWindowSlice<T> {
   readonly totalCount: number;

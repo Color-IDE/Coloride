@@ -1,5 +1,5 @@
-import { button } from "../dom-utils.js";
-import { UI_STRINGS } from "../ui-strings.js";
+import { button } from "../ui/dom-utils.js";
+import { UI_STRINGS } from "../ui/ui-strings.js";
 
 export interface SidebarMenuAction {
   readonly label: string;

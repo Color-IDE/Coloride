@@ -1,5 +1,5 @@
-import { attribute, button, label, visibility } from "../dom-utils.js";
-import { UI_STRINGS } from "../ui-strings.js";
+import { attribute, button, label, visibility } from "../ui/dom-utils.js";
+import { UI_STRINGS } from "../ui/ui-strings.js";
 import { CHEVRON_ICON, MORE_ICON, PLUS_ICON } from "./icons.js";
 
 export interface SidebarRowOptions {

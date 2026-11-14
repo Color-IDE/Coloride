@@ -1,6 +1,6 @@
-import { PANEL_DIMENSIONS } from "../../panel-geometry.js";
+import { PANEL_DIMENSIONS } from "../../layout/panel-geometry.js";
+import type { UiPreferences } from "../../state/ui-preferences.js";
 import type { Zone1ActivityState } from "../../stores/index.js";
-import type { UiPreferences } from "../../ui-preferences.js";
 import { PanelResizeHandle } from "../panels/panel-resize.js";
 
 /** Grid columns shared by the title bar and the shell, so headers stay above their zone. */

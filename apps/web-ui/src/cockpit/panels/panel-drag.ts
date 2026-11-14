@@ -1,4 +1,4 @@
-import { type LayoutNode, movePanel, panelIds, swapPanels } from "../../layout-tree.js";
+import { type LayoutNode, movePanel, panelIds, swapPanels } from "../../layout/layout-tree.js";
 
 /** A header pressed and moved less than this is a click, not a drag. */
 const DRAG_THRESHOLD_PX = 5;

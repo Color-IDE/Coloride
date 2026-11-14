@@ -1,5 +1,4 @@
-import { reconcile } from "../../dom-utils.js";
-import { type LayoutNode, panel, panelIds, reconcileLayout } from "../../layout-tree.js";
+import { type LayoutNode, panel, panelIds, reconcileLayout } from "../../layout/layout-tree.js";
 import { PLUS_ICON } from "../../sidebar/icons.js";
 import { sessionDisplayTitle } from "../../sidebar/sidebar-row.js";
 import {
@@ -9,8 +8,9 @@ import {
   resolveGroupLayout,
   resolveGroupMaximized,
 } from "../../stores/index.js";
-import { UI_STRINGS, uiText } from "../../ui-strings.js";
-import { VirtualChatMessageListRenderer } from "../../virtualizer.js";
+import { reconcile } from "../../ui/dom-utils.js";
+import { UI_STRINGS, uiText } from "../../ui/ui-strings.js";
+import { VirtualChatMessageListRenderer } from "../../ui/virtualizer.js";
 import {
   type TerminalHost,
   TerminalPane,

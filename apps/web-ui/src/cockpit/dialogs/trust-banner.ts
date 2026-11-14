@@ -1,4 +1,4 @@
-import { UI_STRINGS } from "../../ui-strings.js";
+import { UI_STRINGS } from "../../ui/ui-strings.js";
 
 /** Notice icon (static markup, no external input). */
 const NOTICE_ICON =

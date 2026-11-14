@@ -16,6 +16,7 @@ import { TitleBar } from "./cockpit/shell/title-bar.js";
 import type { TerminalHost, TerminalViewFactory } from "./cockpit/terminal/terminal-pane.js";
 import { createXtermView } from "./cockpit/terminal/xterm-view.js";
 import { OnboardingModalController, createInitialOnboardingState } from "./onboarding/index.js";
+import { UiPreferences, browserStorage } from "./state/ui-preferences.js";
 import type {
   CockpitAstSymbolItem,
   CockpitFileTreeNode,
@@ -24,8 +25,7 @@ import type {
   CockpitStoreBundle,
   Zone4InspectorState,
 } from "./stores/index.js";
-import { UiPreferences, browserStorage } from "./ui-preferences.js";
-import { UI_STRINGS, uiText } from "./ui-strings.js";
+import { UI_STRINGS, uiText } from "./ui/ui-strings.js";
 
 export type {
   DebugCommandMessage,

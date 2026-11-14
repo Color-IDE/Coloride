@@ -1,5 +1,5 @@
+import { type LayoutNode, parseLayout, reconcileLayout } from "../layout/layout-tree.js";
 import { AtomicStore } from "./atomic-store.js";
-import { type LayoutNode, parseLayout, reconcileLayout } from "./layout-tree.js";
 
 /** Persisted UI navigation only. Document text remains owned by host-core. */
 export interface WorkGroup {

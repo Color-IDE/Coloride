@@ -1,5 +1,5 @@
 import type { CockpitStoreBundle } from "../../stores/index.js";
-import { UI_STRINGS } from "../../ui-strings.js";
+import { UI_STRINGS } from "../../ui/ui-strings.js";
 import type { DebugPanel } from "../inspector/debug-panel.js";
 interface ShellShortcutHost {
   readonly stores: CockpitStoreBundle;

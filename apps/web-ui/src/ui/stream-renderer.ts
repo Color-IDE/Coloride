@@ -1,5 +1,5 @@
-import type { CockpitChatMessage, Zone3MultiChatState } from "./stores/index.js";
-import type { AtomicStore } from "./stores/index.js";
+import type { CockpitChatMessage, Zone3MultiChatState } from "../stores/index.js";
+import type { AtomicStore } from "../stores/index.js";
 
 function escapeHtml(raw: string): string {
   return raw

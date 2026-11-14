@@ -1,6 +1,6 @@
+import { PANEL_DIMENSIONS, type PanelSide } from "../layout/panel-geometry.js";
 import { AtomicStore } from "./atomic-store.js";
-import { PANEL_DIMENSIONS, type PanelSide } from "./panel-geometry.js";
-export type { PanelSide } from "./panel-geometry.js";
+export type { PanelSide } from "../layout/panel-geometry.js";
 
 export const UI_PREFERENCES_KEY = "coloride.uiPreferences.v1";
 export interface UiPreferencesState {

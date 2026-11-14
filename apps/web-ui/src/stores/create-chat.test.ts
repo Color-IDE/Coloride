@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { panelIds } from "./layout-tree.js";
-import {
-  createCockpitStoreBundle,
-  resolveGroupLayout,
-  resolveGroupMaximized,
-} from "./stores/index.js";
+import { panelIds } from "../layout/layout-tree.js";
+import { createCockpitStoreBundle, resolveGroupLayout, resolveGroupMaximized } from "./index.js";
 
 const chat = (chatId: string, modelName = "Codex") => ({
   kind: "agent" as const,

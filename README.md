@@ -44,13 +44,13 @@ cargo test --workspace
 
 `cockpit-dom.ts` composes zones and routes store subscriptions; document-scoped
 shortcuts live in `cockpit/shell/shell-shortcuts.ts`, and column geometry/resizing in
-`cockpit/shell/shell-layout.ts`. `ui-preferences.ts` owns the versioned UI snapshot
+`cockpit/shell/shell-layout.ts`. `state/ui-preferences.ts` owns the versioned UI snapshot
 (widths and hidden tree), validates persisted data, and migrates the old keys.
 Document text still belongs to Rust host-core; UI preferences contain no document text.
 
 Sessions are a discriminated union: `kind: "agent"` requires `modelName`, while
 `kind: "terminal"` has neither a model nor agent execution state. Cache restoration
-normalizes legacy sessions once, and `session-presentation.ts` owns session icons.
+normalizes legacy sessions once, and `cockpit/panels/session-presentation.ts` owns session icons.
 CodeMirror's controller retains its singleton lifecycle and IPC/revision handling;
 `editor-state.ts` owns the extension recipe, with no view creation or remounting.
 Theme tokens/base rules stay in `tailwind.css`; component styles are split into

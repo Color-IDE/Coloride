@@ -4,8 +4,8 @@ import {
   minExtentPx,
   nodeAt,
   resizeBoundary,
-} from "../../layout-tree.js";
-import { UI_STRINGS } from "../../ui-strings.js";
+} from "../../layout/layout-tree.js";
+import { UI_STRINGS } from "../../ui/ui-strings.js";
 
 /** A bar closer than this to another one of the same orientation is pulled onto it. */
 const SNAP_DISTANCE_PX = 8;

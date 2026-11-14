@@ -1,12 +1,12 @@
-import { COLORIDE_DESIGN_TOKENS, type CockpitFileTreeNode } from "./stores/index.js";
+import { COLORIDE_DESIGN_TOKENS, type CockpitFileTreeNode } from "../stores/index.js";
 import {
   TREE_CHEVRON_SVG,
   TREE_FOLDER_CLOSED_SVG,
   TREE_FOLDER_OPEN_SVG,
   fileTreeIconColor,
   fileTreeIconSvg,
-} from "./theme/file-tree-icons.js";
-import { computeVirtualWindowSlice } from "./virtualizer.js";
+} from "../theme/file-tree-icons.js";
+import { computeVirtualWindowSlice } from "../ui/virtualizer.js";
 
 export const EXPLORER_ROW_HEIGHT_PX = 22;
 /** Chevron (14px) + gap (4px): children start exactly under their parent folder icon. */

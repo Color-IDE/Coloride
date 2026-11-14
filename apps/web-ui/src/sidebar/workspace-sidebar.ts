@@ -1,8 +1,8 @@
 import { sessionIcon } from "../cockpit/panels/session-presentation.js";
-import { attribute, button, reconcile, visibility } from "../dom-utils.js";
+import { type WorkGroup, listProjects } from "../state/workspace-navigation.js";
 import type { CockpitChatTab, CockpitFileTreeNode, CockpitStoreBundle } from "../stores/index.js";
-import { UI_STRINGS } from "../ui-strings.js";
-import { type WorkGroup, listProjects } from "../workspace-navigation.js";
+import { attribute, button, reconcile, visibility } from "../ui/dom-utils.js";
+import { UI_STRINGS } from "../ui/ui-strings.js";
 import { FOLDER_ICON, GROUP_ICON } from "./icons.js";
 import { SidebarMenu } from "./sidebar-menu.js";
 import { SidebarRow } from "./sidebar-row.js";

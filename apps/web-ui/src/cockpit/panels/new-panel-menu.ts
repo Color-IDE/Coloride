@@ -1,4 +1,4 @@
-import { UI_STRINGS } from "../../ui-strings.js";
+import { UI_STRINGS } from "../../ui/ui-strings.js";
 import { CODEX_ICON, TERMINAL_ICON } from "./panel-icons.js";
 
 const CHEVRON_RIGHT =

@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
+import { createCockpitStoreBundle } from "../stores/index.js";
 import { restoreCachedSession } from "./session-cache.js";
-import { createCockpitStoreBundle } from "./stores/index.js";
 const base = { chatId: "legacy", title: "My session", validationState: "UnchangedBlue" };
 it("normalizes legacy agents and shells, and strips model/execution state from terminals", () => {
   expect(restoreCachedSession({ ...base, modelName: "Codex" })).toMatchObject({

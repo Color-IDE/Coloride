@@ -7,8 +7,8 @@ import type {
   CockpitSearchResultItem,
   CockpitStoreBundle,
 } from "../../stores/index.js";
-import { type ThinScrollbar, attachThinScrollbar } from "../../thin-scrollbar.js";
-import { UI_STRINGS, uiText } from "../../ui-strings.js";
+import { type ThinScrollbar, attachThinScrollbar } from "../../ui/thin-scrollbar.js";
+import { UI_STRINGS, uiText } from "../../ui/ui-strings.js";
 
 export interface SidebarPanelsOptions {
   readonly stores: CockpitStoreBundle;
