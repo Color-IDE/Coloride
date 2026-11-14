@@ -41,6 +41,7 @@
   }
   .sidebar-row:hover,
   .sidebar-row:has(.sidebar-more[aria-expanded="true"]),
+  .sidebar-row:has(.sidebar-add[aria-expanded="true"]),
   .sidebar-row--session[data-selected="true"] {
     background-color: var(--color-selected);
   }
@@ -133,7 +134,8 @@
   .sidebar-row:hover .sidebar-add,
   .sidebar-row:focus-within .sidebar-more,
   .sidebar-row:focus-within .sidebar-add,
-  .sidebar-more[aria-expanded="true"] {
+  .sidebar-more[aria-expanded="true"],
+  .sidebar-add[aria-expanded="true"] {
     visibility: visible;
   }
   .sidebar-chevron {
