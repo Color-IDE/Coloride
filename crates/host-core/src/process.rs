@@ -40,12 +40,14 @@ impl OrphanWatchdog {
     pub(crate) fn start(group: u32) -> Result<Self, SupervisionError> {
         use std::os::unix::process::CommandExt;
         use std::process::Stdio;
-        // `read` returns when the pipe is closed (it is never written to).
+        // `read` returns when the pipe is closed (it is never written to). `-s KILL --` is the
+        // form that dash (the `/bin/sh` of Debian and Ubuntu) accepts for a group id: it rejects
+        // `kill -KILL -- -<pgid>`.
         // Sanctioned launch: only reachable from gated launches (see `clippy.toml`).
         #[allow(clippy::disallowed_methods)]
         let mut process = Command::new("/bin/sh")
             .arg("-c")
-            .arg(r#"read _; kill -KILL -- "-$1" 2>/dev/null"#)
+            .arg(r#"read _; kill -s KILL -- "-$1" 2>/dev/null"#)
             .arg("coloride-watchdog")
             .arg(group.to_string())
             .stdin(Stdio::piped())
