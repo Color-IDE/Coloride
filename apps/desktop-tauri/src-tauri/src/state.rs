@@ -106,8 +106,9 @@ pub(crate) fn test_state(data_dir: &std::path::Path) -> DesktopAppState {
     )
 }
 
-/// Like `test_state`, collecting the diagnostics that would be sent to the UI.
-#[cfg(test)]
+/// Like `test_state`, collecting the diagnostics that would be sent to the UI. Only the Unix-only
+/// language-server test uses it.
+#[cfg(all(test, unix))]
 pub(crate) fn test_state_collecting_diagnostics(
     data_dir: &std::path::Path,
 ) -> (
