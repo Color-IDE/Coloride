@@ -387,6 +387,15 @@
     @apply text-[12.5px] font-medium !text-text-primary border-b border-white/8;
   }
 
+  /* A panel's title is grey, and white while the panel is the selected one (like the tabs). */
+  .coloride-chat-cell .coloride-chat-cell-header {
+    color: var(--color-text-muted) !important;
+    transition: color 120ms ease;
+  }
+  .coloride-chat-cell[data-active="true"] .coloride-chat-cell-header {
+    color: var(--color-text-primary) !important;
+  }
+
   /* The header owns its small padding so its divider runs edge to edge of the panel. */
   .coloride-chat-cell-header {
     display: flex;
